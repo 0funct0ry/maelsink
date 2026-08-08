@@ -120,6 +120,42 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestValidate_SMTPMaxMessageSize(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.MaxMessageSizeMB = 0
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with max_message_size_mb=0 = nil, want error")
+	}
+}
+
+func TestValidate_SMTPStartTLSRequiresCertAndKey(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.StartTLS = true
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with starttls enabled and no cert/key = nil, want error")
+	}
+
+	cfg.SMTP.TLSCert = "cert.pem"
+	cfg.SMTP.TLSKey = "key.pem"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() with starttls enabled and cert/key set = %v, want nil", err)
+	}
+}
+
+func TestValidate_SMTPAuthRequiresUsernameAndPassword(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.Auth.Enabled = true
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with auth enabled and no credentials = nil, want error")
+	}
+
+	cfg.SMTP.Auth.Username = "user"
+	cfg.SMTP.Auth.Password = "pass"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() with auth enabled and credentials set = %v, want nil", err)
+	}
+}
+
 func TestWriteFile_RefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "maelsink.yaml")

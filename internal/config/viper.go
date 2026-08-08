@@ -92,6 +92,27 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	if f.SMTPDomain != nil {
 		cfg.SMTP.Domain = *f.SMTPDomain
 	}
+	if f.SMTPMaxMessageSizeMB != nil {
+		cfg.SMTP.MaxMessageSizeMB = *f.SMTPMaxMessageSizeMB
+	}
+	if f.SMTPStartTLS != nil {
+		cfg.SMTP.StartTLS = *f.SMTPStartTLS
+	}
+	if f.SMTPTLSCert != nil {
+		cfg.SMTP.TLSCert = *f.SMTPTLSCert
+	}
+	if f.SMTPTLSKey != nil {
+		cfg.SMTP.TLSKey = *f.SMTPTLSKey
+	}
+	if f.SMTPAuthEnabled != nil {
+		cfg.SMTP.Auth.Enabled = *f.SMTPAuthEnabled
+	}
+	if f.SMTPAuthUsername != nil {
+		cfg.SMTP.Auth.Username = *f.SMTPAuthUsername
+	}
+	if f.SMTPAuthPassword != nil {
+		cfg.SMTP.Auth.Password = *f.SMTPAuthPassword
+	}
 	if f.WebEnabled != nil {
 		cfg.Web.Enabled = *f.WebEnabled
 	}
@@ -104,6 +125,9 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	if f.WebBasePath != nil {
 		cfg.Web.BasePath = *f.WebBasePath
 	}
+	if f.WebCORSOrigins != nil {
+		cfg.Web.CORSOrigins = *f.WebCORSOrigins
+	}
 	if f.APIHost != nil {
 		cfg.API.Host = *f.APIHost
 	}
@@ -113,8 +137,23 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	if f.APIBasePath != nil {
 		cfg.API.BasePath = *f.APIBasePath
 	}
+	if f.APIAuthEnabled != nil {
+		cfg.API.Auth.Enabled = *f.APIAuthEnabled
+	}
+	if f.APIAuthAPIKey != nil {
+		cfg.API.Auth.APIKey = *f.APIAuthAPIKey
+	}
 	if f.DBPath != nil {
 		cfg.Storage.Path = *f.DBPath
+	}
+	if f.StorageDriver != nil {
+		cfg.Storage.Driver = *f.StorageDriver
+	}
+	if f.StorageAttachmentsStoreOnDisk != nil {
+		cfg.Storage.Attachments.StoreOnDisk = *f.StorageAttachmentsStoreOnDisk
+	}
+	if f.StorageAttachmentsDiskPath != nil {
+		cfg.Storage.Attachments.DiskPath = *f.StorageAttachmentsDiskPath
 	}
 	if f.LogLevel != nil {
 		cfg.Logging.Level = *f.LogLevel
@@ -122,10 +161,16 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	if f.LogFormat != nil {
 		cfg.Logging.Format = *f.LogFormat
 	}
+	if f.LogFile != nil {
+		cfg.Logging.File = *f.LogFile
+	}
 	if f.RetentionMaxMessages != nil {
 		cfg.Storage.Retention.MaxMessages = *f.RetentionMaxMessages
 	}
 	if f.RetentionMaxAgeHours != nil {
 		cfg.Storage.Retention.MaxAgeHours = *f.RetentionMaxAgeHours
+	}
+	if f.ServerShutdownTimeoutSeconds != nil {
+		cfg.Server.ShutdownTimeoutSeconds = *f.ServerShutdownTimeoutSeconds
 	}
 }

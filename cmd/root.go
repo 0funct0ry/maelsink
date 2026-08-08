@@ -13,6 +13,7 @@ var (
 	cfgFile     string
 	logLevel    string
 	logFormat   string
+	logFile     string
 	showVersion bool
 )
 
@@ -47,6 +48,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "path to maelsink.yaml")
 	rootCmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "", "log level (debug|info|warn|error)")
 	rootCmd.PersistentFlags().StringVarP(&logFormat, "log-format", "F", "", "log format (text|json)")
+	rootCmd.PersistentFlags().StringVarP(&logFile, "log-file", "j", "", "log file path (empty = stdout only)")
 
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "print version information and exit")
 

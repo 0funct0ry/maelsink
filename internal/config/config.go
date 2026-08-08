@@ -136,21 +136,36 @@ func Defaults() Config {
 // (i.e. Cobra's Changed==true) are applied — an unset flag must never
 // stomp a value from the file/env layers with its zero value.
 type FlagOverrides struct {
-	SMTPHost             *string
-	SMTPPort             *int
-	SMTPDomain           *string
-	WebEnabled           *bool
-	WebHost              *string
-	WebPort              *int
-	WebBasePath          *string
-	APIHost              *string
-	APIPort              *int
-	APIBasePath          *string
-	DBPath               *string
-	LogLevel             *string
-	LogFormat            *string
-	RetentionMaxMessages *int
-	RetentionMaxAgeHours *int
+	SMTPHost                      *string
+	SMTPPort                      *int
+	SMTPDomain                    *string
+	SMTPMaxMessageSizeMB          *int
+	SMTPStartTLS                  *bool
+	SMTPTLSCert                   *string
+	SMTPTLSKey                    *string
+	SMTPAuthEnabled               *bool
+	SMTPAuthUsername              *string
+	SMTPAuthPassword              *string
+	WebEnabled                    *bool
+	WebHost                       *string
+	WebPort                       *int
+	WebBasePath                   *string
+	WebCORSOrigins                *[]string
+	APIHost                       *string
+	APIPort                       *int
+	APIBasePath                   *string
+	APIAuthEnabled                *bool
+	APIAuthAPIKey                 *string
+	DBPath                        *string
+	StorageDriver                 *string
+	StorageAttachmentsStoreOnDisk *bool
+	StorageAttachmentsDiskPath    *string
+	LogLevel                      *string
+	LogFormat                     *string
+	LogFile                       *string
+	RetentionMaxMessages          *int
+	RetentionMaxAgeHours          *int
+	ServerShutdownTimeoutSeconds  *int
 }
 
 // Options controls a single Load call.
@@ -225,6 +240,19 @@ func (c Config) Validate() error {
 	}
 	if c.Storage.Path == "" {
 		return fmt.Errorf("storage.path: must not be empty")
+	}
+	if c.SMTP.MaxMessageSizeMB <= 0 {
+		return fmt.Errorf("smtp.max_message_size_mb: must be > 0, got %d", c.SMTP.MaxMessageSizeMB)
+	}
+	if c.SMTP.StartTLS {
+		if c.SMTP.TLSCert == "" || c.SMTP.TLSKey == "" {
+			return fmt.Errorf("smtp.starttls: tls_cert and tls_key are both required when starttls is enabled")
+		}
+	}
+	if c.SMTP.Auth.Enabled {
+		if c.SMTP.Auth.Username == "" || c.SMTP.Auth.Password == "" {
+			return fmt.Errorf("smtp.auth: username and password are both required when auth.enabled is true")
+		}
 	}
 	return nil
 }
