@@ -30,7 +30,7 @@ func (s *MemoryStore) Save(_ context.Context, msg *Message) error {
 	defer s.mu.Unlock()
 
 	if msg.ID == "" {
-		msg.ID = newID()
+		msg.ID = NewID()
 	}
 
 	if idx, ok := s.byID[msg.ID]; ok {
@@ -112,8 +112,9 @@ func (s *MemoryStore) Clear(_ context.Context) error {
 	return nil
 }
 
-// newID generates a random, URL-safe message ID.
-func newID() string {
+// NewID generates a random, URL-safe ID, used for messages, attachments, and
+// inline images alike.
+func NewID() string {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
 		// crypto/rand.Read failing is effectively impossible on supported

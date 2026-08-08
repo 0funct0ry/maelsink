@@ -100,6 +100,9 @@ aGVsbG8=
 	if string(att.Data) != "hello" {
 		t.Errorf("Data = %q, want %q", att.Data, "hello")
 	}
+	if att.ID == "" {
+		t.Errorf("Attachment.ID = %q, want non-empty", att.ID)
+	}
 }
 
 func TestParse_MultipartRelatedInlineImage(t *testing.T) {
@@ -144,6 +147,9 @@ aGVsbG8=
 	}
 	if string(msg.InlineImages[0].Data) != "hello" {
 		t.Errorf("Data = %q, want %q", msg.InlineImages[0].Data, "hello")
+	}
+	if msg.InlineImages[0].ID == "" {
+		t.Errorf("InlineImage.ID = %q, want non-empty", msg.InlineImages[0].ID)
 	}
 }
 

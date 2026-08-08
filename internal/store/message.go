@@ -24,6 +24,7 @@ type Address struct {
 // InlineImage is a MIME part referenced by Content-ID (typically via a
 // "cid:" URL in an HTML body).
 type InlineImage struct {
+	ID          string
 	ContentID   string
 	Filename    string
 	ContentType string
@@ -33,6 +34,7 @@ type InlineImage struct {
 
 // Attachment is a MIME part with a filename and no Content-ID reference.
 type Attachment struct {
+	ID          string
 	Filename    string
 	ContentType string
 	Size        int64

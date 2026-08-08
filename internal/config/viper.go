@@ -36,6 +36,7 @@ func setDefaults(v *viper.Viper, d Config) {
 	v.SetDefault("storage.path", d.Storage.Path)
 	v.SetDefault("storage.retention.max_messages", d.Storage.Retention.MaxMessages)
 	v.SetDefault("storage.retention.max_age_hours", d.Storage.Retention.MaxAgeHours)
+	v.SetDefault("storage.retention.sweep_interval_minutes", d.Storage.Retention.SweepIntervalMinutes)
 	v.SetDefault("storage.attachments.store_on_disk", d.Storage.Attachments.StoreOnDisk)
 	v.SetDefault("storage.attachments.disk_path", d.Storage.Attachments.DiskPath)
 
@@ -69,6 +70,7 @@ func bindEnv(v *viper.Viper) {
 
 		"storage.driver", "storage.path",
 		"storage.retention.max_messages", "storage.retention.max_age_hours",
+		"storage.retention.sweep_interval_minutes",
 		"storage.attachments.store_on_disk", "storage.attachments.disk_path",
 
 		"logging.level", "logging.format", "logging.file",
@@ -169,6 +171,9 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	}
 	if f.RetentionMaxAgeHours != nil {
 		cfg.Storage.Retention.MaxAgeHours = *f.RetentionMaxAgeHours
+	}
+	if f.RetentionSweepIntervalMinutes != nil {
+		cfg.Storage.Retention.SweepIntervalMinutes = *f.RetentionSweepIntervalMinutes
 	}
 	if f.ServerShutdownTimeoutSeconds != nil {
 		cfg.Server.ShutdownTimeoutSeconds = *f.ServerShutdownTimeoutSeconds

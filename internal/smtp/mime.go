@@ -248,6 +248,7 @@ func processPart(msg *store.Message, part *multipart.Part) error {
 	switch {
 	case contentID != "":
 		msg.InlineImages = append(msg.InlineImages, store.InlineImage{
+			ID:          store.NewID(),
 			ContentID:   contentID,
 			Filename:    filename,
 			ContentType: mediaType,
@@ -256,6 +257,7 @@ func processPart(msg *store.Message, part *multipart.Part) error {
 		})
 	case filename != "" || strings.Contains(disposition, "attachment"):
 		msg.Attachments = append(msg.Attachments, store.Attachment{
+			ID:          store.NewID(),
 			Filename:    filename,
 			ContentType: mediaType,
 			Size:        int64(len(body)),
@@ -269,6 +271,7 @@ func processPart(msg *store.Message, part *multipart.Part) error {
 		// An unrecognized inline part with no filename/disposition: keep it
 		// as an attachment rather than silently dropping content.
 		msg.Attachments = append(msg.Attachments, store.Attachment{
+			ID:          store.NewID(),
 			Filename:    filename,
 			ContentType: mediaType,
 			Size:        int64(len(body)),

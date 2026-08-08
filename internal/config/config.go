@@ -50,8 +50,9 @@ type API struct {
 }
 
 type Retention struct {
-	MaxMessages int `yaml:"max_messages" mapstructure:"max_messages"`
-	MaxAgeHours int `yaml:"max_age_hours" mapstructure:"max_age_hours"`
+	MaxMessages          int `yaml:"max_messages" mapstructure:"max_messages"`
+	MaxAgeHours          int `yaml:"max_age_hours" mapstructure:"max_age_hours"`
+	SweepIntervalMinutes int `yaml:"sweep_interval_minutes" mapstructure:"sweep_interval_minutes"`
 }
 
 type Attachments struct {
@@ -120,6 +121,9 @@ func Defaults() Config {
 				StoreOnDisk: false,
 				DiskPath:    "./attachments",
 			},
+			Retention: Retention{
+				SweepIntervalMinutes: 5,
+			},
 		},
 		Logging: Logging{
 			Level:  "info",
@@ -165,6 +169,7 @@ type FlagOverrides struct {
 	LogFile                       *string
 	RetentionMaxMessages          *int
 	RetentionMaxAgeHours          *int
+	RetentionSweepIntervalMinutes *int
 	ServerShutdownTimeoutSeconds  *int
 }
 

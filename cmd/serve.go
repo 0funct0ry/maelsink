@@ -6,13 +6,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/0funct0ry/maelsink/internal/config"
 	"github.com/0funct0ry/maelsink/internal/logging"
+	"github.com/0funct0ry/maelsink/internal/retention"
 	"github.com/0funct0ry/maelsink/internal/smtp"
 	"github.com/0funct0ry/maelsink/internal/store"
+	"github.com/0funct0ry/maelsink/internal/store/sqlite"
 )
 
 var (
@@ -44,6 +47,7 @@ var (
 	flagLogFile                       string
 	flagRetentionMaxMessages          int
 	flagRetentionMaxAgeHours          int
+	flagRetentionSweepIntervalMinutes int
 	flagServerShutdownTimeoutSeconds  int
 )
 
@@ -91,6 +95,7 @@ func addServeFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&flagStorageAttachmentsDiskPath, "storage-attachments-disk-path", "x", d.Storage.Attachments.DiskPath, "directory for on-disk attachment storage")
 	cmd.Flags().IntVarP(&flagRetentionMaxMessages, "retention-max-messages", "M", d.Storage.Retention.MaxMessages, "max stored messages (0 = unlimited)")
 	cmd.Flags().IntVarP(&flagRetentionMaxAgeHours, "retention-max-age-hours", "g", d.Storage.Retention.MaxAgeHours, "max message age in hours (0 = unlimited)")
+	cmd.Flags().IntVarP(&flagRetentionSweepIntervalMinutes, "retention-sweep-interval-minutes", "i", d.Storage.Retention.SweepIntervalMinutes, "retention sweeper interval in minutes")
 	cmd.Flags().IntVarP(&flagServerShutdownTimeoutSeconds, "server-shutdown-timeout-seconds", "T", d.Server.ShutdownTimeoutSeconds, "graceful shutdown timeout in seconds")
 }
 
@@ -194,6 +199,9 @@ func resolveConfig(cmd *cobra.Command) (config.Config, error) {
 	if f.Changed("retention-max-age-hours") {
 		overrides.RetentionMaxAgeHours = &flagRetentionMaxAgeHours
 	}
+	if f.Changed("retention-sweep-interval-minutes") {
+		overrides.RetentionSweepIntervalMinutes = &flagRetentionSweepIntervalMinutes
+	}
 	if f.Changed("server-shutdown-timeout-seconds") {
 		overrides.ServerShutdownTimeoutSeconds = &flagServerShutdownTimeoutSeconds
 	}
@@ -215,10 +223,30 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("logging: %w", err)
 	}
 
-	// M2.0 replaces this in-memory store with a SQLite-backed one; M7.0
-	// replaces the no-op publisher with the real event bus.
-	messageStore := store.NewMemoryStore()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var messageStore store.MessageStore
+	switch cfg.Storage.Driver {
+	case "sqlite":
+		db, err := sqlite.Open(ctx, cfg.Storage.Path)
+		if err != nil {
+			return fmt.Errorf("storage: %w", err)
+		}
+		defer db.Close()
+		messageStore = sqlite.New(db, cfg.Storage.Attachments.StoreOnDisk, cfg.Storage.Attachments.DiskPath)
+	default:
+		return fmt.Errorf("storage: unknown driver %q", cfg.Storage.Driver)
+	}
+	// M7.0 replaces the no-op publisher with the real event bus.
 	publisher := store.NoopPublisher{}
+
+	sweeper := retention.New(messageStore, retention.Config{
+		MaxMessages: cfg.Storage.Retention.MaxMessages,
+		MaxAgeHours: cfg.Storage.Retention.MaxAgeHours,
+		Interval:    time.Duration(cfg.Storage.Retention.SweepIntervalMinutes) * time.Minute,
+	}, retention.RealClock{}, logger)
+	go sweeper.Run(ctx)
 
 	smtpSrv, err := smtp.New(smtp.Config{
 		Host:           cfg.SMTP.Host,
@@ -241,10 +269,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "  Web UI   -> http://%s:%d/ (not implemented yet)\n", cfg.Web.Host, cfg.Web.Port)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  REST API -> http://%s:%d/api/v1 (not implemented yet)\n", cfg.API.Host, cfg.API.Port)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Storage  -> %s (%s) (not implemented yet, in-memory for now)\n", cfg.Storage.Path, cfg.Storage.Driver)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	fmt.Fprintf(cmd.OutOrStdout(), "  Storage  -> %s (%s)\n", cfg.Storage.Path, cfg.Storage.Driver)
 
 	// Full graceful drain with a configurable timeout is M10.0's job; here
 	// we only need the listener and its connection-handler goroutines to
