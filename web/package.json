@@ -1,0 +1,10 @@
+{
+  "name": "maelsink-web",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Placeholder for the maelsink Web UI (Vite + React + TypeScript). Full scaffold lands in M5.0.",
+  "scripts": {
+    "build": "echo 'web/ is a placeholder — real Vite/React scaffold lands in M5.0' && exit 0",
+    "dev": "echo 'web/ is a placeholder — real Vite/React scaffold lands in M5.0' && exit 0"
+  }
+}
