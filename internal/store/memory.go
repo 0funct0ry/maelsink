@@ -44,18 +44,48 @@ func (s *MemoryStore) Save(_ context.Context, msg *Message) error {
 	return nil
 }
 
-// Get returns the message with the given ID, or ErrNotFound.
+// Get returns the message with the given ID or unambiguous ID prefix (see
+// IDLength), or ErrNotFound/ErrAmbiguousID.
 func (s *MemoryStore) Get(_ context.Context, id string) (*Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	idx, ok := s.byID[id]
-	if !ok {
-		return nil, ErrNotFound
+	full, err := resolveID(s.byID, id)
+	if err != nil {
+		return nil, err
 	}
-	copy := *s.messages[idx]
+	copy := *s.messages[s.byID[full]]
 	copy.AttachmentCount = len(copy.Attachments) + len(copy.InlineImages)
 	return &copy, nil
+}
+
+// resolveID looks up id in byID (keyed by full message ID). Strings of
+// IDLength or longer are matched exactly (the common case, and the fast
+// path — no prefix scan). Shorter strings are resolved as a prefix: zero
+// matches is ErrNotFound, more than one is ErrAmbiguousID.
+func resolveID(byID map[string]int, id string) (string, error) {
+	if len(id) >= IDLength {
+		if _, ok := byID[id]; ok {
+			return id, nil
+		}
+		return "", ErrNotFound
+	}
+
+	var match string
+	count := 0
+	for full := range byID {
+		if strings.HasPrefix(full, id) {
+			match = full
+			count++
+			if count > 1 {
+				return "", ErrAmbiguousID
+			}
+		}
+	}
+	if count == 0 {
+		return "", ErrNotFound
+	}
+	return match, nil
 }
 
 // List returns messages matching filter (newest-first by default, or
@@ -165,18 +195,20 @@ func (s *MemoryStore) Ping(_ context.Context) error {
 	return nil
 }
 
-// Delete removes the message with the given ID, or returns ErrNotFound.
+// Delete removes the message with the given ID or unambiguous ID prefix, or
+// returns ErrNotFound/ErrAmbiguousID.
 func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	idx, ok := s.byID[id]
-	if !ok {
-		return ErrNotFound
+	full, err := resolveID(s.byID, id)
+	if err != nil {
+		return err
 	}
+	idx := s.byID[full]
 
 	s.messages = append(s.messages[:idx], s.messages[idx+1:]...)
-	delete(s.byID, id)
+	delete(s.byID, full)
 	for i := idx; i < len(s.messages); i++ {
 		s.byID[s.messages[i].ID] = i
 	}

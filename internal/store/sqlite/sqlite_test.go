@@ -189,6 +189,91 @@ func TestStore_Delete(t *testing.T) {
 	}
 }
 
+func TestStore_GetByPrefix(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	msg := sampleMessage()
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := s.Get(ctx, msg.ID[:8])
+	if err != nil {
+		t.Fatalf("Get by prefix: %v", err)
+	}
+	if got.ID != msg.ID {
+		t.Fatalf("got.ID = %q, want %q", got.ID, msg.ID)
+	}
+}
+
+func TestStore_GetByAmbiguousPrefix(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	msg1 := sampleMessage()
+	msg1.ID = "aaaa1111aaaa1111aaaa1111"
+	msg2 := sampleMessage()
+	msg2.ID = "aaaa2222aaaa2222aaaa2222"
+	if err := s.Save(ctx, msg1); err != nil {
+		t.Fatalf("Save msg1: %v", err)
+	}
+	if err := s.Save(ctx, msg2); err != nil {
+		t.Fatalf("Save msg2: %v", err)
+	}
+
+	if _, err := s.Get(ctx, "aaaa"); err != store.ErrAmbiguousID {
+		t.Fatalf("Get ambiguous prefix: got %v, want ErrAmbiguousID", err)
+	}
+}
+
+func TestStore_DeleteByPrefix(t *testing.T) {
+	s, diskPath := newTestStore(t, true)
+	ctx := context.Background()
+
+	msg := sampleMessage()
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := s.Delete(ctx, msg.ID[:8]); err != nil {
+		t.Fatalf("Delete by prefix: %v", err)
+	}
+	if _, err := s.Get(ctx, msg.ID); err != store.ErrNotFound {
+		t.Fatalf("expected ErrNotFound after prefix delete, got %v", err)
+	}
+
+	entries, err := os.ReadDir(diskPath)
+	if err != nil {
+		t.Fatalf("reading disk path: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected attachment files removed by prefix delete, got %d entries", len(entries))
+	}
+}
+
+func TestStore_DeleteByAmbiguousPrefix(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	msg1 := sampleMessage()
+	msg1.ID = "bbbb1111bbbb1111bbbb1111"
+	msg2 := sampleMessage()
+	msg2.ID = "bbbb2222bbbb2222bbbb2222"
+	_ = s.Save(ctx, msg1)
+	_ = s.Save(ctx, msg2)
+
+	if err := s.Delete(ctx, "bbbb"); err != store.ErrAmbiguousID {
+		t.Fatalf("Delete ambiguous prefix: got %v, want ErrAmbiguousID", err)
+	}
+	if _, err := s.Get(ctx, msg1.ID); err != nil {
+		t.Fatalf("Get msg1 after failed ambiguous delete: %v", err)
+	}
+	if _, err := s.Get(ctx, msg2.ID); err != nil {
+		t.Fatalf("Get msg2 after failed ambiguous delete: %v", err)
+	}
+}
+
 func TestStore_Clear(t *testing.T) {
 	s, diskPath := newTestStore(t, true)
 	ctx := context.Background()

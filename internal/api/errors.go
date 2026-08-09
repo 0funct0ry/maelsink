@@ -22,6 +22,10 @@ func respondNotFound(c *gin.Context, id string) {
 	respondError(c, 404, "message_not_found", "no message with id "+id)
 }
 
+func respondAmbiguousID(c *gin.Context, id string) {
+	respondError(c, 400, "ambiguous_id", "id prefix "+id+" matches more than one message")
+}
+
 func respondValidation(c *gin.Context, message string) {
 	respondError(c, 400, "validation_error", message)
 }

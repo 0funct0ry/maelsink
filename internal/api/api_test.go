@@ -169,6 +169,16 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		}
 	})
 
+	t.Run("get by id prefix", func(t *testing.T) {
+		rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages/"+id[:8], nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if body["id"] != id {
+			t.Fatalf("expected id %q, got %+v", id, body)
+		}
+	})
+
 	t.Run("get not found", func(t *testing.T) {
 		rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages/does-not-exist", nil)
 		if rec.Code != http.StatusNotFound {
@@ -255,6 +265,50 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		}
 		if total != 0 {
 			t.Fatalf("expected 0 messages after clear, got %d", total)
+		}
+	})
+}
+
+func TestAPI_AmbiguousIDPrefix(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+
+	msg1 := sampleMessage("one", "alice@example.com", "bob@example.com", time.Now())
+	msg1.ID = "cccc1111cccc1111cccc1111"
+	msg2 := sampleMessage("two", "alice@example.com", "bob@example.com", time.Now())
+	msg2.ID = "cccc2222cccc2222cccc2222"
+	if err := s.Save(ctx, msg1); err != nil {
+		t.Fatalf("Save msg1: %v", err)
+	}
+	if err := s.Save(ctx, msg2); err != nil {
+		t.Fatalf("Save msg2: %v", err)
+	}
+
+	router := newRouter(t, s, Config{})
+
+	t.Run("get with ambiguous prefix", func(t *testing.T) {
+		rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages/cccc", nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %+v", rec.Code, body)
+		}
+		errObj := body["error"].(map[string]any)
+		if errObj["code"] != "ambiguous_id" {
+			t.Fatalf("expected ambiguous_id, got %+v", body)
+		}
+	})
+
+	t.Run("delete with ambiguous prefix leaves both messages", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/messages/cccc", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+		if _, err := s.Get(ctx, msg1.ID); err != nil {
+			t.Fatalf("msg1 should survive a failed ambiguous delete: %v", err)
+		}
+		if _, err := s.Get(ctx, msg2.ID); err != nil {
+			t.Fatalf("msg2 should survive a failed ambiguous delete: %v", err)
 		}
 	})
 }

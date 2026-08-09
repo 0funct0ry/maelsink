@@ -34,6 +34,80 @@ func TestMemoryStore_GetMissing(t *testing.T) {
 	}
 }
 
+func TestMemoryStore_GetByPrefix(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{Subject: "hello"}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := s.Get(ctx, msg.ID[:8])
+	if err != nil {
+		t.Fatalf("Get by prefix: %v", err)
+	}
+	if got.ID != msg.ID {
+		t.Fatalf("got.ID = %q, want %q", got.ID, msg.ID)
+	}
+}
+
+func TestMemoryStore_GetByAmbiguousPrefix(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	a := &Message{ID: "aaaa1111aaaa1111aaaa1111"}
+	b := &Message{ID: "aaaa2222aaaa2222aaaa2222"}
+	if err := s.Save(ctx, a); err != nil {
+		t.Fatalf("Save a: %v", err)
+	}
+	if err := s.Save(ctx, b); err != nil {
+		t.Fatalf("Save b: %v", err)
+	}
+
+	if _, err := s.Get(ctx, "aaaa"); err != ErrAmbiguousID {
+		t.Fatalf("Get ambiguous prefix: got %v, want ErrAmbiguousID", err)
+	}
+}
+
+func TestMemoryStore_DeleteByPrefix(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := s.Delete(ctx, msg.ID[:8]); err != nil {
+		t.Fatalf("Delete by prefix: %v", err)
+	}
+	if _, err := s.Get(ctx, msg.ID); err != ErrNotFound {
+		t.Fatalf("Get after prefix delete: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestMemoryStore_DeleteByAmbiguousPrefix(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	a := &Message{ID: "bbbb1111bbbb1111bbbb1111"}
+	b := &Message{ID: "bbbb2222bbbb2222bbbb2222"}
+	_ = s.Save(ctx, a)
+	_ = s.Save(ctx, b)
+
+	if err := s.Delete(ctx, "bbbb"); err != ErrAmbiguousID {
+		t.Fatalf("Delete ambiguous prefix: got %v, want ErrAmbiguousID", err)
+	}
+	// Neither message should have been touched.
+	if _, err := s.Get(ctx, a.ID); err != nil {
+		t.Fatalf("Get a after failed ambiguous delete: %v", err)
+	}
+	if _, err := s.Get(ctx, b.ID); err != nil {
+		t.Fatalf("Get b after failed ambiguous delete: %v", err)
+	}
+}
+
 func TestMemoryStore_ListOrderingAndPagination(t *testing.T) {
 	s := NewMemoryStore()
 	ctx := context.Background()

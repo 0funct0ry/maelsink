@@ -195,15 +195,25 @@ func (h *handlers) listMessages(c *gin.Context) {
 	c.JSON(http.StatusOK, listResponse{Messages: summaries, Total: total, Limit: filter.Limit, Offset: filter.Offset})
 }
 
+// handleStoreErr classifies an error from a by-id/by-prefix store lookup
+// into the matching error response: not found, an ambiguous short prefix
+// (SPEC.md §5.2's ID-prefix resolution), or a genuine internal error.
+func handleStoreErr(c *gin.Context, id string, err error) {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		respondNotFound(c, id)
+	case errors.Is(err, store.ErrAmbiguousID):
+		respondAmbiguousID(c, id)
+	default:
+		respondInternal(c, err.Error())
+	}
+}
+
 func (h *handlers) getMessage(c *gin.Context) {
 	id := c.Param("id")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			respondNotFound(c, id)
-			return
-		}
-		respondInternal(c, err.Error())
+		handleStoreErr(c, id, err)
 		return
 	}
 	c.JSON(http.StatusOK, toDetail(msg))
@@ -212,11 +222,7 @@ func (h *handlers) getMessage(c *gin.Context) {
 func (h *handlers) deleteMessage(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.store.Delete(c.Request.Context(), id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			respondNotFound(c, id)
-			return
-		}
-		respondInternal(c, err.Error())
+		handleStoreErr(c, id, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -238,11 +244,7 @@ func (h *handlers) rawMessage(c *gin.Context) {
 	id := c.Param("id")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			respondNotFound(c, id)
-			return
-		}
-		respondInternal(c, err.Error())
+		handleStoreErr(c, id, err)
 		return
 	}
 	c.Data(http.StatusOK, "message/rfc822", msg.RawSource)
@@ -252,14 +254,10 @@ func (h *handlers) exportMessage(c *gin.Context) {
 	id := c.Param("id")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			respondNotFound(c, id)
-			return
-		}
-		respondInternal(c, err.Error())
+		handleStoreErr(c, id, err)
 		return
 	}
-	c.Header("Content-Disposition", `attachment; filename="`+id+`.eml"`)
+	c.Header("Content-Disposition", `attachment; filename="`+msg.ID+`.eml"`)
 	c.Data(http.StatusOK, "message/rfc822", msg.RawSource)
 }
 
@@ -267,11 +265,7 @@ func (h *handlers) getAttachment(c *gin.Context) {
 	id, attID := c.Param("id"), c.Param("attId")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			respondNotFound(c, id)
-			return
-		}
-		respondInternal(c, err.Error())
+		handleStoreErr(c, id, err)
 		return
 	}
 

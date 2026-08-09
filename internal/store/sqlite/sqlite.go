@@ -248,12 +248,69 @@ func headerValue(headers []store.Header, name string) string {
 	return ""
 }
 
-// Get returns the message with the given ID, or store.ErrNotFound.
+// resolveID resolves id to a full stored message ID. Strings of
+// store.IDLength or longer are looked up with an exact, index-seek `WHERE
+// id = ?` (the common case, and the fast path — no prefix scan). Shorter
+// strings are resolved as a prefix via `WHERE id LIKE ? || '%'`: since `id`
+// is a TEXT PRIMARY KEY, SQLite's query planner can still use that index for
+// a LIKE pattern with no leading wildcard, so this stays an index range scan
+// rather than a full table scan even with a large message count. Message
+// IDs are lowercase hex (store.NewID), so the prefix can never itself
+// contain a LIKE metacharacter (`%`/`_`) and needs no escaping. Zero matches
+// is store.ErrNotFound; more than one is store.ErrAmbiguousID.
+func (s *Store) resolveID(ctx context.Context, id string) (string, error) {
+	if len(id) >= store.IDLength {
+		var full string
+		err := s.db.QueryRowContext(ctx, `SELECT id FROM messages WHERE id = ?`, id).Scan(&full)
+		if err == sql.ErrNoRows {
+			return "", store.ErrNotFound
+		}
+		if err != nil {
+			return "", fmt.Errorf("sqlite: resolving id: %w", err)
+		}
+		return full, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM messages WHERE id LIKE ? || '%' LIMIT 2`, id)
+	if err != nil {
+		return "", fmt.Errorf("sqlite: resolving id prefix: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []string
+	for rows.Next() {
+		var full string
+		if err := rows.Scan(&full); err != nil {
+			return "", fmt.Errorf("sqlite: scanning id prefix match: %w", err)
+		}
+		matches = append(matches, full)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+
+	switch len(matches) {
+	case 0:
+		return "", store.ErrNotFound
+	case 1:
+		return matches[0], nil
+	default:
+		return "", store.ErrAmbiguousID
+	}
+}
+
+// Get returns the message with the given ID or unambiguous ID prefix (see
+// store.IDLength), or store.ErrNotFound/store.ErrAmbiguousID.
 func (s *Store) Get(ctx context.Context, id string) (*store.Message, error) {
+	full, err := s.resolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	row := s.db.QueryRowContext(ctx, `SELECT
 		id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, text_body, html_body,
 		raw_source, size_bytes, parse_warning, parse_error, received_at
-	FROM messages WHERE id = ?`, id)
+	FROM messages WHERE id = ?`, full)
 
 	msg, err := scanMessage(row)
 	if err != nil {
@@ -537,16 +594,23 @@ func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 	return msg, attachmentCount, nil
 }
 
-// Delete removes the message with the given ID (and its on-disk attachment
-// files, if any), or returns store.ErrNotFound. This is the single delete
-// path also used by the retention sweeper.
+// Delete removes the message with the given ID or unambiguous ID prefix
+// (and its on-disk attachment files, if any), or returns
+// store.ErrNotFound/store.ErrAmbiguousID. This is the single delete path
+// also used by the retention sweeper (which always passes a full ID, so it
+// never hits the prefix path).
 func (s *Store) Delete(ctx context.Context, id string) error {
-	diskPaths, err := s.attachmentDiskPaths(ctx, `message_id = ?`, id)
+	full, err := s.resolveID(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	res, err := s.db.ExecContext(ctx, `DELETE FROM messages WHERE id = ?`, id)
+	diskPaths, err := s.attachmentDiskPaths(ctx, `message_id = ?`, full)
+	if err != nil {
+		return err
+	}
+
+	res, err := s.db.ExecContext(ctx, `DELETE FROM messages WHERE id = ?`, full)
 	if err != nil {
 		return fmt.Errorf("sqlite: deleting message: %w", err)
 	}

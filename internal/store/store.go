@@ -7,8 +7,18 @@ import (
 )
 
 // ErrNotFound is returned by Get/Delete when no message exists with the
-// given ID.
+// given ID (or ID prefix, see IDLength).
 var ErrNotFound = errors.New("store: message not found")
+
+// ErrAmbiguousID is returned by Get/Delete when a short ID prefix matches
+// more than one stored message.
+var ErrAmbiguousID = errors.New("store: ambiguous message id prefix")
+
+// IDLength is the length, in hex characters, of a full message ID produced
+// by NewID. Get and Delete treat any shorter string as a prefix to resolve
+// against stored IDs (docker-CLI-style short references), and any string of
+// this length or longer as a full ID looked up directly.
+const IDLength = 24
 
 // Sort orders for ListFilter.Sort. ReceivedAtDesc is the default.
 const (
@@ -48,10 +58,15 @@ type Stats struct {
 // depend on a concrete backend.
 type MessageStore interface {
 	Save(ctx context.Context, msg *Message) error
+	// Get accepts either a full message ID or an unambiguous prefix of one
+	// (any string shorter than IDLength), docker-CLI-style. A prefix
+	// matching zero messages returns ErrNotFound; a prefix matching more
+	// than one returns ErrAmbiguousID.
 	Get(ctx context.Context, id string) (*Message, error)
 	// List returns the page of messages selected by filter (newest first)
 	// and the total number of messages matching (ignoring pagination).
 	List(ctx context.Context, filter ListFilter) ([]*Message, int, error)
+	// Delete accepts a full ID or unambiguous prefix, per Get.
 	Delete(ctx context.Context, id string) error
 	Clear(ctx context.Context) error
 	// Stats returns a snapshot summary of the store's current contents.
