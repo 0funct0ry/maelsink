@@ -77,6 +77,21 @@ type Server struct {
 	ShutdownTimeoutSeconds int `yaml:"shutdown_timeout_seconds" mapstructure:"shutdown_timeout_seconds"`
 }
 
+type Shell struct {
+	CommandPrefix       string `yaml:"command_prefix" mapstructure:"command_prefix"`
+	Prompt              string `yaml:"prompt" mapstructure:"prompt"`
+	HistoryFile         string `yaml:"history_file" mapstructure:"history_file"`
+	HistorySize         int    `yaml:"history_size" mapstructure:"history_size"`
+	Color               string `yaml:"color" mapstructure:"color"`
+	Seed                int64  `yaml:"seed" mapstructure:"seed"`
+	Editor              string `yaml:"editor" mapstructure:"editor"`
+	ShEnabled           bool   `yaml:"sh_enabled" mapstructure:"sh_enabled"`
+	ExitOnError         bool   `yaml:"exit_on_error" mapstructure:"exit_on_error"`
+	AbbrTriggerKey      string `yaml:"abbr_trigger_key" mapstructure:"abbr_trigger_key"`
+	TemplateEnabled     bool   `yaml:"template_enabled" mapstructure:"template_enabled"`
+	TemplateUnsafeFuncs bool   `yaml:"template_unsafe_funcs" mapstructure:"template_unsafe_funcs"`
+}
+
 // Config is the fully-resolved maelsink configuration (SPEC.md §3.1).
 type Config struct {
 	SMTP    SMTP    `yaml:"smtp" mapstructure:"smtp"`
@@ -85,6 +100,7 @@ type Config struct {
 	Storage Storage `yaml:"storage" mapstructure:"storage"`
 	Logging Logging `yaml:"logging" mapstructure:"logging"`
 	Server  Server  `yaml:"server" mapstructure:"server"`
+	Shell   Shell   `yaml:"shell" mapstructure:"shell"`
 }
 
 // Defaults returns maelsink's built-in defaults (SPEC.md §3.1), the lowest
@@ -132,6 +148,14 @@ func Defaults() Config {
 		Server: Server{
 			ShutdownTimeoutSeconds: 15,
 		},
+		Shell: Shell{
+			Prompt:          "maelsink{{ if not .connected }} (offline){{ end }}> ",
+			HistorySize:     5000,
+			Color:           "auto",
+			ShEnabled:       true,
+			AbbrTriggerKey:  "space",
+			TemplateEnabled: true,
+		},
 	}
 }
 
@@ -171,6 +195,18 @@ type FlagOverrides struct {
 	RetentionMaxAgeHours          *int
 	RetentionSweepIntervalMinutes *int
 	ServerShutdownTimeoutSeconds  *int
+	ShellCommandPrefix            *string
+	ShellPrompt                   *string
+	ShellHistoryFile              *string
+	ShellHistorySize              *int
+	ShellColor                    *string
+	ShellSeed                     *int64
+	ShellEditor                   *string
+	ShellShEnabled                *bool
+	ShellExitOnError              *bool
+	ShellAbbrTriggerKey           *string
+	ShellTemplateEnabled          *bool
+	ShellTemplateUnsafeFuncs      *bool
 }
 
 // Options controls a single Load call.
@@ -258,6 +294,16 @@ func (c Config) Validate() error {
 		if c.SMTP.Auth.Username == "" || c.SMTP.Auth.Password == "" {
 			return fmt.Errorf("smtp.auth: username and password are both required when auth.enabled is true")
 		}
+	}
+	switch c.Shell.Color {
+	case "auto", "always", "never":
+	default:
+		return fmt.Errorf("shell.color: must be auto|always|never, got %q", c.Shell.Color)
+	}
+	switch c.Shell.AbbrTriggerKey {
+	case "space", "tab", "enter", "none":
+	default:
+		return fmt.Errorf("shell.abbr_trigger_key: must be space|tab|enter|none, got %q", c.Shell.AbbrTriggerKey)
 	}
 	return nil
 }

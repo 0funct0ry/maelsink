@@ -156,6 +156,208 @@ func TestValidate_SMTPAuthRequiresUsernameAndPassword(t *testing.T) {
 	}
 }
 
+func TestLoad_ShellKeysReachableFromFileEnvFlag(t *testing.T) {
+	cases := []struct {
+		name     string
+		yamlKey  string
+		yamlVal  string
+		envKey   string
+		envVal   string
+		flags    func(v string) FlagOverrides
+		flagVal  string
+		get      func(c Config) any
+		wantFile any
+		wantEnv  any
+		wantFlag any
+	}{
+		{
+			name:    "command_prefix",
+			yamlKey: "command_prefix", yamlVal: "!",
+			envKey: "MAELSINK_SHELL_COMMAND_PREFIX", envVal: "@",
+			flagVal:  "#",
+			flags:    func(v string) FlagOverrides { return FlagOverrides{ShellCommandPrefix: &v} },
+			get:      func(c Config) any { return c.Shell.CommandPrefix },
+			wantFile: "!", wantEnv: "@", wantFlag: "#",
+		},
+		{
+			name:    "prompt",
+			yamlKey: "prompt", yamlVal: "file> ",
+			envKey: "MAELSINK_SHELL_PROMPT", envVal: "env> ",
+			flagVal:  "flag> ",
+			flags:    func(v string) FlagOverrides { return FlagOverrides{ShellPrompt: &v} },
+			get:      func(c Config) any { return c.Shell.Prompt },
+			wantFile: "file> ", wantEnv: "env> ", wantFlag: "flag> ",
+		},
+		{
+			name:    "history_file",
+			yamlKey: "history_file", yamlVal: "/tmp/file_hist",
+			envKey: "MAELSINK_SHELL_HISTORY_FILE", envVal: "/tmp/env_hist",
+			flagVal:  "/tmp/flag_hist",
+			flags:    func(v string) FlagOverrides { return FlagOverrides{ShellHistoryFile: &v} },
+			get:      func(c Config) any { return c.Shell.HistoryFile },
+			wantFile: "/tmp/file_hist", wantEnv: "/tmp/env_hist", wantFlag: "/tmp/flag_hist",
+		},
+		{
+			name:    "history_size",
+			yamlKey: "history_size", yamlVal: "111",
+			envKey: "MAELSINK_SHELL_HISTORY_SIZE", envVal: "222",
+			flagVal: "333",
+			flags: func(v string) FlagOverrides {
+				n := 333
+				return FlagOverrides{ShellHistorySize: &n}
+			},
+			get:      func(c Config) any { return c.Shell.HistorySize },
+			wantFile: 111, wantEnv: 222, wantFlag: 333,
+		},
+		{
+			name:    "color",
+			yamlKey: "color", yamlVal: "always",
+			envKey: "MAELSINK_SHELL_COLOR", envVal: "never",
+			flagVal:  "auto",
+			flags:    func(v string) FlagOverrides { return FlagOverrides{ShellColor: &v} },
+			get:      func(c Config) any { return c.Shell.Color },
+			wantFile: "always", wantEnv: "never", wantFlag: "auto",
+		},
+		{
+			name:    "editor",
+			yamlKey: "editor", yamlVal: "vim",
+			envKey: "MAELSINK_SHELL_EDITOR", envVal: "nano",
+			flagVal:  "emacs",
+			flags:    func(v string) FlagOverrides { return FlagOverrides{ShellEditor: &v} },
+			get:      func(c Config) any { return c.Shell.Editor },
+			wantFile: "vim", wantEnv: "nano", wantFlag: "emacs",
+		},
+		{
+			name:    "abbr_trigger_key",
+			yamlKey: "abbr_trigger_key", yamlVal: "tab",
+			envKey: "MAELSINK_SHELL_ABBR_TRIGGER_KEY", envVal: "enter",
+			flagVal:  "none",
+			flags:    func(v string) FlagOverrides { return FlagOverrides{ShellAbbrTriggerKey: &v} },
+			get:      func(c Config) any { return c.Shell.AbbrTriggerKey },
+			wantFile: "tab", wantEnv: "enter", wantFlag: "none",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+"/file", func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "maelsink.yaml")
+			data := "shell:\n  " + tc.yamlKey + ": \"" + tc.yamlVal + "\"\n"
+			if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(Options{ConfigFile: path})
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := tc.get(cfg); got != tc.wantFile {
+				t.Errorf("shell.%s from file = %v, want %v", tc.yamlKey, got, tc.wantFile)
+			}
+		})
+
+		t.Run(tc.name+"/env", func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "maelsink.yaml")
+			data := "shell:\n  " + tc.yamlKey + ": \"" + tc.yamlVal + "\"\n"
+			if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv(tc.envKey, tc.envVal)
+			cfg, err := Load(Options{ConfigFile: path})
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := tc.get(cfg); got != tc.wantEnv {
+				t.Errorf("shell.%s from env = %v, want %v", tc.yamlKey, got, tc.wantEnv)
+			}
+		})
+
+		t.Run(tc.name+"/flag", func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "maelsink.yaml")
+			data := "shell:\n  " + tc.yamlKey + ": \"" + tc.yamlVal + "\"\n"
+			if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv(tc.envKey, tc.envVal)
+			cfg, err := Load(Options{ConfigFile: path, Flags: tc.flags(tc.flagVal)})
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := tc.get(cfg); got != tc.wantFlag {
+				t.Errorf("shell.%s from flag = %v, want %v", tc.yamlKey, got, tc.wantFlag)
+			}
+		})
+	}
+}
+
+func TestLoad_ShellBoolAndInt64KeysReachable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "maelsink.yaml")
+	data := "shell:\n  sh_enabled: false\n  exit_on_error: false\n  template_enabled: false\n  template_unsafe_funcs: false\n  seed: 111\n"
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(Options{ConfigFile: path})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Shell.ShEnabled != false || cfg.Shell.ExitOnError != false ||
+		cfg.Shell.TemplateEnabled != false || cfg.Shell.TemplateUnsafeFuncs != false ||
+		cfg.Shell.Seed != 111 {
+		t.Errorf("shell bool/int64 keys from file = %+v, want all false/111", cfg.Shell)
+	}
+
+	t.Setenv("MAELSINK_SHELL_SH_ENABLED", "true")
+	t.Setenv("MAELSINK_SHELL_EXIT_ON_ERROR", "true")
+	t.Setenv("MAELSINK_SHELL_TEMPLATE_ENABLED", "true")
+	t.Setenv("MAELSINK_SHELL_TEMPLATE_UNSAFE_FUNCS", "true")
+	t.Setenv("MAELSINK_SHELL_SEED", "222")
+
+	cfg, err = Load(Options{ConfigFile: path})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Shell.ShEnabled || !cfg.Shell.ExitOnError ||
+		!cfg.Shell.TemplateEnabled || !cfg.Shell.TemplateUnsafeFuncs ||
+		cfg.Shell.Seed != 222 {
+		t.Errorf("shell bool/int64 keys from env = %+v, want all true/222", cfg.Shell)
+	}
+
+	shEnabled, exitOnErr, tmplEnabled, tmplUnsafe := false, false, false, false
+	var seed int64 = 333
+	cfg, err = Load(Options{ConfigFile: path, Flags: FlagOverrides{
+		ShellShEnabled:           &shEnabled,
+		ShellExitOnError:         &exitOnErr,
+		ShellTemplateEnabled:     &tmplEnabled,
+		ShellTemplateUnsafeFuncs: &tmplUnsafe,
+		ShellSeed:                &seed,
+	}})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Shell.ShEnabled || cfg.Shell.ExitOnError ||
+		cfg.Shell.TemplateEnabled || cfg.Shell.TemplateUnsafeFuncs ||
+		cfg.Shell.Seed != 333 {
+		t.Errorf("shell bool/int64 keys from flag = %+v, want all false/333", cfg.Shell)
+	}
+}
+
+func TestValidate_ShellColorAndAbbrTriggerKey(t *testing.T) {
+	cfg := Defaults()
+	cfg.Shell.Color = "bogus"
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with invalid shell.color = nil, want error")
+	}
+
+	cfg = Defaults()
+	cfg.Shell.AbbrTriggerKey = "bogus"
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with invalid shell.abbr_trigger_key = nil, want error")
+	}
+}
+
 func TestWriteFile_RefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "maelsink.yaml")

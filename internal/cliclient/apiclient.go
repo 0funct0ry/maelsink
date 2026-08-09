@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 )
 
 // MessageSummary mirrors internal/api's messageSummary JSON shape
@@ -147,22 +146,7 @@ func asHTTPError(resp *http.Response) error {
 
 // List calls GET /api/v1/messages.
 func (c *Client) List(ctx context.Context, p ListParams) (*ListResponse, error) {
-	q := url.Values{}
-	setIfNotEmpty(q, "q", p.Query)
-	setIfNotEmpty(q, "from", p.From)
-	setIfNotEmpty(q, "to", p.To)
-	setIfNotEmpty(q, "subject", p.Subject)
-	setIfNotEmpty(q, "since", p.Since)
-	setIfNotEmpty(q, "until", p.Until)
-	setIfNotEmpty(q, "sort", p.Sort)
-	if p.Limit > 0 {
-		q.Set("limit", strconv.Itoa(p.Limit))
-	}
-	if p.Offset > 0 {
-		q.Set("offset", strconv.Itoa(p.Offset))
-	}
-
-	resp, err := c.do(ctx, http.MethodGet, "/api/v1/messages", q)
+	resp, err := c.do(ctx, http.MethodGet, "/api/v1/messages", listQuery(p))
 	if err != nil {
 		return nil, err
 	}

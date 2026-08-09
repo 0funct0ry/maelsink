@@ -45,6 +45,19 @@ func setDefaults(v *viper.Viper, d Config) {
 	v.SetDefault("logging.file", d.Logging.File)
 
 	v.SetDefault("server.shutdown_timeout_seconds", d.Server.ShutdownTimeoutSeconds)
+
+	v.SetDefault("shell.command_prefix", d.Shell.CommandPrefix)
+	v.SetDefault("shell.prompt", d.Shell.Prompt)
+	v.SetDefault("shell.history_file", d.Shell.HistoryFile)
+	v.SetDefault("shell.history_size", d.Shell.HistorySize)
+	v.SetDefault("shell.color", d.Shell.Color)
+	v.SetDefault("shell.seed", d.Shell.Seed)
+	v.SetDefault("shell.editor", d.Shell.Editor)
+	v.SetDefault("shell.sh_enabled", d.Shell.ShEnabled)
+	v.SetDefault("shell.exit_on_error", d.Shell.ExitOnError)
+	v.SetDefault("shell.abbr_trigger_key", d.Shell.AbbrTriggerKey)
+	v.SetDefault("shell.template_enabled", d.Shell.TemplateEnabled)
+	v.SetDefault("shell.template_unsafe_funcs", d.Shell.TemplateUnsafeFuncs)
 }
 
 // newEnvReplacer maps YAML key path "smtp.max_message_size_mb" to the env
@@ -76,6 +89,11 @@ func bindEnv(v *viper.Viper) {
 		"logging.level", "logging.format", "logging.file",
 
 		"server.shutdown_timeout_seconds",
+
+		"shell.command_prefix", "shell.prompt", "shell.history_file",
+		"shell.history_size", "shell.color", "shell.seed", "shell.editor",
+		"shell.sh_enabled", "shell.exit_on_error", "shell.abbr_trigger_key",
+		"shell.template_enabled", "shell.template_unsafe_funcs",
 	}
 	for _, k := range keys {
 		_ = v.BindEnv(k)
@@ -177,5 +195,41 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	}
 	if f.ServerShutdownTimeoutSeconds != nil {
 		cfg.Server.ShutdownTimeoutSeconds = *f.ServerShutdownTimeoutSeconds
+	}
+	if f.ShellCommandPrefix != nil {
+		cfg.Shell.CommandPrefix = *f.ShellCommandPrefix
+	}
+	if f.ShellPrompt != nil {
+		cfg.Shell.Prompt = *f.ShellPrompt
+	}
+	if f.ShellHistoryFile != nil {
+		cfg.Shell.HistoryFile = *f.ShellHistoryFile
+	}
+	if f.ShellHistorySize != nil {
+		cfg.Shell.HistorySize = *f.ShellHistorySize
+	}
+	if f.ShellColor != nil {
+		cfg.Shell.Color = *f.ShellColor
+	}
+	if f.ShellSeed != nil {
+		cfg.Shell.Seed = *f.ShellSeed
+	}
+	if f.ShellEditor != nil {
+		cfg.Shell.Editor = *f.ShellEditor
+	}
+	if f.ShellShEnabled != nil {
+		cfg.Shell.ShEnabled = *f.ShellShEnabled
+	}
+	if f.ShellExitOnError != nil {
+		cfg.Shell.ExitOnError = *f.ShellExitOnError
+	}
+	if f.ShellAbbrTriggerKey != nil {
+		cfg.Shell.AbbrTriggerKey = *f.ShellAbbrTriggerKey
+	}
+	if f.ShellTemplateEnabled != nil {
+		cfg.Shell.TemplateEnabled = *f.ShellTemplateEnabled
+	}
+	if f.ShellTemplateUnsafeFuncs != nil {
+		cfg.Shell.TemplateUnsafeFuncs = *f.ShellTemplateUnsafeFuncs
 	}
 }
