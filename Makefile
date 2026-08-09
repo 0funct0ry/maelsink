@@ -37,7 +37,7 @@ GREEN=\033[0;32m
 CYAN=\033[0;36m
 NC=\033[0m # No Color
 
-.PHONY: all help build build-go build-web build-docker fmt vet test test-leak check lint clean run site-dev site-build vhs
+.PHONY: all help build build-go build-web build-docker ensure-web-embed fmt vet test test-leak check lint clean run site-dev site-build vhs
 
 all: build ## Build everything (frontend and backend)
 
@@ -53,7 +53,7 @@ help: ## Show this help message
 
 build: build-web build-go ## Build frontend assets and then the Go binary
 
-build-go: ## Build the Go binary
+build-go: ensure-web-embed ## Build the Go binary
 	@echo "$(BLUE)Building Go binary...$(NC)"
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_DIR)/main.go
@@ -69,6 +69,11 @@ build-web: ## Build the frontend SPA (React/Vite)
 build-docker: ## Build the multi-stage Docker image
 	@echo "$(BLUE)Building Docker image...$(NC)"
 	docker build -t maelsink:latest .
+
+ensure-web-embed: ## Build web assets only if missing, so go:embed has something to compile
+	@if [ ! -f internal/webui/dist/index.html ]; then \
+		$(MAKE) build-web; \
+	fi
 
 # --- Development Targets ---
 
@@ -92,15 +97,15 @@ fmt: ## Format Go source code
 	@echo "$(BLUE)Formatting code...$(NC)"
 	go fmt ./...
 
-vet: ## Run Go vet
+vet: ensure-web-embed ## Run Go vet
 	@echo "$(BLUE)Running vet...$(NC)"
 	go vet ./...
 
-test: ## Run Go tests with the race detector (always on, never skip it)
+test: ensure-web-embed ## Run Go tests with the race detector (always on, never skip it)
 	@echo "$(BLUE)Running tests...$(NC)"
 	go test -v -race ./...
 
-test-leak: ## Run tests with goroutine-leak detection (uber-go/goleak) in addition to -race
+test-leak: ensure-web-embed ## Run tests with goroutine-leak detection (uber-go/goleak) in addition to -race
 	@echo "$(BLUE)Running tests with leak detection...$(NC)"
 	go test -v -race -tags leakcheck ./...
 
@@ -141,6 +146,6 @@ vhs: ## Regenerate terminal GIFs using VHS
 clean: ## Remove build artifacts and temporary files
 	@echo "$(BLUE)Cleaning up...$(NC)"
 	rm -rf $(BIN_DIR)
-	rm -rf $(WEB_DIR)/dist
+	rm -rf internal/webui/dist
 	rm -rf $(SITE_DIR)/dist
 	go clean

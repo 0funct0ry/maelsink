@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      internal/webui rewrites this placeholder to the request's resolved
+      base path (web.base_path config, falling back to X-Forwarded-Prefix,
+      falling back to "/") on every request that serves this document.
+      Static assets are never rewritten. See SPEC.md §3.4.
+    -->
+    <base href="__MAELSINK_BASE_HREF__" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>maelsink</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Populated by the same server-side rewrite as <base href> above, so
+      // the frontend's API/WS client never has to guess or hardcode "/".
+      window.__MAELSINK_BASE__ = "__MAELSINK_BASE_PATH__";
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

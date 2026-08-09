@@ -36,9 +36,20 @@ func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
 
+	RegisterRoutes(&engine.RouterGroup, messageStore, cfg)
+
+	return engine
+}
+
+// RegisterRoutes mounts the /api/v1 surface onto rg (typically an
+// engine.Group(basePath)), enforcing cfg.Auth. Exported so internal/webui
+// (M5.0) can mount the same routes read-through on the Web UI port
+// (SPEC.md §5) without duplicating the route table — this is the single
+// source of truth for /api/v1's shape.
+func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, cfg Config) {
 	h := &handlers{store: messageStore}
 
-	v1 := engine.Group(cfg.BasePath + "/api/v1")
+	v1 := rg.Group(cfg.BasePath + "/api/v1")
 	v1.Use(authMiddleware(cfg.Auth))
 	{
 		v1.GET("/messages", h.listMessages)
@@ -53,6 +64,4 @@ func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.
 		v1.GET("/health", h.health)
 		v1.GET("/version", h.version)
 	}
-
-	return engine
 }

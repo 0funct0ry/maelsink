@@ -18,6 +18,7 @@ import (
 	"github.com/0funct0ry/maelsink/internal/smtp"
 	"github.com/0funct0ry/maelsink/internal/store"
 	"github.com/0funct0ry/maelsink/internal/store/sqlite"
+	"github.com/0funct0ry/maelsink/internal/webui"
 )
 
 var (
@@ -275,9 +276,21 @@ func runServe(cmd *cobra.Command, args []string) error {
 		Handler: apiRouter,
 	}
 
+	var webSrv *http.Server
+	if cfg.Web.Enabled {
+		webuiRouter := webui.New(messageStore, logger, webui.Config{
+			BasePath: cfg.Web.BasePath,
+			Auth:     api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
+		})
+		webSrv = &http.Server{
+			Addr:    fmt.Sprintf("%s:%d", cfg.Web.Host, cfg.Web.Port),
+			Handler: webuiRouter,
+		}
+	}
+
 	fmt.Fprintf(cmd.OutOrStdout(), "  SMTP     -> %s:%d\n", cfg.SMTP.Host, cfg.SMTP.Port)
 	if cfg.Web.Enabled {
-		fmt.Fprintf(cmd.OutOrStdout(), "  Web UI   -> http://%s:%d/ (not implemented yet)\n", cfg.Web.Host, cfg.Web.Port)
+		fmt.Fprintf(cmd.OutOrStdout(), "  Web UI   -> http://%s:%d%s/\n", cfg.Web.Host, cfg.Web.Port, cfg.Web.BasePath)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  REST API -> http://%s:%d%s/api/v1\n", cfg.API.Host, cfg.API.Port, cfg.API.BasePath)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Storage  -> %s (%s)\n", cfg.Storage.Path, cfg.Storage.Driver)
@@ -295,14 +308,35 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
+	webErrCh := make(chan error, 1)
+	if webSrv != nil {
+		go func() {
+			if err := webSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				webErrCh <- err
+			}
+		}()
+	}
+
+	shutdown := func() {
+		_ = apiSrv.Shutdown(context.Background())
+		if webSrv != nil {
+			_ = webSrv.Shutdown(context.Background())
+		}
+	}
+
 	select {
 	case <-ctx.Done():
-		_ = apiSrv.Shutdown(context.Background())
+		shutdown()
 		return smtpSrv.Close()
 	case err := <-errCh:
-		_ = apiSrv.Shutdown(context.Background())
+		shutdown()
 		return err
 	case err := <-apiErrCh:
+		shutdown()
+		_ = smtpSrv.Close()
+		return err
+	case err := <-webErrCh:
+		shutdown()
 		_ = smtpSrv.Close()
 		return err
 	}
