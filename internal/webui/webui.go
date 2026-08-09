@@ -17,6 +17,7 @@ import (
 
 	"github.com/0funct0ry/maelsink/internal/api"
 	"github.com/0funct0ry/maelsink/internal/store"
+	"github.com/0funct0ry/maelsink/internal/webui/uiapi"
 )
 
 //go:embed all:dist
@@ -34,6 +35,12 @@ type Config struct {
 	// request to the X-Forwarded-Prefix header when unset.
 	BasePath string
 	Auth     api.Auth
+
+	// SMTPHost/SMTPPort are surfaced read-only via /ui-api/v1/info for the
+	// Inbox empty state and Settings screen (SPEC.md §8.1) — the Web UI has
+	// no other way to learn the SMTP listener's address.
+	SMTPHost string
+	SMTPPort int
 }
 
 // New builds the Web UI router: the embedded SPA under cfg.BasePath, with
@@ -47,6 +54,12 @@ func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.
 	api.RegisterRoutes(&engine.RouterGroup, messageStore, api.Config{
 		BasePath: cfg.BasePath,
 		Auth:     cfg.Auth,
+	})
+	uiapi.RegisterRoutes(&engine.RouterGroup, uiapi.Config{
+		BasePath: cfg.BasePath,
+		Auth:     cfg.Auth,
+		SMTPHost: cfg.SMTPHost,
+		SMTPPort: cfg.SMTPPort,
 	})
 
 	assets, err := fs.Sub(distFS, "dist")

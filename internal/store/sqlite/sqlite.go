@@ -148,11 +148,11 @@ func (s *Store) Save(ctx context.Context, msg *store.Message) error {
 	_, err = tx.ExecContext(ctx, `INSERT INTO messages (
 		id, message_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject,
 		text_body, html_body, raw_source, size_bytes, raw_size_bytes,
-		has_attachments, parse_warning, parse_error, received_at, client_ip, client_helo
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		has_attachments, parse_warning, parse_error, received_at, client_ip, client_helo, read
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		msg.ID, headerValue(msg.Headers, "Message-Id"), fromAddr, toJSON, ccJSON, bccJSON,
 		msg.Subject, msg.TextBody, msg.HTMLBody, msg.RawSource, msg.Size, int64(len(msg.RawSource)),
-		hasAttachments, msg.ParseWarning, msg.ParseError, msg.ReceivedAt.Format(timeLayout), "", "",
+		hasAttachments, msg.ParseWarning, msg.ParseError, msg.ReceivedAt.Format(timeLayout), "", "", msg.Read,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: inserting message: %w", err)
@@ -309,7 +309,7 @@ func (s *Store) Get(ctx context.Context, id string) (*store.Message, error) {
 
 	row := s.db.QueryRowContext(ctx, `SELECT
 		id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, text_body, html_body,
-		raw_source, size_bytes, parse_warning, parse_error, received_at
+		raw_source, size_bytes, parse_warning, parse_error, received_at, read
 	FROM messages WHERE id = ?`, full)
 
 	msg, err := scanMessage(row)
@@ -337,19 +337,24 @@ func scanMessage(row scannable) (*store.Message, error) {
 		id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string
 		rawSource                                                          []byte
 		size                                                               int64
-		parseWarning                                                       bool
+		parseWarning, read                                                 bool
 		parseError, receivedAt                                             string
 	)
 
 	if err := row.Scan(&id, &fromAddr, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
-		&rawSource, &size, &parseWarning, &parseError, &receivedAt); err != nil {
+		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.ErrNotFound
 		}
 		return nil, fmt.Errorf("sqlite: scanning message: %w", err)
 	}
 
-	return messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
+	msg, err := messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
+	if err != nil {
+		return nil, err
+	}
+	msg.Read = read
+	return msg, nil
 }
 
 func messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string, rawSource []byte, size int64, parseWarning bool, parseError, receivedAt string) (*store.Message, error) {
@@ -518,7 +523,7 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 
 	query := `SELECT
 		m.id, m.from_addr, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.subject, m.text_body, m.html_body,
-		m.raw_source, m.size_bytes, m.parse_warning, m.parse_error, m.received_at,
+		m.raw_source, m.size_bytes, m.parse_warning, m.parse_error, m.received_at, m.read,
 		(SELECT COUNT(*) FROM attachments a WHERE a.message_id = m.id) AS attachment_count
 	` + fromClause + whereClause + ` ORDER BY ` + order
 
@@ -574,13 +579,13 @@ func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 		id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string
 		rawSource                                                          []byte
 		size                                                               int64
-		parseWarning                                                       bool
+		parseWarning, read                                                 bool
 		parseError, receivedAt                                             string
 		attachmentCount                                                    int
 	)
 
 	if err := row.Scan(&id, &fromAddr, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
-		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &attachmentCount); err != nil {
+		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &attachmentCount); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 0, store.ErrNotFound
 		}
@@ -591,6 +596,7 @@ func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	msg.Read = read
 	return msg, attachmentCount, nil
 }
 
@@ -624,6 +630,19 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 
 	for _, p := range diskPaths {
 		_ = os.Remove(p)
+	}
+	return nil
+}
+
+// MarkRead marks the message with the given ID or unambiguous ID prefix as
+// read, or returns store.ErrNotFound/store.ErrAmbiguousID.
+func (s *Store) MarkRead(ctx context.Context, id string) error {
+	full, err := s.resolveID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE messages SET read = 1 WHERE id = ?`, full); err != nil {
+		return fmt.Errorf("sqlite: marking message read: %w", err)
 	}
 	return nil
 }

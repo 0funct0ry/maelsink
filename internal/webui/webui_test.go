@@ -121,6 +121,39 @@ func TestConfiguredBasePathWinsOverForwardedPrefix(t *testing.T) {
 	}
 }
 
+func TestUIAPIInfoOnWebUIPort(t *testing.T) {
+	store := newTestStore(t)
+	engine := New(store, testLogger(t), Config{SMTPHost: "127.0.0.1", SMTPPort: 1025})
+
+	req := httptest.NewRequest("GET", "/ui-api/v1/info", nil)
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("GET /ui-api/v1/info = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"host":"127.0.0.1"`) || !strings.Contains(body, `"port":1025`) {
+		t.Fatalf("expected smtp host/port in response, got: %s", body)
+	}
+	if !strings.Contains(body, `"auth_enabled":false`) {
+		t.Fatalf("expected auth_enabled false, got: %s", body)
+	}
+}
+
+func TestUIAPIInfoRespectsBasePath(t *testing.T) {
+	store := newTestStore(t)
+	engine := New(store, testLogger(t), Config{BasePath: "/maelsink"})
+
+	req := httptest.NewRequest("GET", "/maelsink/ui-api/v1/info", nil)
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("GET /maelsink/ui-api/v1/info = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestAPIReadThroughOnWebUIPort(t *testing.T) {
 	store := newTestStore(t)
 	engine := New(store, testLogger(t), Config{})

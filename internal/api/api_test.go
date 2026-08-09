@@ -169,6 +169,34 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		}
 	})
 
+	t.Run("mark read", func(t *testing.T) {
+		_, before := doJSON(t, router, http.MethodGet, "/api/v1/messages/"+id, nil)
+		if before["read"] != false {
+			t.Fatalf("expected new message unread, got %+v", before)
+		}
+
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/messages/"+id+"/read", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		_, body := doJSON(t, router, http.MethodGet, "/api/v1/messages/"+id, nil)
+		if body["read"] != true {
+			t.Fatalf("expected message marked read, got %+v", body)
+		}
+	})
+
+	t.Run("mark read not found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/messages/does-not-exist/read", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", rec.Code)
+		}
+	})
+
 	t.Run("get by id prefix", func(t *testing.T) {
 		rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages/"+id[:8], nil)
 		if rec.Code != http.StatusOK {

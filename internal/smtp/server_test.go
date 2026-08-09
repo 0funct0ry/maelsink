@@ -108,7 +108,9 @@ func dialAndTransact(t *testing.T, addr string) {
 func TestServer_EndToEndTransaction(t *testing.T) {
 	srv, st := newTestServer(t, Config{})
 
+	before := time.Now()
 	dialAndTransact(t, srv.Addr().String())
+	after := time.Now()
 
 	msgs, total, err := st.List(context.Background(), store.ListFilter{})
 	if err != nil {
@@ -119,6 +121,9 @@ func TestServer_EndToEndTransaction(t *testing.T) {
 	}
 	if !strings.Contains(msgs[0].TextBody, "hello from the integration test") {
 		t.Errorf("TextBody = %q", msgs[0].TextBody)
+	}
+	if msgs[0].ReceivedAt.Before(before) || msgs[0].ReceivedAt.After(after) {
+		t.Errorf("ReceivedAt = %v, want between %v and %v", msgs[0].ReceivedAt, before, after)
 	}
 }
 

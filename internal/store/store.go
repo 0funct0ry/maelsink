@@ -69,6 +69,10 @@ type MessageStore interface {
 	// Delete accepts a full ID or unambiguous prefix, per Get.
 	Delete(ctx context.Context, id string) error
 	Clear(ctx context.Context) error
+	// MarkRead marks the message (full ID or unambiguous prefix, per Get) as
+	// read. Idempotent — marking an already-read message read again is a
+	// no-op success.
+	MarkRead(ctx context.Context, id string) error
 	// Stats returns a snapshot summary of the store's current contents.
 	Stats(ctx context.Context) (Stats, error)
 	// Ping verifies the underlying storage is reachable, for health checks.

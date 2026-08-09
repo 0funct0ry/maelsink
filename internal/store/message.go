@@ -83,6 +83,11 @@ type Message struct {
 	ParseWarning bool
 	ParseError   string
 
+	// Read tracks whether this message has been opened in the Web UI
+	// (SPEC.md §8.1's unread indicator). Defaults to false on insert;
+	// MarkRead is the only path that sets it true.
+	Read bool
+
 	// AttachmentCount is populated by List (which does not load full
 	// Attachments/InlineImages bodies) so summary views can still show
 	// has_attachments/attachment_count without a second query per message.

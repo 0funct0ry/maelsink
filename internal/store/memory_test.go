@@ -212,6 +212,46 @@ func TestMemoryStore_DeleteReindexesRemaining(t *testing.T) {
 	}
 }
 
+func TestMemoryStore_MarkRead(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{Subject: "hello"}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Read {
+		t.Fatal("new message should default to unread")
+	}
+
+	if err := s.MarkRead(ctx, msg.ID); err != nil {
+		t.Fatalf("MarkRead: %v", err)
+	}
+	if err := s.MarkRead(ctx, msg.ID); err != nil {
+		t.Fatalf("MarkRead (idempotent second call): %v", err)
+	}
+
+	got, err = s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get after MarkRead: %v", err)
+	}
+	if !got.Read {
+		t.Fatal("expected message to be marked read")
+	}
+}
+
+func TestMemoryStore_MarkReadMissing(t *testing.T) {
+	s := NewMemoryStore()
+	if err := s.MarkRead(context.Background(), "nope"); err != ErrNotFound {
+		t.Fatalf("MarkRead missing: got %v, want ErrNotFound", err)
+	}
+}
+
 func TestMemoryStore_Clear(t *testing.T) {
 	s := NewMemoryStore()
 	ctx := context.Background()

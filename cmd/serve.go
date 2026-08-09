@@ -281,6 +281,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 		webuiRouter := webui.New(messageStore, logger, webui.Config{
 			BasePath: cfg.Web.BasePath,
 			Auth:     api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
+			SMTPHost: cfg.SMTP.Host,
+			SMTPPort: cfg.SMTP.Port,
 		})
 		webSrv = &http.Server{
 			Addr:    fmt.Sprintf("%s:%d", cfg.Web.Host, cfg.Web.Port),

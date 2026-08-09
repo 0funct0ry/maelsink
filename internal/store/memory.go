@@ -215,6 +215,20 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	return nil
 }
 
+// MarkRead marks the message with the given ID or unambiguous ID prefix as
+// read, or returns ErrNotFound/ErrAmbiguousID.
+func (s *MemoryStore) MarkRead(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	full, err := resolveID(s.byID, id)
+	if err != nil {
+		return err
+	}
+	s.messages[s.byID[full]].Read = true
+	return nil
+}
+
 // Clear removes every stored message.
 func (s *MemoryStore) Clear(_ context.Context) error {
 	s.mu.Lock()

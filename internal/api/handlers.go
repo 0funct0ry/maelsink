@@ -33,6 +33,7 @@ type messageSummary struct {
 	AttachmentCount int      `json:"attachment_count"`
 	ReceivedAt      string   `json:"received_at"`
 	ParseWarning    bool     `json:"parse_warning"`
+	Read            bool     `json:"read"`
 }
 
 // attachmentSummary is a single entry in messageDetail.Attachments.
@@ -83,6 +84,7 @@ func toSummary(msg *store.Message) messageSummary {
 		AttachmentCount: msg.AttachmentCount,
 		ReceivedAt:      msg.ReceivedAt.UTC().Format(time.RFC3339),
 		ParseWarning:    msg.ParseWarning,
+		Read:            msg.Read,
 	}
 }
 
@@ -217,6 +219,15 @@ func (h *handlers) getMessage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toDetail(msg))
+}
+
+func (h *handlers) markRead(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.store.MarkRead(c.Request.Context(), id); err != nil {
+		handleStoreErr(c, id, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (h *handlers) deleteMessage(c *gin.Context) {

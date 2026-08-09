@@ -274,6 +274,46 @@ func TestStore_DeleteByAmbiguousPrefix(t *testing.T) {
 	}
 }
 
+func TestStore_MarkRead(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	msg := sampleMessage()
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Read {
+		t.Fatal("new message should default to unread")
+	}
+
+	if err := s.MarkRead(ctx, msg.ID); err != nil {
+		t.Fatalf("MarkRead: %v", err)
+	}
+	if err := s.MarkRead(ctx, msg.ID); err != nil {
+		t.Fatalf("MarkRead (idempotent second call): %v", err)
+	}
+
+	got, err = s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get after MarkRead: %v", err)
+	}
+	if !got.Read {
+		t.Fatal("expected message to be marked read")
+	}
+}
+
+func TestStore_MarkReadMissing(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	if err := s.MarkRead(context.Background(), "nope"); err != store.ErrNotFound {
+		t.Fatalf("MarkRead missing: got %v, want ErrNotFound", err)
+	}
+}
+
 func TestStore_Clear(t *testing.T) {
 	s, diskPath := newTestStore(t, true)
 	ctx := context.Background()

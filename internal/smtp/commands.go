@@ -156,6 +156,7 @@ func handleDATA(sess *session, _ string) bool {
 	}
 
 	msg := Parse(raw)
+	msg.ReceivedAt = time.Now()
 	msg.EnvelopeFrom = sess.envFrom
 	msg.EnvelopeTo = sess.envTo
 	msg.Bcc = deriveBcc(msg.To, msg.Cc, sess.envTo)

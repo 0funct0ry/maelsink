@@ -23,6 +23,7 @@ type MessageSummary struct {
 	AttachmentCount int      `json:"attachment_count"`
 	ReceivedAt      string   `json:"received_at"`
 	ParseWarning    bool     `json:"parse_warning"`
+	Read            bool     `json:"read"`
 }
 
 // Header is a single message header (name/value).

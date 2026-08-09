@@ -1,14 +1,27 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import TopBar from './TopBar'
 import Sidebar from './Sidebar'
+import ToastContainer from '../common/ToastContainer'
+import ConfirmDialog from '../common/ConfirmDialog'
+import { useMessageStore } from '../../stores/useMessageStore'
+import { useUIStore } from '../../stores/useUIStore'
 
 interface AppShellProps {
   children: ReactNode
 }
 
 // Fixed-height, non-scrolling app shell (STYLE_GUIDE.md §1.4): top bar +
-// sidebar + an independently-scrolling content region.
+// sidebar + an independently-scrolling content region. ConfirmDialog is
+// mounted once here (not per-screen) since more than one screen/the sidebar
+// can trigger a confirmation via useUIStore.openConfirm.
 export default function AppShell({ children }: AppShellProps) {
+  const modal = useUIStore((state) => state.modal)
+  const closeModal = useUIStore((state) => state.closeModal)
+
+  useEffect(() => {
+    void useMessageStore.getState().fetchMessages()
+  }, [])
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden">
       <TopBar />
@@ -16,6 +29,16 @@ export default function AppShell({ children }: AppShellProps) {
         <Sidebar />
         <main className="flex-1 overflow-y-auto bg-bg">{children}</main>
       </div>
+      <ToastContainer />
+      <ConfirmDialog
+        open={modal?.kind === 'confirm'}
+        onClose={closeModal}
+        onConfirm={modal?.onConfirm ?? (() => {})}
+        title={modal?.title ?? ''}
+        body={modal?.body ?? ''}
+        confirmLabel={modal?.confirmLabel}
+        danger={modal?.danger}
+      />
     </div>
   )
 }
