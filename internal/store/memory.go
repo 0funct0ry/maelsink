@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"sync"
 )
 
@@ -52,22 +53,40 @@ func (s *MemoryStore) Get(_ context.Context, id string) (*Message, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	return s.messages[idx], nil
+	copy := *s.messages[idx]
+	copy.AttachmentCount = len(copy.Attachments) + len(copy.InlineImages)
+	return &copy, nil
 }
 
-// List returns messages newest-first, paginated by filter, plus the total
-// count ignoring pagination.
+// List returns messages matching filter (newest-first by default, or
+// oldest-first when filter.Sort == SortReceivedAtAsc), paginated, plus the
+// total count of matches ignoring pagination.
 func (s *MemoryStore) List(_ context.Context, filter ListFilter) ([]*Message, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	total := len(s.messages)
-
-	// Build newest-first order without mutating s.messages.
-	ordered := make([]*Message, total)
-	for i, msg := range s.messages {
-		ordered[total-1-i] = msg
+	var matched []*Message
+	for _, msg := range s.messages {
+		if messageMatchesFilter(msg, filter) {
+			// Return a shallow copy so callers mutating/reading
+			// AttachmentCount never race with concurrent List/Get calls
+			// sharing the same underlying *Message.
+			copy := *msg
+			copy.AttachmentCount = len(msg.Attachments) + len(msg.InlineImages)
+			matched = append(matched, &copy)
+		}
 	}
+
+	// Build newest-first order (default) without mutating s.messages.
+	ordered := make([]*Message, len(matched))
+	for i, msg := range matched {
+		ordered[len(matched)-1-i] = msg
+	}
+	if filter.Sort == SortReceivedAtAsc {
+		ordered = matched
+	}
+
+	total := len(ordered)
 
 	offset := filter.Offset
 	if offset < 0 {
@@ -82,6 +101,68 @@ func (s *MemoryStore) List(_ context.Context, filter ListFilter) ([]*Message, in
 		ordered = ordered[:filter.Limit]
 	}
 	return ordered, total, nil
+}
+
+func messageMatchesFilter(msg *Message, filter ListFilter) bool {
+	if filter.From != "" && !addrsContain(msg.From, filter.From) {
+		return false
+	}
+	if filter.To != "" && !addrsContain(msg.To, filter.To) {
+		return false
+	}
+	if filter.Subject != "" && !strings.Contains(strings.ToLower(msg.Subject), strings.ToLower(filter.Subject)) {
+		return false
+	}
+	if filter.Query != "" {
+		q := strings.ToLower(filter.Query)
+		if !strings.Contains(strings.ToLower(msg.Subject), q) &&
+			!strings.Contains(strings.ToLower(msg.TextBody), q) &&
+			!addrsContain(msg.From, filter.Query) &&
+			!addrsContain(msg.To, filter.Query) {
+			return false
+		}
+	}
+	if !filter.Since.IsZero() && msg.ReceivedAt.Before(filter.Since) {
+		return false
+	}
+	if !filter.Until.IsZero() && msg.ReceivedAt.After(filter.Until) {
+		return false
+	}
+	return true
+}
+
+func addrsContain(addrs []Address, substr string) bool {
+	substr = strings.ToLower(substr)
+	for _, a := range addrs {
+		if strings.Contains(strings.ToLower(a.Address), substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// Stats returns a snapshot summary of the store's current contents.
+func (s *MemoryStore) Stats(_ context.Context) (Stats, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	stats := Stats{TotalMessages: len(s.messages)}
+	for _, msg := range s.messages {
+		stats.TotalSizeBytes += msg.Size
+		rt := msg.ReceivedAt
+		if stats.OldestReceivedAt == nil || rt.Before(*stats.OldestReceivedAt) {
+			stats.OldestReceivedAt = &rt
+		}
+		if stats.NewestReceivedAt == nil || rt.After(*stats.NewestReceivedAt) {
+			stats.NewestReceivedAt = &rt
+		}
+	}
+	return stats, nil
+}
+
+// Ping always succeeds for the in-memory store.
+func (s *MemoryStore) Ping(_ context.Context) error {
+	return nil
 }
 
 // Delete removes the message with the given ID, or returns ErrNotFound.

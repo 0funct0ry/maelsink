@@ -82,4 +82,9 @@ type Message struct {
 
 	ParseWarning bool
 	ParseError   string
+
+	// AttachmentCount is populated by List (which does not load full
+	// Attachments/InlineImages bodies) so summary views can still show
+	// has_attachments/attachment_count without a second query per message.
+	AttachmentCount int
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/0funct0ry/maelsink/internal/api"
 	"github.com/0funct0ry/maelsink/internal/config"
 	"github.com/0funct0ry/maelsink/internal/logging"
 	"github.com/0funct0ry/maelsink/internal/retention"
@@ -264,11 +266,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("smtp: %w", err)
 	}
 
+	apiRouter := api.New(messageStore, logger, api.Config{
+		BasePath: cfg.API.BasePath,
+		Auth:     api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
+	})
+	apiSrv := &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", cfg.API.Host, cfg.API.Port),
+		Handler: apiRouter,
+	}
+
 	fmt.Fprintf(cmd.OutOrStdout(), "  SMTP     -> %s:%d\n", cfg.SMTP.Host, cfg.SMTP.Port)
 	if cfg.Web.Enabled {
 		fmt.Fprintf(cmd.OutOrStdout(), "  Web UI   -> http://%s:%d/ (not implemented yet)\n", cfg.Web.Host, cfg.Web.Port)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "  REST API -> http://%s:%d/api/v1 (not implemented yet)\n", cfg.API.Host, cfg.API.Port)
+	fmt.Fprintf(cmd.OutOrStdout(), "  REST API -> http://%s:%d%s/api/v1\n", cfg.API.Host, cfg.API.Port, cfg.API.BasePath)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Storage  -> %s (%s)\n", cfg.Storage.Path, cfg.Storage.Driver)
 
 	// Full graceful drain with a configurable timeout is M10.0's job; here
@@ -277,10 +288,22 @@ func runServe(cmd *cobra.Command, args []string) error {
 	errCh := make(chan error, 1)
 	go func() { errCh <- smtpSrv.ListenAndServe(ctx) }()
 
+	apiErrCh := make(chan error, 1)
+	go func() {
+		if err := apiSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			apiErrCh <- err
+		}
+	}()
+
 	select {
 	case <-ctx.Done():
+		_ = apiSrv.Shutdown(context.Background())
 		return smtpSrv.Close()
 	case err := <-errCh:
+		_ = apiSrv.Shutdown(context.Background())
+		return err
+	case err := <-apiErrCh:
+		_ = smtpSrv.Close()
 		return err
 	}
 }

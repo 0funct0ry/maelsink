@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -265,6 +266,7 @@ func (s *Store) Get(ctx context.Context, id string) (*store.Message, error) {
 	if err := s.loadAttachments(ctx, msg); err != nil {
 		return nil, err
 	}
+	msg.AttachmentCount = len(msg.Attachments) + len(msg.InlineImages)
 
 	return msg, nil
 }
@@ -290,6 +292,10 @@ func scanMessage(row scannable) (*store.Message, error) {
 		return nil, fmt.Errorf("sqlite: scanning message: %w", err)
 	}
 
+	return messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
+}
+
+func messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string, rawSource []byte, size int64, parseWarning bool, parseError, receivedAt string) (*store.Message, error) {
 	to, err := parseAddrsJSON(toJSON)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: decoding to_addrs: %w", err)
@@ -398,35 +404,82 @@ func (s *Store) loadAttachments(ctx context.Context, msg *store.Message) error {
 	return rows.Err()
 }
 
-// List returns messages newest-first, paginated by filter, plus the total
-// count ignoring pagination. Bodies/headers/attachments are not loaded for
-// list rows, matching the summary shape callers need for a listing view.
+// List returns messages matching filter (newest-first by default, or
+// oldest-first when filter.Sort == store.SortReceivedAtAsc), paginated, plus
+// the total count of matches ignoring pagination. Bodies/headers/attachments
+// are not loaded for list rows (only AttachmentCount), matching the summary
+// shape callers need for a listing view.
 func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Message, int, error) {
+	var (
+		joins []string
+		where []string
+		args  []any
+	)
+
+	if filter.Query != "" {
+		joins = append(joins, `JOIN messages_fts f ON f.id = m.id`)
+		where = append(where, `messages_fts MATCH ?`)
+		args = append(args, filter.Query)
+	}
+	if filter.From != "" {
+		where = append(where, `m.from_addr LIKE ? ESCAPE '\'`)
+		args = append(args, likeContains(filter.From))
+	}
+	if filter.To != "" {
+		where = append(where, `m.to_addrs LIKE ? ESCAPE '\'`)
+		args = append(args, likeContains(filter.To))
+	}
+	if filter.Subject != "" {
+		where = append(where, `m.subject LIKE ? ESCAPE '\'`)
+		args = append(args, likeContains(filter.Subject))
+	}
+	if !filter.Since.IsZero() {
+		where = append(where, `m.received_at >= ?`)
+		args = append(args, filter.Since.UTC().Format(timeLayout))
+	}
+	if !filter.Until.IsZero() {
+		where = append(where, `m.received_at <= ?`)
+		args = append(args, filter.Until.UTC().Format(timeLayout))
+	}
+
+	fromClause := `FROM messages m ` + strings.Join(joins, " ")
+	whereClause := ""
+	if len(where) > 0 {
+		whereClause = ` WHERE ` + strings.Join(where, " AND ")
+	}
+
 	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages`).Scan(&total); err != nil {
+	countQuery := `SELECT COUNT(*) ` + fromClause + whereClause
+	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("sqlite: counting messages: %w", err)
 	}
 
-	query := `SELECT
-		id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, text_body, html_body,
-		raw_source, size_bytes, parse_warning, parse_error, received_at
-	FROM messages ORDER BY received_at DESC`
+	order := `m.received_at DESC`
+	if filter.Sort == store.SortReceivedAtAsc {
+		order = `m.received_at ASC`
+	}
 
-	args := []any{}
+	query := `SELECT
+		m.id, m.from_addr, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.subject, m.text_body, m.html_body,
+		m.raw_source, m.size_bytes, m.parse_warning, m.parse_error, m.received_at,
+		(SELECT COUNT(*) FROM attachments a WHERE a.message_id = m.id) AS attachment_count
+	` + fromClause + whereClause + ` ORDER BY ` + order
+
+	listArgs := append([]any{}, args...)
 	if filter.Limit > 0 {
 		query += ` LIMIT ?`
-		args = append(args, filter.Limit)
+		listArgs = append(listArgs, filter.Limit)
 		if filter.Offset > 0 {
 			query += ` OFFSET ?`
-			args = append(args, filter.Offset)
+			listArgs = append(listArgs, filter.Offset)
 		}
 	} else if filter.Offset > 0 {
 		// SQLite requires a LIMIT before OFFSET; -1 means "no limit".
 		query += ` LIMIT -1 OFFSET ?`
-		args = append(args, filter.Offset)
+		listArgs = append(listArgs, filter.Offset)
 	}
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.db.QueryContext(ctx, query, listArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("sqlite: listing messages: %w", err)
 	}
@@ -434,10 +487,11 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 
 	var out []*store.Message
 	for rows.Next() {
-		msg, err := scanMessage(rows)
+		msg, count, err := scanMessageWithCount(rows)
 		if err != nil {
 			return nil, 0, err
 		}
+		msg.AttachmentCount = count
 		out = append(out, msg)
 	}
 	if err := rows.Err(); err != nil {
@@ -448,6 +502,39 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 	}
 
 	return out, total, nil
+}
+
+// likeContains escapes SQLite LIKE metacharacters in s and wraps it for a
+// case-sensitive-by-default (but SQLite's LIKE is ASCII case-insensitive)
+// substring match.
+func likeContains(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return "%" + r.Replace(s) + "%"
+}
+
+func scanMessageWithCount(row scannable) (*store.Message, int, error) {
+	var (
+		id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string
+		rawSource                                                          []byte
+		size                                                               int64
+		parseWarning                                                       bool
+		parseError, receivedAt                                             string
+		attachmentCount                                                    int
+	)
+
+	if err := row.Scan(&id, &fromAddr, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
+		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &attachmentCount); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, 0, store.ErrNotFound
+		}
+		return nil, 0, fmt.Errorf("sqlite: scanning message: %w", err)
+	}
+
+	msg, err := messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
+	if err != nil {
+		return nil, 0, err
+	}
+	return msg, attachmentCount, nil
 }
 
 // Delete removes the message with the given ID (and its on-disk attachment
@@ -512,27 +599,40 @@ func (s *Store) attachmentDiskPaths(ctx context.Context, where string, args ...a
 	return out, rows.Err()
 }
 
-// SearchFTS returns messages matching the given FTS5 query against subject,
-// from_addr, to_addrs, and text_body. It is an internal helper for M2.0 —
-// the REST API's search surface lands in M3.0.
-func (s *Store) SearchFTS(ctx context.Context, query string) ([]*store.Message, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT m.id, m.from_addr, m.to_addrs, m.cc_addrs, m.bcc_addrs,
-		m.subject, m.text_body, m.html_body, m.raw_source, m.size_bytes, m.parse_warning,
-		m.parse_error, m.received_at
-	FROM messages_fts f JOIN messages m ON m.id = f.id
-	WHERE messages_fts MATCH ? ORDER BY rank`, query)
+// Stats returns a snapshot summary of the store's current contents.
+func (s *Store) Stats(ctx context.Context) (store.Stats, error) {
+	var (
+		total     int
+		totalSize sql.NullInt64
+		oldestStr sql.NullString
+		newestStr sql.NullString
+	)
+	err := s.db.QueryRowContext(ctx, `SELECT
+		COUNT(*), COALESCE(SUM(size_bytes), 0), MIN(received_at), MAX(received_at)
+	FROM messages`).Scan(&total, &totalSize, &oldestStr, &newestStr)
 	if err != nil {
-		return nil, fmt.Errorf("sqlite: fts search: %w", err)
+		return store.Stats{}, fmt.Errorf("sqlite: querying stats: %w", err)
 	}
-	defer rows.Close()
 
-	var out []*store.Message
-	for rows.Next() {
-		msg, err := scanMessage(rows)
+	stats := store.Stats{TotalMessages: total, TotalSizeBytes: totalSize.Int64}
+	if oldestStr.Valid {
+		t, err := time.Parse(timeLayout, oldestStr.String)
 		if err != nil {
-			return nil, err
+			return store.Stats{}, fmt.Errorf("sqlite: parsing oldest received_at: %w", err)
 		}
-		out = append(out, msg)
+		stats.OldestReceivedAt = &t
 	}
-	return out, rows.Err()
+	if newestStr.Valid {
+		t, err := time.Parse(timeLayout, newestStr.String)
+		if err != nil {
+			return store.Stats{}, fmt.Errorf("sqlite: parsing newest received_at: %w", err)
+		}
+		stats.NewestReceivedAt = &t
+	}
+	return stats, nil
+}
+
+// Ping verifies the underlying database connection is reachable.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
 }

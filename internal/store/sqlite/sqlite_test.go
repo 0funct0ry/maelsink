@@ -275,19 +275,177 @@ func TestStore_SearchFTS(t *testing.T) {
 		t.Fatalf("Save m2: %v", err)
 	}
 
-	results, err := s.SearchFTS(ctx, "invoice")
+	results, _, err := s.List(ctx, store.ListFilter{Query: "invoice"})
 	if err != nil {
-		t.Fatalf("SearchFTS: %v", err)
+		t.Fatalf("List with query: %v", err)
 	}
 	if len(results) != 1 || results[0].ID != m1.ID {
 		t.Fatalf("expected 1 result matching m1, got %+v", results)
 	}
 
-	results, err = s.SearchFTS(ctx, "bob")
+	results, _, err = s.List(ctx, store.ListFilter{Query: "bob"})
 	if err != nil {
-		t.Fatalf("SearchFTS: %v", err)
+		t.Fatalf("List with query: %v", err)
 	}
 	if len(results) != 2 {
 		t.Fatalf("expected both messages to match on to_addrs, got %d", len(results))
+	}
+}
+
+func TestStore_List_FiltersSortAndPagination(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 5; i++ {
+		m := sampleMessage()
+		m.Subject = "message"
+		m.From = []store.Address{{Address: "alice@example.com"}}
+		m.To = []store.Address{{Address: "bob@example.com"}}
+		m.ReceivedAt = base.Add(time.Duration(i) * time.Hour)
+		if i == 4 {
+			m.Subject = "special report"
+			m.From = []store.Address{{Address: "carol@other.com"}}
+		}
+		if err := s.Save(ctx, m); err != nil {
+			t.Fatalf("Save %d: %v", i, err)
+		}
+	}
+
+	t.Run("pagination", func(t *testing.T) {
+		page1, total, err := s.List(ctx, store.ListFilter{Limit: 2, Offset: 0})
+		if err != nil {
+			t.Fatalf("List page1: %v", err)
+		}
+		if total != 5 {
+			t.Fatalf("expected total 5, got %d", total)
+		}
+		if len(page1) != 2 {
+			t.Fatalf("expected 2 results, got %d", len(page1))
+		}
+		page2, _, err := s.List(ctx, store.ListFilter{Limit: 2, Offset: 2})
+		if err != nil {
+			t.Fatalf("List page2: %v", err)
+		}
+		if len(page2) != 2 {
+			t.Fatalf("expected 2 results, got %d", len(page2))
+		}
+		if page1[0].ID == page2[0].ID {
+			t.Fatalf("expected different results across pages")
+		}
+	})
+
+	t.Run("sort ascending", func(t *testing.T) {
+		results, _, err := s.List(ctx, store.ListFilter{Sort: store.SortReceivedAtAsc})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(results) != 5 {
+			t.Fatalf("expected 5 results, got %d", len(results))
+		}
+		if !results[0].ReceivedAt.Equal(base) {
+			t.Fatalf("expected oldest first, got %v", results[0].ReceivedAt)
+		}
+	})
+
+	t.Run("sort descending default", func(t *testing.T) {
+		results, _, err := s.List(ctx, store.ListFilter{})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if !results[0].ReceivedAt.Equal(base.Add(4 * time.Hour)) {
+			t.Fatalf("expected newest first, got %v", results[0].ReceivedAt)
+		}
+	})
+
+	t.Run("filter by from", func(t *testing.T) {
+		results, total, err := s.List(ctx, store.ListFilter{From: "carol"})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if total != 1 || len(results) != 1 {
+			t.Fatalf("expected 1 match, got %d", len(results))
+		}
+	})
+
+	t.Run("filter by subject", func(t *testing.T) {
+		results, _, err := s.List(ctx, store.ListFilter{Subject: "special"})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(results) != 1 || results[0].Subject != "special report" {
+			t.Fatalf("expected special report match, got %+v", results)
+		}
+	})
+
+	t.Run("filter by since/until", func(t *testing.T) {
+		results, _, err := s.List(ctx, store.ListFilter{Since: base.Add(2 * time.Hour), Until: base.Add(3 * time.Hour)})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("expected 2 matches in range, got %d", len(results))
+		}
+	})
+
+	t.Run("attachment count populated", func(t *testing.T) {
+		results, _, err := s.List(ctx, store.ListFilter{Limit: 1})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if results[0].AttachmentCount != 2 {
+			t.Fatalf("expected attachment_count 2 (1 attachment + 1 inline image), got %d", results[0].AttachmentCount)
+		}
+	})
+}
+
+func TestStore_Stats(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	stats, err := s.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats on empty store: %v", err)
+	}
+	if stats.TotalMessages != 0 || stats.OldestReceivedAt != nil || stats.NewestReceivedAt != nil {
+		t.Fatalf("expected empty stats, got %+v", stats)
+	}
+
+	m1 := sampleMessage()
+	m1.ReceivedAt = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	m1.Size = 100
+	m2 := sampleMessage()
+	m2.ReceivedAt = time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	m2.Size = 200
+
+	if err := s.Save(ctx, m1); err != nil {
+		t.Fatalf("Save m1: %v", err)
+	}
+	if err := s.Save(ctx, m2); err != nil {
+		t.Fatalf("Save m2: %v", err)
+	}
+
+	stats, err = s.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.TotalMessages != 2 {
+		t.Fatalf("expected 2 messages, got %d", stats.TotalMessages)
+	}
+	if stats.TotalSizeBytes != 300 {
+		t.Fatalf("expected total size 300, got %d", stats.TotalSizeBytes)
+	}
+	if stats.OldestReceivedAt == nil || !stats.OldestReceivedAt.Equal(m1.ReceivedAt) {
+		t.Fatalf("expected oldest %v, got %v", m1.ReceivedAt, stats.OldestReceivedAt)
+	}
+	if stats.NewestReceivedAt == nil || !stats.NewestReceivedAt.Equal(m2.ReceivedAt) {
+		t.Fatalf("expected newest %v, got %v", m2.ReceivedAt, stats.NewestReceivedAt)
+	}
+}
+
+func TestStore_Ping(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	if err := s.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
 	}
 }

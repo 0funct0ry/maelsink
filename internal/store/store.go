@@ -3,19 +3,43 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrNotFound is returned by Get/Delete when no message exists with the
 // given ID.
 var ErrNotFound = errors.New("store: message not found")
 
-// ListFilter controls pagination for List. It is intentionally minimal for
-// M1.0 — later milestones (M2.0/M3.0) extend it with query filters
-// (from/to/subject/full-text) without breaking this signature, since new
-// fields default to their zero value (no filtering).
+// Sort orders for ListFilter.Sort. ReceivedAtDesc is the default.
+const (
+	SortReceivedAtDesc = "received_at_desc"
+	SortReceivedAtAsc  = "received_at_asc"
+)
+
+// ListFilter controls pagination and filtering for List, per SPEC.md §5.2's
+// GET /api/v1/messages query params. Zero-value fields mean "no filtering" so
+// M1.0 callers (which only ever set Limit/Offset) keep working unchanged.
 type ListFilter struct {
 	Limit  int
 	Offset int
+
+	// Query performs an FTS5 match against subject/from/to/text_body
+	// (messages_fts).
+	Query string
+	// From, To, Subject are case-insensitive substring filters.
+	From, To, Subject string
+	// Since, Until bound received_at (inclusive); zero value means unset.
+	Since, Until time.Time
+	// Sort is one of the Sort* constants; "" defaults to SortReceivedAtDesc.
+	Sort string
+}
+
+// Stats summarizes the store's current contents for GET /api/v1/stats.
+type Stats struct {
+	TotalMessages    int
+	TotalSizeBytes   int64
+	OldestReceivedAt *time.Time
+	NewestReceivedAt *time.Time
 }
 
 // MessageStore is the storage-agnostic interface every backend (in-memory
@@ -30,6 +54,10 @@ type MessageStore interface {
 	List(ctx context.Context, filter ListFilter) ([]*Message, int, error)
 	Delete(ctx context.Context, id string) error
 	Clear(ctx context.Context) error
+	// Stats returns a snapshot summary of the store's current contents.
+	Stats(ctx context.Context) (Stats, error)
+	// Ping verifies the underlying storage is reachable, for health checks.
+	Ping(ctx context.Context) error
 }
 
 // Publisher is notified after a message is durably saved. It stands in for
