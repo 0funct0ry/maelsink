@@ -14,6 +14,15 @@ var ErrNotFound = errors.New("store: message not found")
 // more than one stored message.
 var ErrAmbiguousID = errors.New("store: ambiguous message id prefix")
 
+// ErrInvalidQuery is returned by List when ListFilter.Query is not valid
+// FTS5 query syntax (SPEC.md §5.2's `q` param is passed verbatim into
+// SQLite's FTS5 MATCH operator, so a malformed boolean/phrase/column-filter
+// expression surfaces here rather than as a generic storage failure).
+// Callers should map this to a 400 response with a user-facing message,
+// never the raw driver error text, which is an internal implementation
+// detail (SQL dialect, column names) that would leak through otherwise.
+var ErrInvalidQuery = errors.New("store: invalid search query")
+
 // IDLength is the length, in hex characters, of a full message ID produced
 // by NewID. Get and Delete treat any shorter string as a prefix to resolve
 // against stored IDs (docker-CLI-style short references), and any string of
@@ -106,19 +115,3 @@ type MessageStore interface {
 	// Ping verifies the underlying storage is reachable, for health checks.
 	Ping(ctx context.Context) error
 }
-
-// Publisher is notified after a message is durably saved. It stands in for
-// the full in-process event bus that M7.0 builds (message.created/deleted/
-// cleared over a pub/sub bus) — for M1.0, /internal/smtp depends on nothing
-// more than this single method, satisfying SPEC.md §2.3 point 5's "depends
-// only on the MessageStore interface and the event bus" without building
-// pub/sub prematurely.
-type Publisher interface {
-	Publish(ctx context.Context, msg *Message)
-}
-
-// NoopPublisher discards every event. It is the default Publisher until
-// M7.0 wires in a real event bus.
-type NoopPublisher struct{}
-
-func (NoopPublisher) Publish(context.Context, *Message) {}

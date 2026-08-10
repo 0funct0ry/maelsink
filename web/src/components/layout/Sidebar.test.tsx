@@ -49,7 +49,7 @@ function renderSidebarAt(initialPath: string) {
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', makeMemoryStorage())
-    useMessageStore.setState({ total: 5, query: {}, setQuery: vi.fn() })
+    useMessageStore.setState({ total: 5, query: {}, setQuery: vi.fn(), sidebarStats: null, sidebarTags: [] })
     vi.mocked(apiClient.getTags).mockResolvedValue([])
   })
 
@@ -200,6 +200,51 @@ describe('Sidebar', () => {
     const savedButton = screen.getByText('Invoices')
     fireEvent.click(savedButton)
     expect(setQuery).toHaveBeenCalledWith({ subject: 'invoice' })
+  })
+
+  it('refreshes counts/tags when a realtime event updates the store (M7.0)', async () => {
+    vi.mocked(apiClient.getStats)
+      .mockResolvedValueOnce({
+        total_messages: 5,
+        total_size_bytes: 2048,
+        unread_count: 0,
+        attachment_count: 0,
+        parse_warning_count: 0,
+        oldest_received_at: null,
+        newest_received_at: null,
+      })
+      .mockResolvedValueOnce({
+        total_messages: 6,
+        total_size_bytes: 4096,
+        unread_count: 1,
+        attachment_count: 0,
+        parse_warning_count: 0,
+        oldest_received_at: null,
+        newest_received_at: null,
+      })
+    renderSidebar()
+    await waitFor(() => expect(screen.getByText('2.0 KB')).toBeInTheDocument())
+
+    // Simulate what AppShell's WS handler does when a message.created frame
+    // arrives — the store action itself triggers the sidebar refetch, the
+    // Sidebar component doesn't need its own WS awareness.
+    useMessageStore.getState().applyMessageCreated({
+      id: 'msg_new',
+      from: 'a@example.com',
+      to: ['b@example.com'],
+      cc: [],
+      subject: 'New mail',
+      size_bytes: 10,
+      has_attachments: false,
+      attachment_count: 0,
+      received_at: '2026-01-01T00:00:00Z',
+      parse_warning: false,
+      read: false,
+      tags: [],
+      preview: '',
+    })
+
+    await waitFor(() => expect(screen.getByText('4.0 KB')).toBeInTheDocument())
   })
 
   it('deletes a saved search', () => {

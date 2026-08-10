@@ -13,12 +13,14 @@ import (
 
 	"github.com/0funct0ry/maelsink/internal/api"
 	"github.com/0funct0ry/maelsink/internal/config"
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/logging"
 	"github.com/0funct0ry/maelsink/internal/retention"
 	"github.com/0funct0ry/maelsink/internal/smtp"
 	"github.com/0funct0ry/maelsink/internal/store"
 	"github.com/0funct0ry/maelsink/internal/store/sqlite"
 	"github.com/0funct0ry/maelsink/internal/webui"
+	"github.com/0funct0ry/maelsink/internal/ws"
 )
 
 var (
@@ -242,10 +244,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	default:
 		return fmt.Errorf("storage: unknown driver %q", cfg.Storage.Driver)
 	}
-	// M7.0 replaces the no-op publisher with the real event bus.
-	publisher := store.NoopPublisher{}
+	// bus is the in-process event bus (SPEC.md §2.2/§5.5, M7.0): every
+	// mutating path (SMTP ingestion, REST delete/clear, the retention
+	// sweeper) publishes to it, and hub fans events out to connected
+	// WebSocket clients.
+	bus := events.NewBus()
+	hub := ws.NewHub(bus, logger)
 
-	sweeper := retention.New(messageStore, retention.Config{
+	sweeper := retention.New(messageStore, bus, retention.Config{
 		MaxMessages: cfg.Storage.Retention.MaxMessages,
 		MaxAgeHours: cfg.Storage.Retention.MaxAgeHours,
 		Interval:    time.Duration(cfg.Storage.Retention.SweepIntervalMinutes) * time.Minute,
@@ -263,12 +269,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 		AuthEnabled:    cfg.SMTP.Auth.Enabled,
 		AuthUsername:   cfg.SMTP.Auth.Username,
 		AuthPassword:   cfg.SMTP.Auth.Password,
-	}, messageStore, publisher, logger)
+	}, messageStore, bus, logger)
 	if err != nil {
 		return fmt.Errorf("smtp: %w", err)
 	}
 
-	apiRouter := api.New(messageStore, logger, api.Config{
+	apiRouter := api.New(messageStore, bus, logger, api.Config{
 		BasePath: cfg.API.BasePath,
 		Auth:     api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
 	})
@@ -279,7 +285,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	var webSrv *http.Server
 	if cfg.Web.Enabled {
-		webuiRouter := webui.New(messageStore, logger, webui.Config{
+		webuiRouter := webui.New(messageStore, bus, hub, logger, webui.Config{
 			BasePath:      cfg.Web.BasePath,
 			Auth:          api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
 			SMTPHost:      cfg.SMTP.Host,
@@ -321,7 +327,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}()
 	}
 
+	// Full graceful drain (draining in-flight /ws upgrades, coordinating
+	// with the other listeners) is M10.0's job; here we broadcast
+	// server.shutdown and close every WS client before the HTTP servers
+	// tear down their listeners, since a closed http.Server may already
+	// have torn down hijacked connections.
 	shutdown := func() {
+		hub.Shutdown(context.Background())
 		_ = apiSrv.Shutdown(context.Background())
 		if webSrv != nil {
 			_ = webSrv.Shutdown(context.Background())

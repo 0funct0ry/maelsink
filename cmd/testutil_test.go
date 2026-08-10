@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/0funct0ry/maelsink/internal/api"
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
@@ -26,7 +27,7 @@ func newTestAPIServer(t *testing.T, seed ...*store.Message) (*httptest.Server, s
 			t.Fatalf("seed Save: %v", err)
 		}
 	}
-	router := api.New(st, slog.New(slog.DiscardHandler), api.Config{})
+	router := api.New(st, events.NewBus(), slog.New(slog.DiscardHandler), api.Config{})
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	return srv, st

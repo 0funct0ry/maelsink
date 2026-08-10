@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/smtp"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
@@ -20,7 +21,7 @@ func newTestSMTPServer(t *testing.T) (host string, port int, st store.MessageSto
 	st = store.NewMemoryStore()
 	srv, err := smtp.New(smtp.Config{
 		Host: "127.0.0.1", Port: 0, Domain: "maelsink.test", MaxMessageSize: 1 << 20,
-	}, st, store.NoopPublisher{}, slog.New(slog.DiscardHandler))
+	}, st, events.NewBus(), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("smtp.New: %v", err)
 	}

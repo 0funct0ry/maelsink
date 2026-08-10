@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/logging"
 	"github.com/0funct0ry/maelsink/internal/store/sqlite"
+	"github.com/0funct0ry/maelsink/internal/ws"
 )
 
 func newTestStore(t *testing.T) *sqlite.Store {
@@ -32,9 +34,18 @@ func testLogger(t *testing.T) *slog.Logger {
 	return logger
 }
 
+func testBusAndHub(t *testing.T) (*events.Bus, *ws.Hub) {
+	t.Helper()
+	bus := events.NewBus()
+	hub := ws.NewHub(bus, testLogger(t))
+	t.Cleanup(hub.Close)
+	return bus, hub
+}
+
 func TestServesEmbeddedSPAAtRoot(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{})
 
 	req := httptest.NewRequest("GET", "/", nil)
 	rec := httptest.NewRecorder()
@@ -54,7 +65,8 @@ func TestServesEmbeddedSPAAtRoot(t *testing.T) {
 
 func TestSPAClientSideRouteFallsBackToIndex(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{})
 
 	req := httptest.NewRequest("GET", "/messages/anything", nil)
 	rec := httptest.NewRecorder()
@@ -70,7 +82,8 @@ func TestSPAClientSideRouteFallsBackToIndex(t *testing.T) {
 
 func TestConfiguredBasePathTemplatesIndexHTML(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{BasePath: "/maelsink"})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{BasePath: "/maelsink"})
 
 	req := httptest.NewRequest("GET", "/maelsink/", nil)
 	rec := httptest.NewRecorder()
@@ -90,7 +103,8 @@ func TestConfiguredBasePathTemplatesIndexHTML(t *testing.T) {
 
 func TestForwardedPrefixFallbackWhenNoBasePathConfigured(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{})
 
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("X-Forwarded-Prefix", "/maelsink")
@@ -108,7 +122,8 @@ func TestForwardedPrefixFallbackWhenNoBasePathConfigured(t *testing.T) {
 
 func TestConfiguredBasePathWinsOverForwardedPrefix(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{BasePath: "/configured"})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{BasePath: "/configured"})
 
 	req := httptest.NewRequest("GET", "/configured/", nil)
 	req.Header.Set("X-Forwarded-Prefix", "/from-proxy")
@@ -123,7 +138,8 @@ func TestConfiguredBasePathWinsOverForwardedPrefix(t *testing.T) {
 
 func TestUIAPIInfoOnWebUIPort(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{SMTPHost: "127.0.0.1", SMTPPort: 1025})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{SMTPHost: "127.0.0.1", SMTPPort: 1025})
 
 	req := httptest.NewRequest("GET", "/ui-api/v1/info", nil)
 	rec := httptest.NewRecorder()
@@ -143,7 +159,8 @@ func TestUIAPIInfoOnWebUIPort(t *testing.T) {
 
 func TestUIAPIInfoRespectsBasePath(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{BasePath: "/maelsink"})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{BasePath: "/maelsink"})
 
 	req := httptest.NewRequest("GET", "/maelsink/ui-api/v1/info", nil)
 	rec := httptest.NewRecorder()
@@ -156,7 +173,8 @@ func TestUIAPIInfoRespectsBasePath(t *testing.T) {
 
 func TestAPIReadThroughOnWebUIPort(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{})
 
 	req := httptest.NewRequest("GET", "/api/v1/health", nil)
 	rec := httptest.NewRecorder()
@@ -169,7 +187,8 @@ func TestAPIReadThroughOnWebUIPort(t *testing.T) {
 
 func TestAPIReadThroughRespectsBasePath(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{BasePath: "/maelsink"})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{BasePath: "/maelsink"})
 
 	req := httptest.NewRequest("GET", "/maelsink/api/v1/health", nil)
 	rec := httptest.NewRecorder()
@@ -182,7 +201,8 @@ func TestAPIReadThroughRespectsBasePath(t *testing.T) {
 
 func TestStaticAssetsServedByteForByte(t *testing.T) {
 	store := newTestStore(t)
-	engine := New(store, testLogger(t), Config{})
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{})
 
 	// The embedded index.html should reference assets under ./assets/ —
 	// discover one and confirm it's served unmodified (no placeholder

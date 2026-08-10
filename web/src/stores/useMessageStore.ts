@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import * as apiClient from '../lib/apiClient'
 import { ApiClientError, HttpError } from '../lib/apiErrors'
-import type { ListMessagesParams, MessageDetail, MessageSummary } from '../lib/apiTypes'
+import type { ListMessagesParams, MessageDetail, MessageSummary, Stats, TagCount } from '../lib/apiTypes'
 import { useUIStore } from './useUIStore'
 
 type FetchStatus = 'idle' | 'loading' | 'error'
@@ -20,7 +20,18 @@ interface MessageState {
   selectedStatus: SelectedStatus
   selectedError: ApiClientError | null
 
+  /** IDs recently added via a realtime message.created event, for a brief
+   * highlight animation in the row (M7.0). Cleared automatically. */
+  highlightIds: Set<string>
+
+  /** Sidebar counts/tags (M6.1's Sidebar, kept live here since M7.0 so the
+   * mailbox counts and tag list stay in sync with realtime events without
+   * the Sidebar owning its own separate fetch-once-on-mount state). */
+  sidebarStats: Stats | null
+  sidebarTags: TagCount[]
+
   fetchMessages: () => Promise<void>
+  fetchSidebarData: () => Promise<void>
   setQuery: (patch: Partial<ListMessagesParams>) => void
   setPage: (offset: number) => void
   fetchMessage: (id: string) => Promise<void>
@@ -28,6 +39,12 @@ interface MessageState {
   deleteMessageOptimistic: (id: string) => Promise<void>
   clearAll: () => Promise<void>
   clearSelected: () => void
+
+  /** Realtime event handlers (M7.0), driven by wsClient via InboxScreen —
+   * these never make network requests themselves. */
+  applyMessageCreated: (summary: MessageSummary) => void
+  applyMessageDeleted: (id: string) => void
+  applyMessagesCleared: () => void
 }
 
 export const useMessageStore = create<MessageState>((set, get) => ({
@@ -43,6 +60,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   selectedStatus: 'idle',
   selectedError: null,
 
+  highlightIds: new Set(),
+
+  sidebarStats: null,
+  sidebarTags: [],
+
   fetchMessages: async () => {
     const { query, limit, offset } = get()
     set({ listStatus: 'loading', listError: null })
@@ -51,6 +73,21 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       set({ messages: res.messages, total: res.total, limit: res.limit, offset: res.offset, listStatus: 'idle' })
     } catch (err) {
       set({ listStatus: 'error', listError: err as ApiClientError })
+    }
+  },
+
+  fetchSidebarData: async () => {
+    try {
+      const stats = await apiClient.getStats()
+      set({ sidebarStats: stats })
+    } catch {
+      // Non-fatal: the storage card and mailbox counts just don't update.
+    }
+    try {
+      const tags = await apiClient.getTags()
+      set({ sidebarTags: tags })
+    } catch {
+      // Non-fatal: the tags nav group just doesn't update.
     }
   },
 
@@ -85,6 +122,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         messages: state.messages.map((m) => (m.id === id ? { ...m, read } : m)),
         selected: state.selected && state.selected.id === id ? { ...state.selected, read } : state.selected,
       }))
+      void get().fetchSidebarData()
     } catch {
       useUIStore.getState().pushToast('danger', `Failed to mark message as ${read ? 'read' : 'unread'}`)
     }
@@ -103,6 +141,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
 
     try {
       await apiClient.deleteMessage(id)
+      void get().fetchSidebarData()
     } catch {
       set((state) => {
         const restored = [...state.messages]
@@ -118,10 +157,54 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       await apiClient.clearMessages()
       set({ messages: [], total: 0, offset: 0 })
       useUIStore.getState().pushToast('success', 'All messages cleared')
+      void get().fetchSidebarData()
     } catch {
       useUIStore.getState().pushToast('danger', 'Failed to clear messages')
     }
   },
 
   clearSelected: () => set({ selected: null, selectedStatus: 'idle', selectedError: null }),
+
+  applyMessageCreated: (summary) => {
+    set((state) => ({
+      messages: [summary, ...state.messages],
+      total: state.total + 1,
+      highlightIds: new Set(state.highlightIds).add(summary.id),
+    }))
+    setTimeout(() => {
+      set((state) => {
+        if (!state.highlightIds.has(summary.id)) return {}
+        const next = new Set(state.highlightIds)
+        next.delete(summary.id)
+        return { highlightIds: next }
+      })
+    }, HIGHLIGHT_DURATION_MS)
+    void get().fetchSidebarData()
+  },
+
+  applyMessageDeleted: (id) => {
+    set((state) => {
+      const index = state.messages.findIndex((m) => m.id === id)
+      const messages = index === -1 ? state.messages : [...state.messages.slice(0, index), ...state.messages.slice(index + 1)]
+      const total = index === -1 ? state.total : Math.max(0, state.total - 1)
+
+      if (state.selected?.id === id) {
+        return { messages, total, selected: null, selectedStatus: 'not_found', selectedError: null }
+      }
+      return { messages, total }
+    })
+    void get().fetchSidebarData()
+  },
+
+  applyMessagesCleared: () => {
+    set((state) => ({
+      messages: [],
+      total: 0,
+      offset: 0,
+      ...(state.selected ? { selected: null, selectedStatus: 'not_found' as const, selectedError: null } : {}),
+    }))
+    void get().fetchSidebarData()
+  },
 }))
+
+const HIGHLIGHT_DURATION_MS = 2000

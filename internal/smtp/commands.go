@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/0funct0ry/maelsink/internal/events"
+	"github.com/0funct0ry/maelsink/internal/store"
 )
 
 // handlerFunc handles one SMTP verb. It returns quit=true when the
@@ -169,7 +172,7 @@ func handleDATA(sess *session, _ string) bool {
 		sess.resetTransaction()
 		return false
 	}
-	sess.srv.publisher.Publish(ctx, msg)
+	sess.srv.bus.Publish(events.MessageCreated(store.NewMessageSummary(msg)))
 
 	sess.srv.logger.Info("smtp: message accepted",
 		"msg_id", msg.ID,

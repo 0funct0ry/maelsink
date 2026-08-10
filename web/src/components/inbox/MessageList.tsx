@@ -11,6 +11,7 @@ export default function MessageList({ onOpenMessage, onPreviewMessage }: Message
   const messages = useMessageStore((state) => state.messages)
   const listStatus = useMessageStore((state) => state.listStatus)
   const listError = useMessageStore((state) => state.listError)
+  const highlightIds = useMessageStore((state) => state.highlightIds)
 
   if (listStatus === 'loading') {
     return (
@@ -38,6 +39,7 @@ export default function MessageList({ onOpenMessage, onPreviewMessage }: Message
         <MessageRow
           key={message.id}
           message={message}
+          highlighted={highlightIds.has(message.id)}
           onOpen={() => onOpenMessage(message.id)}
           onPreview={() => onPreviewMessage(message.id)}
         />

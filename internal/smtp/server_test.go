@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
@@ -27,7 +28,7 @@ func newTestServer(t *testing.T, cfg Config) (*Server, store.MessageStore) {
 	}
 
 	st := store.NewMemoryStore()
-	srv, err := New(cfg, st, store.NoopPublisher{}, slog.New(slog.DiscardHandler))
+	srv, err := New(cfg, st, events.NewBus(), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

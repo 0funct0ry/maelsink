@@ -17,7 +17,7 @@ function renderTopBar() {
 
 describe('TopBar', () => {
   beforeEach(() => {
-    useUIStore.setState({ modal: null })
+    useUIStore.setState({ modal: null, wsStatus: 'connecting' })
   })
 
   it('renders the wordmark', () => {
@@ -67,5 +67,19 @@ describe('TopBar', () => {
       useUIStore.getState().modal?.onConfirm()
     })
     expect(clearAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the reconnecting badge when useUIStore.wsStatus is reconnecting (M7.0)', () => {
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
+    useUIStore.setState({ wsStatus: 'reconnecting' })
+    renderTopBar()
+    expect(screen.getByText('Reconnecting…')).toBeInTheDocument()
+  })
+
+  it('hides the reconnecting badge once wsStatus returns to open', () => {
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
+    useUIStore.setState({ wsStatus: 'open' })
+    renderTopBar()
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument()
   })
 })

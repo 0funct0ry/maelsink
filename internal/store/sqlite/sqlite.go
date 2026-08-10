@@ -497,6 +497,24 @@ func (s *Store) loadAttachments(ctx context.Context, msg *store.Message) error {
 	return rows.Err()
 }
 
+// wrapListErr classifies a failure from List's count/select queries. When
+// the query included a FTS5 MATCH clause (hasQuery), any driver failure is
+// treated as a malformed search query (store.ErrInvalidQuery) rather than a
+// generic storage error — the FTS5 MATCH clause is the only part of List's
+// SQL built from unsanitized user input, so a query failure while it's
+// present is overwhelmingly a syntax error in that input, not a real
+// storage fault. The underlying driver error (which contains SQLite/FTS5
+// internals like column/table names) is preserved via %w for logs, but
+// callers must never surface err.Error() to end users for
+// store.ErrInvalidQuery — only the sentinel's own generic message is safe
+// to display.
+func wrapListErr(err error, hasQuery bool, context string) error {
+	if hasQuery {
+		return fmt.Errorf("%w: sqlite: %s: %w", store.ErrInvalidQuery, context, err)
+	}
+	return fmt.Errorf("sqlite: %s: %w", context, err)
+}
+
 // List returns messages matching filter (newest-first by default, or
 // oldest-first when filter.Sort == store.SortReceivedAtAsc), paginated, plus
 // the total count of matches ignoring pagination. Bodies/headers/attachments
@@ -567,7 +585,7 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 	var total int
 	countQuery := `SELECT COUNT(*) ` + fromClause + whereClause
 	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("sqlite: counting messages: %w", err)
+		return nil, 0, wrapListErr(err, filter.Query != "", "counting messages")
 	}
 
 	order := `m.received_at DESC`
@@ -597,7 +615,7 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 
 	rows, err := s.db.QueryContext(ctx, query, listArgs...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("sqlite: listing messages: %w", err)
+		return nil, 0, wrapListErr(err, filter.Query != "", "listing messages")
 	}
 	defer rows.Close()
 

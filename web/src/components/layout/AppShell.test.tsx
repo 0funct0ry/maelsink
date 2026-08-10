@@ -5,9 +5,14 @@ import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
 import * as apiClient from '../../lib/apiClient'
 import * as uiApiClient from '../../lib/uiApiClient'
+import * as wsClient from '../../lib/wsClient'
 
 vi.mock('../../lib/apiClient')
 vi.mock('../../lib/uiApiClient')
+vi.mock('../../lib/wsClient', async () => {
+  const actual = await vi.importActual<typeof wsClient>('../../lib/wsClient')
+  return { ...actual, connectWs: vi.fn() }
+})
 
 function renderShell(initialEntries: string[] = ['/']) {
   return render(
@@ -27,7 +32,10 @@ describe('AppShell', () => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
     vi.mocked(apiClient.getTags).mockRejectedValue(new Error('offline'))
     vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
-    useUIStore.setState({ modal: null })
+    useUIStore.setState({ modal: null, wsStatus: 'connecting' })
+    useMessageStore.setState({ messages: [], total: 0 })
+    vi.mocked(wsClient.connectWs).mockClear()
+    vi.mocked(wsClient.connectWs).mockReturnValue({ close: vi.fn() })
   })
 
   it('fetches messages once on mount', () => {
@@ -90,5 +98,145 @@ describe('AppShell', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
 
     expect(screen.getByText('message detail')).toBeInTheDocument()
+  })
+
+  it('connects to the WebSocket on mount and disconnects on unmount', () => {
+    const close = vi.fn()
+    vi.mocked(wsClient.connectWs).mockReturnValue({ close })
+
+    const { unmount } = renderShell()
+    expect(wsClient.connectWs).toHaveBeenCalledTimes(1)
+
+    unmount()
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays connected across a route change (Inbox -> Detail)', () => {
+    const close = vi.fn()
+    vi.mocked(wsClient.connectWs).mockReturnValue({ close })
+
+    renderShell(['/messages/abc123'])
+    expect(wsClient.connectWs).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(screen.getByText('content')).toBeInTheDocument()
+    expect(close).not.toHaveBeenCalled()
+    expect(wsClient.connectWs).toHaveBeenCalledTimes(1)
+  })
+
+  it('prepends a message when a message.created frame arrives, from any route', () => {
+    useMessageStore.setState({ messages: [], total: 0 })
+    let handleFrame: ((frame: wsClient.WsFrame) => void) | undefined
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      handleFrame = opts.onEvent
+      return { close: vi.fn() }
+    })
+
+    renderShell(['/messages/abc123'])
+    act(() => {
+      handleFrame?.({
+        type: 'message.created',
+        payload: {
+          id: 'msg_new',
+          from: 'a@example.com',
+          to: ['b@example.com'],
+          cc: [],
+          subject: 'New mail',
+          size_bytes: 10,
+          has_attachments: false,
+          attachment_count: 0,
+          received_at: '2026-01-01T00:00:00Z',
+          parse_warning: false,
+          read: false,
+          tags: [],
+          preview: '',
+        },
+      })
+    })
+
+    expect(useMessageStore.getState().messages.map((m) => m.id)).toEqual(['msg_new'])
+  })
+
+  it('removes a message when a message.deleted frame arrives', () => {
+    useMessageStore.setState({
+      messages: [
+        {
+          id: 'msg_old',
+          from: 'a@example.com',
+          to: ['b@example.com'],
+          cc: [],
+          subject: 'Old mail',
+          size_bytes: 10,
+          has_attachments: false,
+          attachment_count: 0,
+          received_at: '2026-01-01T00:00:00Z',
+          parse_warning: false,
+          read: false,
+          tags: [],
+          preview: '',
+        },
+      ],
+      total: 1,
+    })
+    let handleFrame: ((frame: wsClient.WsFrame) => void) | undefined
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      handleFrame = opts.onEvent
+      return { close: vi.fn() }
+    })
+
+    renderShell()
+    act(() => {
+      handleFrame?.({ type: 'message.deleted', payload: { id: 'msg_old' } })
+    })
+
+    expect(useMessageStore.getState().messages).toHaveLength(0)
+  })
+
+  it('clears messages when a messages.cleared frame arrives', () => {
+    useMessageStore.setState({
+      messages: [
+        {
+          id: 'msg_old',
+          from: 'a@example.com',
+          to: ['b@example.com'],
+          cc: [],
+          subject: 'Old mail',
+          size_bytes: 10,
+          has_attachments: false,
+          attachment_count: 0,
+          received_at: '2026-01-01T00:00:00Z',
+          parse_warning: false,
+          read: false,
+          tags: [],
+          preview: '',
+        },
+      ],
+      total: 1,
+    })
+    let handleFrame: ((frame: wsClient.WsFrame) => void) | undefined
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      handleFrame = opts.onEvent
+      return { close: vi.fn() }
+    })
+
+    renderShell()
+    act(() => {
+      handleFrame?.({ type: 'messages.cleared', payload: {} })
+    })
+
+    expect(useMessageStore.getState().messages).toHaveLength(0)
+    expect(useMessageStore.getState().total).toBe(0)
+  })
+
+  it('updates useUIStore.wsStatus on connection status changes', () => {
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      opts.onStatusChange?.('reconnecting')
+      return { close: vi.fn() }
+    })
+
+    renderShell()
+
+    expect(useUIStore.getState().wsStatus).toBe('reconnecting')
   })
 })

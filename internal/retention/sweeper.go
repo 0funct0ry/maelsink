@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
@@ -35,17 +36,23 @@ type Config struct {
 // Sweeper periodically enforces Config against a store.MessageStore.
 type Sweeper struct {
 	store  store.MessageStore
+	bus    *events.Bus
 	cfg    Config
 	clock  Clock
 	logger *slog.Logger
 }
 
-// New returns a ready-to-run Sweeper.
-func New(s store.MessageStore, cfg Config, clock Clock, logger *slog.Logger) *Sweeper {
+// New returns a ready-to-run Sweeper. bus receives a message.deleted event
+// for every row the sweeper removes, for consistency with manual deletes
+// (SPEC.md §6).
+func New(s store.MessageStore, bus *events.Bus, cfg Config, clock Clock, logger *slog.Logger) *Sweeper {
+	if bus == nil {
+		bus = events.NewBus()
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Sweeper{store: s, cfg: cfg, clock: clock, logger: logger}
+	return &Sweeper{store: s, bus: bus, cfg: cfg, clock: clock, logger: logger}
 }
 
 // Run blocks, ticking at cfg.Interval and calling sweepOnce, until ctx is
@@ -112,6 +119,7 @@ func (sw *Sweeper) sweepOnce(ctx context.Context) error {
 		if err := sw.store.Delete(ctx, m.ID); err != nil && err != store.ErrNotFound {
 			return err
 		}
+		sw.bus.Publish(events.MessageDeleted(m.ID))
 		sw.logger.Info("retention sweep deleted message", "msg_id", m.ID)
 	}
 

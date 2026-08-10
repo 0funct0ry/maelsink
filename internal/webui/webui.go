@@ -1,8 +1,9 @@
 // Package webui embeds and serves the maelsink Web UI SPA (SPEC.md §8),
 // mounting the /api/v1 surface read-through (SPEC.md §5) via
-// internal/api.RegisterRoutes. It depends only on the store.MessageStore
-// interface and internal/api's route registration, never the other way
-// around (SPEC.md §2.3 point 4).
+// internal/api.RegisterRoutes, and the WebSocket hub (SPEC.md §5.5, M7.0)
+// via internal/ws. It depends only on the store.MessageStore interface,
+// internal/api's route registration, and internal/events/internal/ws —
+// never the other way around (SPEC.md §2.3 point 4).
 package webui
 
 import (
@@ -17,8 +18,10 @@ import (
 
 	"github.com/0funct0ry/maelsink/internal/api"
 	"github.com/0funct0ry/maelsink/internal/config"
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 	"github.com/0funct0ry/maelsink/internal/webui/uiapi"
+	"github.com/0funct0ry/maelsink/internal/ws"
 )
 
 //go:embed all:dist
@@ -50,14 +53,15 @@ type Config struct {
 }
 
 // New builds the Web UI router: the embedded SPA under cfg.BasePath, with
-// the /api/v1 surface mounted read-through at the same base path.
-func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.Engine {
+// the /api/v1 surface mounted read-through at the same base path, plus the
+// GET /ws WebSocket endpoint (SPEC.md §5.5) served by hub.
+func New(messageStore store.MessageStore, bus *events.Bus, hub *ws.Hub, logger *slog.Logger, cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
 
-	api.RegisterRoutes(&engine.RouterGroup, messageStore, api.Config{
+	api.RegisterRoutes(&engine.RouterGroup, messageStore, bus, api.Config{
 		BasePath: cfg.BasePath,
 		Auth:     cfg.Auth,
 	})
@@ -68,6 +72,7 @@ func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.
 		SMTPPort:      cfg.SMTPPort,
 		ConfigEntries: cfg.ConfigEntries,
 	})
+	engine.GET(cfg.BasePath+"/ws", hub.ServeWS)
 
 	assets, err := fs.Sub(distFS, "dist")
 	if err != nil {

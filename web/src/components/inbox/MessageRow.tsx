@@ -9,6 +9,9 @@ interface MessageRowProps {
   message: MessageSummary
   onOpen: () => void
   onPreview: () => void
+  /** Briefly true right after a realtime message.created event (M7.0), to
+   * flash the row so it's obvious a new message just arrived. */
+  highlighted?: boolean
 }
 
 // Grid columns mirror MOCKUP.html's .msg-row (unread dot / from / subject
@@ -23,7 +26,7 @@ interface MessageRowProps {
 // §8.1 requires delete). The body preview snippet was deliberately dropped
 // from the row (kept only in the preview modal/detail screen) to reduce
 // list density/clutter — subject + tags is enough to scan a row.
-export default function MessageRow({ message, onOpen, onPreview }: MessageRowProps) {
+export default function MessageRow({ message, onOpen, onPreview, highlighted }: MessageRowProps) {
   const { shown, more } = truncateList(message.to, 1)
 
   return (
@@ -34,7 +37,9 @@ export default function MessageRow({ message, onOpen, onPreview }: MessageRowPro
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onOpen()
       }}
-      className="group grid cursor-pointer grid-cols-[20px_1fr_32px] items-start gap-4 border-b border-border-soft px-[22px] py-3 text-sm transition-colors hover:bg-surface md:grid-cols-[20px_190px_1fr_90px_70px_32px]"
+      className={`group grid cursor-pointer grid-cols-[20px_1fr_32px] items-start gap-4 border-b border-border-soft px-[22px] py-3 text-sm transition-colors hover:bg-surface md:grid-cols-[20px_190px_1fr_90px_70px_32px] ${
+        highlighted ? 'bg-accent-soft' : ''
+      }`}
     >
       <span className="flex h-[7px] w-[7px] items-center justify-center pt-1.5">
         {!message.read && <span className="h-[7px] w-[7px] rounded-full bg-accent" aria-label="Unread" />}

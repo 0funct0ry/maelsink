@@ -6,6 +6,7 @@ import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
 import SearchBar from '../inbox/SearchBar'
 import IconButton from '../common/IconButton'
+import ReconnectBadge from '../inbox/ReconnectBadge'
 
 // 56px top bar per STYLE_GUIDE.md §1.4 / MOCKUP.html's .topbar: brand mark +
 // wordmark, a live SMTP connection pill, a global search box, and
@@ -16,6 +17,7 @@ import IconButton from '../common/IconButton'
 export default function TopBar() {
   const navigate = useNavigate()
   const openConfirm = useUIStore((state) => state.openConfirm)
+  const wsStatus = useUIStore((state) => state.wsStatus)
   const [smtp, setSmtp] = useState<{ host: string; port: number } | null>(null)
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export default function TopBar() {
       </div>
 
       <div className="ml-auto flex flex-none items-center gap-2">
+        <ReconnectBadge status={wsStatus} />
         <IconButton
           icon={<Trash2 className="h-[17px] w-[17px]" aria-hidden="true" />}
           aria-label="Clear all messages"

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -425,6 +426,29 @@ func TestStore_SearchFTS(t *testing.T) {
 	}
 	if len(results) != 2 {
 		t.Fatalf("expected both messages to match on to_addrs, got %d", len(results))
+	}
+}
+
+// TestStore_SearchFTS_InvalidSyntax asserts that malformed FTS5 query
+// syntax (unary "-" on a bare word, an unterminated quote, a bare hyphen
+// inside an unquoted term, ...) is classified as store.ErrInvalidQuery
+// rather than a generic error, so the API layer can respond with a
+// friendly 400 instead of leaking the raw SQLite/FTS5 error text.
+func TestStore_SearchFTS_InvalidSyntax(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	for _, q := range []string{
+		"certificate -urgent", // unary "-" on a bare word: "no such column: urgent"
+		"can't",               // unterminated quote from the bare apostrophe
+		"multi-factor",        // bare hyphen inside an unquoted term
+	} {
+		t.Run(q, func(t *testing.T) {
+			_, _, err := s.List(ctx, store.ListFilter{Query: q})
+			if !errors.Is(err, store.ErrInvalidQuery) {
+				t.Fatalf("List(%q) error = %v, want errors.Is(_, store.ErrInvalidQuery)", q, err)
+			}
+		})
 	}
 }
 

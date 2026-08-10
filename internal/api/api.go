@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
@@ -29,14 +30,16 @@ type Config struct {
 }
 
 // New builds the /api/v1 router against store, logging requests through
-// logger (SPEC.md §10) and enforcing cfg.Auth when enabled.
-func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.Engine {
+// logger (SPEC.md §10) and enforcing cfg.Auth when enabled. bus is the
+// in-process event bus (internal/events, M7.0) that deleteMessage and
+// clearMessages publish to.
+func New(messageStore store.MessageStore, bus *events.Bus, logger *slog.Logger, cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
 
-	RegisterRoutes(&engine.RouterGroup, messageStore, cfg)
+	RegisterRoutes(&engine.RouterGroup, messageStore, bus, cfg)
 
 	return engine
 }
@@ -45,9 +48,9 @@ func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.
 // engine.Group(basePath)), enforcing cfg.Auth. Exported so internal/webui
 // (M5.0) can mount the same routes read-through on the Web UI port
 // (SPEC.md §5) without duplicating the route table — this is the single
-// source of truth for /api/v1's shape.
-func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, cfg Config) {
-	h := &handlers{store: messageStore}
+// source of truth for /api/v1's shape. bus must not be nil.
+func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, bus *events.Bus, cfg Config) {
+	h := &handlers{store: messageStore, bus: bus}
 
 	v1 := rg.Group(cfg.BasePath + "/api/v1")
 	v1.Use(authMiddleware(cfg.Auth))

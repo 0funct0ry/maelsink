@@ -3,13 +3,12 @@ package api
 import (
 	"errors"
 	"net/http"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 	"github.com/0funct0ry/maelsink/internal/version"
 )
@@ -19,26 +18,22 @@ const (
 	maxLimit     = 500
 )
 
+// invalidQueryMessage is shown to the user for a store.ErrInvalidQuery,
+// deliberately generic — the underlying SQLite/FTS5 error text (column
+// names, "SQL logic error", etc.) is an implementation detail that must
+// never reach the client. See internal/store's ErrInvalidQuery doc comment.
+const invalidQueryMessage = "Invalid search query. Check your quotes, boolean operators (AND/OR/NOT), and column filters (e.g. subject:...)."
+
 type handlers struct {
 	store store.MessageStore
+	bus   *events.Bus
 }
 
-// messageSummary is the Message (summary) shape from SPEC.md §5.1.
-type messageSummary struct {
-	ID              string   `json:"id"`
-	From            string   `json:"from"`
-	To              []string `json:"to"`
-	Cc              []string `json:"cc"`
-	Subject         string   `json:"subject"`
-	SizeBytes       int64    `json:"size_bytes"`
-	HasAttachments  bool     `json:"has_attachments"`
-	AttachmentCount int      `json:"attachment_count"`
-	ReceivedAt      string   `json:"received_at"`
-	ParseWarning    bool     `json:"parse_warning"`
-	Read            bool     `json:"read"`
-	Tags            []string `json:"tags"`
-	Preview         string   `json:"preview"`
-}
+// messageSummary is the Message (summary) shape from SPEC.md §5.1. It also
+// backs the message.created WebSocket event payload (SPEC.md §5.5), so the
+// type itself lives in internal/store (see store.MessageSummary) where both
+// internal/api and internal/smtp can build it without importing each other.
+type messageSummary = store.MessageSummary
 
 // attachmentSummary is a single entry in messageDetail.Attachments.
 type attachmentSummary struct {
@@ -64,74 +59,9 @@ type messageDetail struct {
 	RawSizeBytes int64               `json:"raw_size_bytes"`
 }
 
-func addrStrings(addrs []store.Address) []string {
-	out := make([]string, len(addrs))
-	for i, a := range addrs {
-		out[i] = a.Address
-	}
-	return out
-}
-
-const previewMaxLen = 120
-
-// tagsOrEmpty avoids sending `"tags": null` to clients (nil vs. empty slice
-// both mean "no tags", but JSON null forces every caller to null-check).
-func tagsOrEmpty(tags []string) []string {
-	if tags == nil {
-		return []string{}
-	}
-	return tags
-}
-
-// messagePreview computes a short, plain-text-only truncated preview: the
-// first ~120 chars of TextBody, or of HTMLBody with tags stripped if no
-// TextBody exists. It is computed at query time so list responses never
-// carry the full body.
-func messagePreview(msg *store.Message) string {
-	text := strings.TrimSpace(msg.TextBody)
-	if text == "" {
-		text = strings.TrimSpace(stripHTMLTags(msg.HTMLBody))
-	}
-	text = collapseWhitespace(text)
-	r := []rune(text)
-	if len(r) > previewMaxLen {
-		return string(r[:previewMaxLen])
-	}
-	return string(r)
-}
-
-var htmlTagRe = regexp.MustCompile(`(?s)<[^>]*>`)
-
-func stripHTMLTags(html string) string {
-	return htmlTagRe.ReplaceAllString(html, " ")
-}
-
-var whitespaceRe = regexp.MustCompile(`\s+`)
-
-func collapseWhitespace(s string) string {
-	return strings.TrimSpace(whitespaceRe.ReplaceAllString(s, " "))
-}
-
+// toSummary builds the summary JSON shape for msg.
 func toSummary(msg *store.Message) messageSummary {
-	from := ""
-	if len(msg.From) > 0 {
-		from = msg.From[0].Address
-	}
-	return messageSummary{
-		ID:              msg.ID,
-		From:            from,
-		To:              addrStrings(msg.To),
-		Cc:              addrStrings(msg.Cc),
-		Subject:         msg.Subject,
-		SizeBytes:       msg.Size,
-		HasAttachments:  msg.AttachmentCount > 0,
-		AttachmentCount: msg.AttachmentCount,
-		ReceivedAt:      msg.ReceivedAt.UTC().Format(time.RFC3339),
-		ParseWarning:    msg.ParseWarning,
-		Read:            msg.Read,
-		Tags:            tagsOrEmpty(msg.Tags),
-		Preview:         messagePreview(msg),
-	}
+	return store.NewMessageSummary(msg)
 }
 
 func toDetail(msg *store.Message) messageDetail {
@@ -257,6 +187,10 @@ func (h *handlers) listMessages(c *gin.Context) {
 
 	msgs, total, err := h.store.List(c.Request.Context(), filter)
 	if err != nil {
+		if errors.Is(err, store.ErrInvalidQuery) {
+			respondError(c, http.StatusBadRequest, "invalid_query", invalidQueryMessage)
+			return
+		}
 		respondInternal(c, err.Error())
 		return
 	}
@@ -324,10 +258,21 @@ func (h *handlers) markRead(c *gin.Context) {
 
 func (h *handlers) deleteMessage(c *gin.Context) {
 	id := c.Param("id")
+
+	// id may be an unambiguous prefix (per MessageStore.Delete); resolve it
+	// to the full ID before publishing message.deleted, so WS clients
+	// matching on payload.id always see the canonical ID.
+	msg, err := h.store.Get(c.Request.Context(), id)
+	if err != nil {
+		handleStoreErr(c, id, err)
+		return
+	}
+
 	if err := h.store.Delete(c.Request.Context(), id); err != nil {
 		handleStoreErr(c, id, err)
 		return
 	}
+	h.bus.Publish(events.MessageDeleted(msg.ID))
 	c.Status(http.StatusNoContent)
 }
 
@@ -340,6 +285,7 @@ func (h *handlers) clearMessages(c *gin.Context) {
 		respondInternal(c, err.Error())
 		return
 	}
+	h.bus.Publish(events.MessagesCleared())
 	c.Status(http.StatusNoContent)
 }
 

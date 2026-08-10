@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import MessageDetailScreen from './MessageDetailScreen'
 import { useMessageStore } from '../../stores/useMessageStore'
@@ -75,6 +75,18 @@ describe('MessageDetailScreen', () => {
   it('shows DeletedMessageState for not_found', () => {
     useMessageStore.setState({ selectedStatus: 'not_found' })
     renderScreen()
+    expect(screen.getByText(/This message no longer exists/)).toBeInTheDocument()
+  })
+
+  it('shows DeletedMessageState when a realtime message.deleted event arrives for the open message (M7.0)', () => {
+    useMessageStore.setState({ selected: message, selectedStatus: 'idle' })
+    renderScreen()
+    expect(screen.getByText('Hello world')).toBeInTheDocument()
+
+    act(() => {
+      useMessageStore.getState().applyMessageDeleted(message.id)
+    })
+
     expect(screen.getByText(/This message no longer exists/)).toBeInTheDocument()
   })
 

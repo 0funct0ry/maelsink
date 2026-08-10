@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
@@ -34,14 +35,21 @@ type testClient struct {
 
 func newTestSession(t *testing.T, cfg Config) (*testClient, store.MessageStore) {
 	t.Helper()
+	c, st, _ := newTestSessionWithBus(t, cfg)
+	return c, st
+}
+
+func newTestSessionWithBus(t *testing.T, cfg Config) (*testClient, store.MessageStore, *events.Bus) {
+	t.Helper()
 	st := store.NewMemoryStore()
-	srv := &Server{cfg: cfg, store: st, publisher: store.NoopPublisher{}, logger: slog.New(slog.DiscardHandler)}
+	bus := events.NewBus()
+	srv := &Server{cfg: cfg, store: st, bus: bus, logger: slog.New(slog.DiscardHandler)}
 
 	clientConn, serverConn := net.Pipe()
 	sess := newSession(srv, serverConn)
 	go sess.run()
 
-	return &testClient{t: t, conn: clientConn, r: bufio.NewReader(clientConn)}, st
+	return &testClient{t: t, conn: clientConn, r: bufio.NewReader(clientConn)}, st, bus
 }
 
 func (c *testClient) send(line string) {
@@ -126,6 +134,54 @@ func TestSession_HappyPath(t *testing.T) {
 	}
 	if total != 1 {
 		t.Fatalf("total = %d, want 1", total)
+	}
+}
+
+func TestSession_EmitsMessageCreatedEvent(t *testing.T) {
+	c, st, bus := newTestSessionWithBus(t, testConfig())
+	defer c.conn.Close()
+
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	c.expectCode(codeGreeting)
+	c.send("EHLO client.example.com")
+	c.expectCode(codeOK)
+	c.send("MAIL FROM:<alice@example.com>")
+	c.expectCode(codeOK)
+	c.send("RCPT TO:<bob@example.com>")
+	c.expectCode(codeOK)
+	c.send("DATA")
+	c.expectCode(codeStartMailInput)
+	c.send("Subject: hi")
+	c.send("")
+	c.send("hello world")
+	c.send(".")
+	c.expectCode(codeOK)
+
+	var ev events.Event
+	select {
+	case ev = <-sub:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for message.created event")
+	}
+	if ev.Type != events.TypeMessageCreated {
+		t.Fatalf("got event type %q, want %q", ev.Type, events.TypeMessageCreated)
+	}
+	summary, ok := ev.Payload.(store.MessageSummary)
+	if !ok {
+		t.Fatalf("payload is %T, want store.MessageSummary", ev.Payload)
+	}
+
+	msgs, _, err := st.List(context.Background(), store.ListFilter{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 stored message, got %d", len(msgs))
+	}
+	if summary.ID != msgs[0].ID {
+		t.Fatalf("event summary ID %q != stored message ID %q", summary.ID, msgs[0].ID)
 	}
 }
 
@@ -319,7 +375,7 @@ func TestSession_StartTLS(t *testing.T) {
 	cfg.TLSKey = keyPath
 
 	st := store.NewMemoryStore()
-	srv := &Server{cfg: cfg, store: st, publisher: store.NoopPublisher{}, logger: slog.New(slog.DiscardHandler)}
+	srv := &Server{cfg: cfg, store: st, bus: events.NewBus(), logger: slog.New(slog.DiscardHandler)}
 
 	clientConn, serverConn := net.Pipe()
 	t.Cleanup(func() { clientConn.Close() })

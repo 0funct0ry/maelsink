@@ -6,6 +6,8 @@ import ToastContainer from '../common/ToastContainer'
 import ConfirmDialog from '../common/ConfirmDialog'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
+import { connectWs, type WsFrame } from '../../lib/wsClient'
+import type { MessageSummary } from '../../lib/apiTypes'
 
 interface AppShellProps {
   children: ReactNode
@@ -23,6 +25,38 @@ export default function AppShell({ children }: AppShellProps) {
 
   useEffect(() => {
     void useMessageStore.getState().fetchMessages()
+  }, [])
+
+  // The /ws connection (M7.0) is owned here — not inside InboxScreen — so
+  // it stays connected across every route (Detail, Settings), not just
+  // while the Inbox list happens to be mounted. Without this, navigating
+  // away from "/" would drop the connection and neither the Sidebar's
+  // counts nor an open Detail screen's "deleted" state would ever update
+  // in realtime.
+  useEffect(() => {
+    const { applyMessageCreated, applyMessageDeleted, applyMessagesCleared } = useMessageStore.getState()
+    const { setWsStatus } = useUIStore.getState()
+
+    const handleFrame = (frame: WsFrame) => {
+      switch (frame.type) {
+        case 'message.created':
+          applyMessageCreated(frame.payload as MessageSummary)
+          break
+        case 'message.deleted':
+          applyMessageDeleted((frame.payload as { id: string }).id)
+          break
+        case 'messages.cleared':
+          applyMessagesCleared()
+          break
+        default:
+          // 'hello' / 'server.shutdown' are status-only, handled via
+          // onStatusChange below.
+          break
+      }
+    }
+
+    const conn = connectWs({ onEvent: handleFrame, onStatusChange: setWsStatus })
+    return () => conn.close()
   }, [])
 
   // Global Escape-to-back: from a message detail route, Escape returns to

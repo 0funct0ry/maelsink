@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/goleak"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
@@ -37,9 +38,22 @@ func TestSweepOnce_MaxAgeHours(t *testing.T) {
 	// oldest to newest: 10h, 5h, 1h ago.
 	ids := seedMessages(t, s, []time.Duration{10 * time.Hour, 5 * time.Hour, 1 * time.Hour}, now)
 
-	sw := New(s, Config{MaxAgeHours: 6}, fakeClock{now: now}, nil)
+	bus := events.NewBus()
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	sw := New(s, bus, Config{MaxAgeHours: 6}, fakeClock{now: now}, nil)
 	if err := sw.sweepOnce(context.Background()); err != nil {
 		t.Fatalf("sweepOnce: %v", err)
+	}
+
+	select {
+	case ev := <-sub:
+		if ev.Type != events.TypeMessageDeleted {
+			t.Fatalf("got event type %q, want %q", ev.Type, events.TypeMessageDeleted)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for message.deleted event")
 	}
 
 	if _, err := s.Get(context.Background(), ids[0]); err != store.ErrNotFound {
@@ -63,7 +77,7 @@ func TestSweepOnce_MaxMessages(t *testing.T) {
 	}
 	ids := seedMessages(t, s, ages, now)
 
-	sw := New(s, Config{MaxMessages: 3}, fakeClock{now: now}, nil)
+	sw := New(s, events.NewBus(), Config{MaxMessages: 3}, fakeClock{now: now}, nil)
 	if err := sw.sweepOnce(context.Background()); err != nil {
 		t.Fatalf("sweepOnce: %v", err)
 	}
@@ -93,7 +107,7 @@ func TestSweepOnce_UnlimitedWhenZero(t *testing.T) {
 	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
 	seedMessages(t, s, []time.Duration{1000 * time.Hour, 2000 * time.Hour}, now)
 
-	sw := New(s, Config{}, fakeClock{now: now}, nil)
+	sw := New(s, events.NewBus(), Config{}, fakeClock{now: now}, nil)
 	if err := sw.sweepOnce(context.Background()); err != nil {
 		t.Fatalf("sweepOnce: %v", err)
 	}
@@ -109,7 +123,7 @@ func TestSweepOnce_UnlimitedWhenZero(t *testing.T) {
 
 func TestRun_StopsOnContextCancel(t *testing.T) {
 	s := store.NewMemoryStore()
-	sw := New(s, Config{Interval: time.Millisecond}, RealClock{}, nil)
+	sw := New(s, events.NewBus(), Config{Interval: time.Millisecond}, RealClock{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

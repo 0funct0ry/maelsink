@@ -2,11 +2,10 @@ import { Inbox, Mail, Paperclip, AlertTriangle, Bookmark, Tag as TagIcon, Trash2
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useMessageStore } from '../../stores/useMessageStore'
-import { getStats, getTags } from '../../lib/apiClient'
 import { formatBytes } from '../../lib/format'
 import { tagColor } from '../../lib/tagColor'
 import { deleteSavedSearch, listSavedSearches, saveSearch, type SavedSearch } from '../../lib/savedSearches'
-import type { ListMessagesParams, Stats, TagCount } from '../../lib/apiTypes'
+import type { ListMessagesParams } from '../../lib/apiTypes'
 
 type MailboxFilter = 'all' | 'unread' | 'attachments' | 'warnings'
 
@@ -31,31 +30,20 @@ export default function Sidebar() {
   const total = useMessageStore((state) => state.total)
   const query = useMessageStore((state) => state.query)
   const setQuery = useMessageStore((state) => state.setQuery)
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [tags, setTags] = useState<TagCount[]>([])
+  const stats = useMessageStore((state) => state.sidebarStats)
+  const tags = useMessageStore((state) => state.sidebarTags)
+  const fetchSidebarData = useMessageStore((state) => state.fetchSidebarData)
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [newSearchName, setNewSearchName] = useState('')
 
+  // Sidebar counts/tags live in useMessageStore (M7.0) so they stay in sync
+  // with realtime message.created/deleted/messages.cleared events and with
+  // this tab's own mutations (markRead, delete, clear) — the store's
+  // action handlers call fetchSidebarData themselves; this effect only
+  // covers the very first load.
   useEffect(() => {
-    let cancelled = false
-    getStats()
-      .then((s) => {
-        if (!cancelled) setStats(s)
-      })
-      .catch(() => {
-        // Non-fatal: the storage card and mailbox counts just don't render.
-      })
-    getTags()
-      .then((t) => {
-        if (!cancelled) setTags(t)
-      })
-      .catch(() => {
-        // Non-fatal: the tags nav group just doesn't render.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    void fetchSidebarData()
+  }, [fetchSidebarData])
 
   useEffect(() => {
     setSavedSearches(listSavedSearches())

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { WsStatus } from '../lib/wsClient'
 
 const STORAGE_KEY = 'maelsink_api_key'
 
@@ -57,6 +58,12 @@ interface UIState {
   setAuthToken: (token: string) => void
   clearAuthToken: () => void
   setAuthRequired: (required: boolean, retry?: () => void) => void
+
+  /** Live status of the app-wide /ws connection (M7.0), owned by AppShell
+   * so it survives route changes — read by TopBar to show a "reconnecting"
+   * indicator regardless of which screen is currently active. */
+  wsStatus: WsStatus
+  setWsStatus: (status: WsStatus) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -81,4 +88,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   clearAuthToken: () => set({ authToken: null }),
   setAuthRequired: (required, retry) =>
     set({ authRequired: required, pendingRetry: required ? retry ?? null : null }),
+
+  wsStatus: 'connecting',
+  setWsStatus: (status) => set({ wsStatus: status }),
 }))

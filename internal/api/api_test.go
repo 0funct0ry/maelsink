@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/mail"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 
 	"go.uber.org/goleak"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/logging"
 	"github.com/0funct0ry/maelsink/internal/store"
 	"github.com/0funct0ry/maelsink/internal/store/sqlite"
@@ -72,7 +74,14 @@ func sampleMessage(subject, from, to string, receivedAt time.Time) *store.Messag
 
 func newRouter(t *testing.T, s store.MessageStore, cfg Config) http.Handler {
 	t.Helper()
-	return New(s, testLogger(t), cfg)
+	router, _ := newRouterWithBus(t, s, cfg)
+	return router
+}
+
+func newRouterWithBus(t *testing.T, s store.MessageStore, cfg Config) (http.Handler, *events.Bus) {
+	t.Helper()
+	bus := events.NewBus()
+	return New(s, bus, testLogger(t), cfg), bus
 }
 
 func doJSON(t *testing.T, router http.Handler, method, path string, headers map[string]string) (*httptest.ResponseRecorder, map[string]any) {
@@ -103,7 +112,7 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		}
 	}
 
-	router := newRouter(t, s, Config{})
+	router, bus := newRouterWithBus(t, s, Config{})
 
 	t.Run("version", func(t *testing.T) {
 		rec, body := doJSON(t, router, http.MethodGet, "/api/v1/version", nil)
@@ -151,6 +160,26 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		}
 		if resp.Messages[0].AttachmentCount != 1 || !resp.Messages[0].HasAttachments {
 			t.Fatalf("expected attachment metadata populated, got %+v", resp.Messages[0])
+		}
+	})
+
+	t.Run("list with malformed search query returns a friendly 400, not the raw SQLite error", func(t *testing.T) {
+		rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages?q="+url.QueryEscape("certificate -urgent"), nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+		errObj, ok := body["error"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected an error envelope, got %+v", body)
+		}
+		if errObj["code"] != "invalid_query" {
+			t.Fatalf("expected code invalid_query, got %+v", errObj)
+		}
+		msg, _ := errObj["message"].(string)
+		for _, leaked := range []string{"sqlite", "SQL logic error", "fts5", "no such column"} {
+			if strings.Contains(msg, leaked) {
+				t.Fatalf("error message leaked internal detail %q: %s", leaked, msg)
+			}
 		}
 	})
 
@@ -293,6 +322,9 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 	})
 
 	t.Run("delete single message", func(t *testing.T) {
+		sub, unsub := bus.Subscribe()
+		defer unsub()
+
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/messages/"+id, nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -302,9 +334,21 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		if _, err := s.Get(ctx, id); err != store.ErrNotFound {
 			t.Fatalf("expected message deleted")
 		}
+
+		select {
+		case ev := <-sub:
+			if ev.Type != events.TypeMessageDeleted {
+				t.Fatalf("got event type %q, want %q", ev.Type, events.TypeMessageDeleted)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for message.deleted event")
+		}
 	})
 
 	t.Run("bulk clear with confirm", func(t *testing.T) {
+		sub, unsub := bus.Subscribe()
+		defer unsub()
+
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/messages?confirm=true", nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -317,6 +361,15 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		}
 		if total != 0 {
 			t.Fatalf("expected 0 messages after clear, got %d", total)
+		}
+
+		select {
+		case ev := <-sub:
+			if ev.Type != events.TypeMessagesCleared {
+				t.Fatalf("got event type %q, want %q", ev.Type, events.TypeMessagesCleared)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for messages.cleared event")
 		}
 	})
 }

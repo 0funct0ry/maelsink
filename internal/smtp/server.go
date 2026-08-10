@@ -1,8 +1,8 @@
 // Package smtp implements maelsink's SMTP server (SPEC.md §4). It is fully
 // isolated per SPEC.md §2.3 point 5: no imports of net/http, Gin, or any
 // future REST/UI package — only the store.MessageStore interface and the
-// store.Publisher event-bus stand-in. This lets the protocol layer be built
-// and unit-tested independently of whether any HTTP surface exists.
+// internal/events event bus. This lets the protocol layer be built and
+// unit-tested independently of whether any HTTP surface exists.
 package smtp
 
 import (
@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
@@ -39,12 +40,13 @@ type Config struct {
 }
 
 // Server accepts SMTP connections and stores parsed messages via the
-// injected MessageStore, publishing a Publish event after each save.
+// injected MessageStore, publishing a message.created event on bus after
+// each successful save.
 type Server struct {
-	cfg       Config
-	store     store.MessageStore
-	publisher store.Publisher
-	logger    *slog.Logger
+	cfg    Config
+	store  store.MessageStore
+	bus    *events.Bus
+	logger *slog.Logger
 
 	listenerMu sync.RWMutex
 	listener   net.Listener
@@ -54,17 +56,17 @@ type Server struct {
 }
 
 // New constructs a Server. It does not start listening; call ListenAndServe.
-func New(cfg Config, st store.MessageStore, pub store.Publisher, logger *slog.Logger) (*Server, error) {
+func New(cfg Config, st store.MessageStore, bus *events.Bus, logger *slog.Logger) (*Server, error) {
 	if st == nil {
 		return nil, fmt.Errorf("smtp: MessageStore must not be nil")
 	}
-	if pub == nil {
-		pub = store.NoopPublisher{}
+	if bus == nil {
+		bus = events.NewBus()
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{cfg: cfg, store: st, publisher: pub, logger: logger}, nil
+	return &Server{cfg: cfg, store: st, bus: bus, logger: logger}, nil
 }
 
 // ListenAndServe binds the configured host:port and accepts connections
