@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/0funct0ry/maelsink/internal/events"
 	"github.com/0funct0ry/maelsink/internal/logging"
 	"github.com/0funct0ry/maelsink/internal/store/sqlite"
@@ -197,6 +199,46 @@ func TestAPIReadThroughRespectsBasePath(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("GET /maelsink/api/v1/health = %d, want 200", rec.Code)
 	}
+}
+
+// TestWSFallsBackToForwardedPrefix covers M8.0's fix for the WS route: when
+// no web.base_path is configured, an operator relying on the zero-config
+// X-Forwarded-Prefix fallback (SPEC.md §3.4) expects GET /<prefix>/ws to
+// upgrade too, not just GET /ws.
+func TestWSFallsBackToForwardedPrefix(t *testing.T) {
+	store := newTestStore(t)
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{})
+
+	srv := httptest.NewServer(engine)
+	t.Cleanup(srv.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/maelsink/ws"
+	header := map[string][]string{"X-Forwarded-Prefix": {"/maelsink"}}
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("Dial %s: %v (resp=%v)", wsURL, err, resp)
+	}
+	defer conn.Close()
+}
+
+// TestWSAtRootStillWorksWithoutForwardedPrefix ensures the fallback added
+// for the forwarded-prefix case doesn't disturb the plain root-mounted /ws
+// route used when no proxy is involved.
+func TestWSAtRootStillWorksWithoutForwardedPrefix(t *testing.T) {
+	store := newTestStore(t)
+	_bus, _hub := testBusAndHub(t)
+	engine := New(store, _bus, _hub, testLogger(t), Config{})
+
+	srv := httptest.NewServer(engine)
+	t.Cleanup(srv.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial %s: %v (resp=%v)", wsURL, err, resp)
+	}
+	defer conn.Close()
 }
 
 func TestStaticAssetsServedByteForByte(t *testing.T) {

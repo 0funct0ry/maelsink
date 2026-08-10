@@ -83,7 +83,7 @@ func New(messageStore store.MessageStore, bus *events.Bus, hub *ws.Hub, logger *
 		panic("webui: embedded index.html missing: " + err.Error())
 	}
 
-	registerSPARoutes(engine, assets, indexHTML, cfg.BasePath)
+	registerSPARoutes(engine, assets, indexHTML, cfg.BasePath, hub)
 
 	return engine
 }
@@ -91,7 +91,15 @@ func New(messageStore store.MessageStore, bus *events.Bus, hub *ws.Hub, logger *
 // registerSPARoutes serves static assets byte-for-byte from assets, and
 // falls back to a base-path-templated index.html for every other GET so the
 // SPA's client-side router can take over (SPEC.md §3.4).
-func registerSPARoutes(engine *gin.Engine, assets fs.FS, indexHTML []byte, configuredBasePath string) {
+//
+// When configuredBasePath is empty, /ws is already mounted at the engine
+// level by New, but that only covers the root-mounted case: an operator
+// relying on the zero-config X-Forwarded-Prefix fallback (SPEC.md §3.4)
+// expects the WS endpoint to live under that forwarded prefix instead, e.g.
+// /maelsink/ws. Since the prefix isn't known until request time, that case
+// is handled here, in NoRoute, using the same resolveBasePath-stripped
+// reqPath already computed for asset/index resolution.
+func registerSPARoutes(engine *gin.Engine, assets fs.FS, indexHTML []byte, configuredBasePath string, hub *ws.Hub) {
 	fileServer := http.FileServer(http.FS(assets))
 
 	serveIndex := func(c *gin.Context) {
@@ -106,8 +114,15 @@ func registerSPARoutes(engine *gin.Engine, assets fs.FS, indexHTML []byte, confi
 			return
 		}
 
-		reqPath := strings.TrimPrefix(c.Request.URL.Path, configuredBasePath)
+		base := resolveBasePath(configuredBasePath, c.Request.Header.Get("X-Forwarded-Prefix"))
+		reqPath := strings.TrimPrefix(c.Request.URL.Path, base)
 		reqPath = strings.TrimPrefix(reqPath, "/")
+
+		if configuredBasePath == "" && reqPath == "ws" {
+			hub.ServeWS(c)
+			return
+		}
+
 		if reqPath != "" {
 			if f, err := assets.Open(reqPath); err == nil {
 				_ = f.Close()
