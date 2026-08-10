@@ -32,6 +32,22 @@ func TestMessageSpec_Build_TextOnly(t *testing.T) {
 	}
 }
 
+func TestMessageSpec_Build_Tags(t *testing.T) {
+	spec := MessageSpec{From: "a@b.com", To: []string{"c@d.com"}, Subject: "hi", Text: "hello", Tags: []string{"smoke", "release"}}
+	raw, err := spec.Build(time.Now())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	m, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	got := m.Header[textproto.CanonicalMIMEHeaderKey("X-Tag")]
+	if len(got) != 2 || got[0] != "smoke" || got[1] != "release" {
+		t.Fatalf("X-Tag headers = %v, want [smoke release]", got)
+	}
+}
+
 func TestMessageSpec_Build_TextAndHTML(t *testing.T) {
 	spec := MessageSpec{From: "a@b.com", To: []string{"c@d.com"}, Subject: "hi", Text: "plain", HTML: "<b>html</b>"}
 	raw, err := spec.Build(time.Now())

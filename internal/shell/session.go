@@ -3,6 +3,8 @@ package shell
 import (
 	"context"
 	"io"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
@@ -56,6 +58,16 @@ type Session struct {
 	// every evaluated line; it has no effect in -e/--script/piped modes,
 	// which have no line buffer to seed.
 	PendingBuffer string
+
+	// jobsMu guards jobs/nextJobID — the only Session state touched by a
+	// goroutine other than the single-threaded eval loop (background
+	// builtin runs, e.g. "intmsg --background"). Every other Session field
+	// is written unsynchronized on the assumption only the eval loop
+	// touches it; this is the sole exception.
+	jobsMu    sync.Mutex
+	jobs      map[string]*BackgroundJob
+	jobOrder  []string
+	nextJobID int
 }
 
 // SetPendingBuffer stages text to be loaded into the next interactive
@@ -159,4 +171,58 @@ func (s *Session) RefreshConnected(ctx context.Context) {
 		return
 	}
 	s.SetVar("connected", "true")
+}
+
+// NewJob registers a new BackgroundJob under a fresh session-local ID (a
+// small incrementing counter, e.g. "1", "2" — easy to type back into a
+// "--stop <id>" flag) and returns it. Used by builtins that support running
+// detached from the interactive prompt (e.g. "intmsg --background").
+func (s *Session) NewJob() *BackgroundJob {
+	s.jobsMu.Lock()
+	defer s.jobsMu.Unlock()
+	if s.jobs == nil {
+		s.jobs = make(map[string]*BackgroundJob)
+	}
+	s.nextJobID++
+	job := &BackgroundJob{ID: strconv.Itoa(s.nextJobID), StartedAt: time.Now(), doneCh: make(chan struct{})}
+	s.jobs[job.ID] = job
+	s.jobOrder = append(s.jobOrder, job.ID)
+	return job
+}
+
+// Job returns the background job registered under id, if any.
+func (s *Session) Job(id string) (*BackgroundJob, bool) {
+	s.jobsMu.Lock()
+	defer s.jobsMu.Unlock()
+	job, ok := s.jobs[id]
+	return job, ok
+}
+
+// RemoveJob unregisters a background job (whether finished or still
+// running) once its owner no longer needs to query it.
+func (s *Session) RemoveJob(id string) {
+	s.jobsMu.Lock()
+	defer s.jobsMu.Unlock()
+	delete(s.jobs, id)
+	for i, existing := range s.jobOrder {
+		if existing == id {
+			s.jobOrder = append(s.jobOrder[:i], s.jobOrder[i+1:]...)
+			break
+		}
+	}
+}
+
+// Jobs returns every currently-registered background job, oldest first —
+// used by a "--list" builtin flag to enumerate running/finished background
+// runs (e.g. "intmsg --list").
+func (s *Session) Jobs() []*BackgroundJob {
+	s.jobsMu.Lock()
+	defer s.jobsMu.Unlock()
+	out := make([]*BackgroundJob, 0, len(s.jobOrder))
+	for _, id := range s.jobOrder {
+		if job, ok := s.jobs[id]; ok {
+			out = append(out, job)
+		}
+	}
+	return out
 }

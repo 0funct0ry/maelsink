@@ -137,6 +137,52 @@ func TestEngineDeterminism(t *testing.T) {
 	}
 }
 
+func TestEngineFloat64Determinism(t *testing.T) {
+	e1, err := New(42, false)
+	if err != nil {
+		t.Fatalf("New(e1): %v", err)
+	}
+	defer e1.Close()
+	e2, err := New(42, false)
+	if err != nil {
+		t.Fatalf("New(e2): %v", err)
+	}
+	defer e2.Close()
+
+	for i := 0; i < 20; i++ {
+		a, b := e1.Float64(), e2.Float64()
+		if a != b {
+			t.Fatalf("Float64 draw %d differs across same-seed engines: %v vs %v", i, a, b)
+		}
+		if a < 0 || a >= 1 {
+			t.Fatalf("Float64 out of [0,1): %v", a)
+		}
+	}
+}
+
+func TestEngineExpFloat64Determinism(t *testing.T) {
+	e1, err := New(7, false)
+	if err != nil {
+		t.Fatalf("New(e1): %v", err)
+	}
+	defer e1.Close()
+	e2, err := New(7, false)
+	if err != nil {
+		t.Fatalf("New(e2): %v", err)
+	}
+	defer e2.Close()
+
+	for i := 0; i < 20; i++ {
+		a, b := e1.ExpFloat64(), e2.ExpFloat64()
+		if a != b {
+			t.Fatalf("ExpFloat64 draw %d differs across same-seed engines: %v vs %v", i, a, b)
+		}
+		if a < 0 {
+			t.Fatalf("ExpFloat64 returned negative: %v", a)
+		}
+	}
+}
+
 func TestEngineDifferentSeedsDiffer(t *testing.T) {
 	e1, err := New(1, false)
 	if err != nil {

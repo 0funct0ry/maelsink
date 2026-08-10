@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -30,6 +31,15 @@ type Engine struct {
 	faker   *gofakeit.Faker
 	tempDir string
 	unsafe  bool
+
+	// mu guards every use of rnd (directly, or indirectly via faker/entropy,
+	// both of which wrap the same *mrand.Rand). math/rand.Rand is not safe
+	// for concurrent use, but builtins like "send"/"randmsg"/"deluge" render
+	// and send messages from a bounded pool of goroutines (--concurrency),
+	// so every entry point that touches rnd must serialize through this
+	// lock — held for the whole Render() call, since a template's function
+	// calls draw from rnd deep inside template execution.
+	mu sync.Mutex
 }
 
 // randReader adapts a *mrand.Rand into an io.Reader, so it can serve as the
@@ -92,7 +102,29 @@ func (e *Engine) TempDir() string {
 // callers outside the FuncMap (e.g. the "example" builtin picking one of
 // several canned templates) stay deterministic under a fixed --seed too.
 func (e *Engine) Intn(n int) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.rnd.Intn(n)
+}
+
+// Float64 returns a pseudo-random float64 in [0.0,1.0) from this Engine's
+// seeded PRNG, for callers needing a uniform draw (e.g. the "steady" jitter
+// model in the intmsg builtin) with the same determinism guarantee as Intn.
+func (e *Engine) Float64() float64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.rnd.Float64()
+}
+
+// ExpFloat64 returns a pseudo-random float64 from the exponential
+// distribution with rate 1, from this Engine's seeded PRNG — the building
+// block for the intmsg builtin's "poisson" interval profile (an exponential
+// inter-arrival time with the given mean is the standard Poisson-process
+// model).
+func (e *Engine) ExpFloat64() float64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.rnd.ExpFloat64()
 }
 
 // FuncMap returns the merged text/template.FuncMap for this Engine: sprig's
@@ -151,6 +183,12 @@ func (e *Engine) Render(text string, data any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tmpl: parse: %w", err)
 	}
+
+	// Held for the whole Execute call: template functions (fake data, ids,
+	// binary/file generators) draw from e.rnd/e.faker/e.entropy deep inside
+	// execution, none of which are safe for concurrent use.
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	var buf strings.Builder
 	if err := tpl.Execute(&buf, data); err != nil {

@@ -40,6 +40,10 @@ type MessageSpec struct {
 	Text        string           `json:"text,omitempty"`
 	HTML        string           `json:"html,omitempty"`
 	Attachments []AttachmentSpec `json:"attachments,omitempty"`
+	// Tags becomes one "X-Tag" header per entry — internal/smtp/mime.go's
+	// extractTags derives internal/store.Message.Tags from that header on
+	// ingest, so this is the client-side way to set tags on a sent message.
+	Tags []string `json:"tags,omitempty"`
 }
 
 // Envelope returns the SMTP envelope (MAIL FROM / RCPT TO) for this spec.
@@ -68,6 +72,9 @@ func (m MessageSpec) Build(now time.Time) ([]byte, error) {
 	headers.Set("Subject", m.Subject)
 	headers.Set("Date", now.UTC().Format(time.RFC1123Z))
 	headers.Set("MIME-Version", "1.0")
+	for _, tag := range m.Tags {
+		headers.Add("X-Tag", tag)
+	}
 
 	body, bodyContentType, err := buildBody(m.Text, m.HTML)
 	if err != nil {
@@ -221,7 +228,7 @@ func joinAddrs(addrs []string) string {
 }
 
 func writeHeaders(buf *bytes.Buffer, headers textproto.MIMEHeader) {
-	for _, key := range []string{"From", "To", "Cc", "Subject", "Date", "MIME-Version", "Content-Type"} {
+	for _, key := range []string{"From", "To", "Cc", "Subject", "X-Tag", "Date", "MIME-Version", "Content-Type"} {
 		for _, v := range headers.Values(key) {
 			fmt.Fprintf(buf, "%s: %s\r\n", key, v)
 		}
