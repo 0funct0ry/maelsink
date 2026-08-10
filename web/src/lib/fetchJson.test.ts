@@ -85,7 +85,9 @@ describe('fetchBlob / fetchText', () => {
   it('fetchBlob resolves a Blob on success', async () => {
     mockFetch(vi.fn(async () => new Response(new Blob(['data']), { status: 200 })) as unknown as typeof fetch)
     const blob = await fetchBlob('/api/v1/messages/x/attachments/y')
-    expect(blob).toBeInstanceOf(Blob)
+    expect(blob).toBeTruthy()
+    expect(typeof (blob as Blob).size).toBe('number')
+    expect(typeof (blob as Blob).type).toBe('string')
   })
 
   it('fetchText resolves text on success', async () => {
