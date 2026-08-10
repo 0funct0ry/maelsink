@@ -143,6 +143,12 @@ func messageMatchesFilter(msg *Message, filter ListFilter) bool {
 	if filter.Subject != "" && !strings.Contains(strings.ToLower(msg.Subject), strings.ToLower(filter.Subject)) {
 		return false
 	}
+	if filter.Cc != "" && !addrsContain(msg.Cc, filter.Cc) {
+		return false
+	}
+	if filter.Bcc != "" && !addrsContain(msg.Bcc, filter.Bcc) {
+		return false
+	}
 	if filter.Query != "" {
 		q := strings.ToLower(filter.Query)
 		if !strings.Contains(strings.ToLower(msg.Subject), q) &&
@@ -158,8 +164,25 @@ func messageMatchesFilter(msg *Message, filter ListFilter) bool {
 	if !filter.Until.IsZero() && msg.ReceivedAt.After(filter.Until) {
 		return false
 	}
-	if filter.Tag != "" && !tagsContain(msg.Tags, filter.Tag) {
-		return false
+	if tags := effectiveTags(filter); len(tags) > 0 {
+		if filter.TagMode == "all" {
+			for _, t := range tags {
+				if !tagsContain(msg.Tags, t) {
+					return false
+				}
+			}
+		} else {
+			matched := false
+			for _, t := range tags {
+				if tagsContain(msg.Tags, t) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
+		}
 	}
 	if filter.Read != nil && msg.Read != *filter.Read {
 		return false
@@ -174,6 +197,18 @@ func messageMatchesFilter(msg *Message, filter ListFilter) bool {
 		return false
 	}
 	return true
+}
+
+// effectiveTags returns filter.Tags, falling back to filter.Tag as sugar for
+// a single-element slice when Tags is unset.
+func effectiveTags(filter ListFilter) []string {
+	if len(filter.Tags) > 0 {
+		return filter.Tags
+	}
+	if filter.Tag != "" {
+		return []string{filter.Tag}
+	}
+	return nil
 }
 
 func tagsContain(tags []string, tag string) bool {
@@ -281,6 +316,62 @@ func (s *MemoryStore) MarkRead(_ context.Context, id string, read bool) error {
 		return err
 	}
 	s.messages[s.byID[full]].Read = read
+	return nil
+}
+
+// AddTag adds tag to the message's tag set. See MessageStore.AddTag.
+func (s *MemoryStore) AddTag(_ context.Context, id, tag string) error {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return ErrInvalidTag
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	full, err := resolveID(s.byID, id)
+	if err != nil {
+		return err
+	}
+	msg := s.messages[s.byID[full]]
+	if tagsContain(msg.Tags, tag) {
+		return nil
+	}
+	// Build a fresh slice rather than appending in place: List/Get hand out
+	// shallow copies of *Message that share this slice's backing array, so
+	// an in-place append could race with a concurrent reader under -race.
+	next := make([]string, len(msg.Tags), len(msg.Tags)+1)
+	copy(next, msg.Tags)
+	next = append(next, tag)
+	msg.Tags = next
+	return nil
+}
+
+// RemoveTag removes tag from the message's tag set. See MessageStore.RemoveTag.
+func (s *MemoryStore) RemoveTag(_ context.Context, id, tag string) error {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return ErrInvalidTag
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	full, err := resolveID(s.byID, id)
+	if err != nil {
+		return err
+	}
+	msg := s.messages[s.byID[full]]
+	if !tagsContain(msg.Tags, tag) {
+		return nil
+	}
+	next := make([]string, 0, len(msg.Tags))
+	for _, t := range msg.Tags {
+		if t != tag {
+			next = append(next, t)
+		}
+	}
+	msg.Tags = next
 	return nil
 }
 

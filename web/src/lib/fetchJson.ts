@@ -5,7 +5,7 @@ import { useUIStore } from '../stores/useUIStore'
 
 export interface FetchJsonOptions {
   method?: string
-  query?: Record<string, string | number | boolean | undefined>
+  query?: Record<string, string | number | boolean | string[] | undefined>
   /** JSON-serializable request body; sets Content-Type: application/json. */
   body?: unknown
   /** Skip attaching Authorization — never needed today, kept for completeness. */
@@ -17,6 +17,12 @@ function buildQuery(query?: FetchJsonOptions['query']): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === '') continue
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v !== '') params.append(key, v)
+      }
+      continue
+    }
     params.set(key, String(value))
   }
   const qs = params.toString()

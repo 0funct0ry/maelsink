@@ -142,6 +142,48 @@ describe('deleteMessageOptimistic', () => {
   })
 })
 
+describe('updateTagsOptimistic', () => {
+  it('applies add/remove immediately and reconciles with the server response', async () => {
+    useMessageStore.setState({ messages: [{ ...summary('a'), tags: ['smoke'] }], total: 1 })
+    vi.mocked(apiClient.updateMessageTags).mockResolvedValue({ ...summary('a'), tags: ['release'] })
+
+    const promise = useMessageStore.getState().updateTagsOptimistic('a', ['release'], ['smoke'])
+    expect(useMessageStore.getState().messages[0].tags).toEqual(['release'])
+    await promise
+
+    expect(useMessageStore.getState().messages[0].tags).toEqual(['release'])
+    expect(apiClient.updateMessageTags).toHaveBeenCalledWith('a', { add: ['release'], remove: ['smoke'] })
+  })
+
+  it('rolls back and toasts on failure', async () => {
+    useMessageStore.setState({ messages: [{ ...summary('a'), tags: ['smoke'] }], total: 1 })
+    vi.mocked(apiClient.updateMessageTags).mockRejectedValue(new HttpError(500, 'internal_error', 'boom'))
+
+    await useMessageStore.getState().updateTagsOptimistic('a', ['release'], ['smoke'])
+
+    expect(useMessageStore.getState().messages[0].tags).toEqual(['smoke'])
+    expect(useUIStore.getState().toasts.some((t) => t.variant === 'danger')).toBe(true)
+  })
+
+  it('is a no-op for a message not in the list or selected', async () => {
+    useMessageStore.setState({ messages: [], selected: null })
+    await useMessageStore.getState().updateTagsOptimistic('missing', ['release'], [])
+    expect(apiClient.updateMessageTags).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyMessageTagsUpdated', () => {
+  it('patches tags on the matching row and selected message', () => {
+    useMessageStore.setState({
+      messages: [{ ...summary('a'), tags: ['smoke'] }],
+      selected: { ...summary('a'), tags: ['smoke'], headers: [], text_body: '', html_body: '', attachments: [], raw_size_bytes: 0 },
+    })
+    useMessageStore.getState().applyMessageTagsUpdated({ id: 'a', tags: ['release'] })
+    expect(useMessageStore.getState().messages[0].tags).toEqual(['release'])
+    expect(useMessageStore.getState().selected?.tags).toEqual(['release'])
+  })
+})
+
 describe('clearAll', () => {
   it('empties the list on success', async () => {
     useMessageStore.setState({ messages: [summary('a')], total: 1, offset: 10 })

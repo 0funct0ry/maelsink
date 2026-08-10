@@ -10,9 +10,10 @@ package events
 type Type string
 
 const (
-	TypeMessageCreated  Type = "message.created"
-	TypeMessageDeleted  Type = "message.deleted"
-	TypeMessagesCleared Type = "messages.cleared"
+	TypeMessageCreated     Type = "message.created"
+	TypeMessageDeleted     Type = "message.deleted"
+	TypeMessagesCleared    Type = "messages.cleared"
+	TypeMessageTagsUpdated Type = "message.tags_updated"
 )
 
 // Event is the bus-internal envelope. Payload is whatever the caller wants
@@ -30,6 +31,13 @@ type deletedPayload struct {
 	ID string `json:"id"`
 }
 
+// tagsUpdatedPayload is the {"id": "msg_...", "tags": [...]} shape SPEC.md
+// §5.5 defines for message.tags_updated.
+type tagsUpdatedPayload struct {
+	ID   string   `json:"id"`
+	Tags []string `json:"tags"`
+}
+
 // MessageCreated builds a message.created event carrying payload (a message
 // summary) as its JSON payload.
 func MessageCreated(payload any) Event {
@@ -45,4 +53,13 @@ func MessageDeleted(id string) Event {
 // MessagesCleared builds a messages.cleared event with an empty payload.
 func MessagesCleared() Event {
 	return Event{Type: TypeMessagesCleared, Payload: struct{}{}}
+}
+
+// MessageTagsUpdated builds a message.tags_updated event for the given
+// (full) message ID and its current tag set. tags is copied into the
+// payload as-is; callers should pass []string{} rather than nil for "no
+// tags" to match the no-null convention used elsewhere (e.g.
+// store.MessageSummary.Tags).
+func MessageTagsUpdated(id string, tags []string) Event {
+	return Event{Type: TypeMessageTagsUpdated, Payload: tagsUpdatedPayload{ID: id, Tags: tags}}
 }

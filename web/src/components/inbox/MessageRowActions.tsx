@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Download, Eye, Mail, MailOpen, MoreVertical, Trash2 } from 'lucide-react'
+import { Download, Eye, Mail, MailOpen, MoreVertical, Tags, Trash2 } from 'lucide-react'
 import IconButton from '../common/IconButton'
+import TagEditModal from '../common/TagEditModal'
 import { exportMessage } from '../../lib/apiClient'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
@@ -35,6 +36,9 @@ export default function MessageRowActions({ message, onPreview }: MessageRowActi
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<MenuPosition | null>(null)
   const [exporting, setExporting] = useState(false)
+  // Lives outside the menu's `open` state (below) so closeAnd unmounting the
+  // portal menu doesn't also unmount this modal.
+  const [tagEditOpen, setTagEditOpen] = useState(false)
   const triggerRef = useRef<HTMLSpanElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const markRead = useMessageStore((state) => state.markRead)
@@ -161,6 +165,15 @@ export default function MessageRowActions({ message, onPreview }: MessageRowActi
             <button
               type="button"
               role="menuitem"
+              onClick={() => closeAnd(() => setTagEditOpen(true))}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-text-primary hover:bg-surface"
+            >
+              <Tags className="h-3.5 w-3.5" aria-hidden="true" />
+              Edit tags
+            </button>
+            <button
+              type="button"
+              role="menuitem"
               onClick={() => closeAnd(handleDeleteClick)}
               className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-danger hover:bg-danger-soft"
             >
@@ -170,6 +183,8 @@ export default function MessageRowActions({ message, onPreview }: MessageRowActi
           </div>,
           document.body,
         )}
+
+      <TagEditModal open={tagEditOpen} onClose={() => setTagEditOpen(false)} message={message} />
     </span>
   )
 }

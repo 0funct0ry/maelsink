@@ -1,11 +1,25 @@
 import { apiUrl } from './apiBase'
 import { fetchBlob, fetchJson, fetchText } from './fetchJson'
-import type { ListMessagesParams, ListResponse, MessageDetail, Stats, TagCount, Version } from './apiTypes'
+import type {
+  ListMessagesParams,
+  ListResponse,
+  MessageDetail,
+  MessageSummary,
+  Stats,
+  TagCount,
+  Version,
+} from './apiTypes'
 
-function buildQueryString(params: Record<string, string | number | boolean | undefined> = {}): string {
+function buildQueryString(params: Record<string, string | number | boolean | string[] | undefined> = {}): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === '') continue
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v !== '') search.append(key, v)
+      }
+      continue
+    }
     search.set(key, String(value))
   }
   const qs = search.toString()
@@ -22,6 +36,10 @@ export function getMessage(id: string): Promise<MessageDetail> {
 
 export function markRead(id: string, read = true): Promise<void> {
   return fetchJson<void>(`/api/v1/messages/${id}/read`, { method: 'PATCH', body: { read } })
+}
+
+export function updateMessageTags(id: string, body: { add: string[]; remove: string[] }): Promise<MessageSummary> {
+  return fetchJson<MessageSummary>(`/api/v1/messages/${id}/tags`, { method: 'PATCH', body })
 }
 
 export function deleteMessage(id: string): Promise<void> {

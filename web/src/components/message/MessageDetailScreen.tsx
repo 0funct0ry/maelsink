@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Tags, Trash2 } from 'lucide-react'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
 import { exportMessage } from '../../lib/apiClient'
@@ -8,6 +8,7 @@ import { formatAbsoluteDate, formatAddress, formatAddressList, formatExactTime, 
 import Button from '../common/Button'
 import ConfirmDialog from '../common/ConfirmDialog'
 import TagBadge from '../common/TagBadge'
+import TagEditModal from '../common/TagEditModal'
 import StatusBadges from './StatusBadges'
 import MessageTabs from './MessageTabs'
 import AttachmentGrid from './AttachmentGrid'
@@ -22,6 +23,7 @@ export default function MessageDetailScreen() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [tagEditOpen, setTagEditOpen] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -175,6 +177,14 @@ export default function MessageDetailScreen() {
               ))}
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setTagEditOpen(true)}
+            className="flex items-center gap-1.5 rounded-sm border border-border-soft bg-bg px-[9px] py-[5px] text-[12px] font-medium text-text-secondary transition-colors hover:border-border hover:bg-surface hover:text-text-primary"
+          >
+            <Tags className="h-3.5 w-3.5" aria-hidden="true" />
+            Edit tags
+          </button>
         </div>
       </div>
 
@@ -195,6 +205,8 @@ export default function MessageDetailScreen() {
         confirmLabel="Delete"
         danger
       />
+
+      <TagEditModal open={tagEditOpen} onClose={() => setTagEditOpen(false)} message={message} />
     </div>
   )
 }

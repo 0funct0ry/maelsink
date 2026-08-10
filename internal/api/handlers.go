@@ -111,10 +111,14 @@ func parseListFilter(c *gin.Context) (store.ListFilter, error) {
 		Cc:      c.Query("cc"),
 		Bcc:     c.Query("bcc"),
 		Sort:    c.DefaultQuery("sort", store.SortReceivedAtDesc),
-		Tag:     c.Query("tag"),
+		Tags:    c.QueryArray("tag"),
+		TagMode: c.DefaultQuery("tag_mode", "any"),
 	}
 	if filter.Sort != store.SortReceivedAtDesc && filter.Sort != store.SortReceivedAtAsc {
 		return filter, errors.New("sort must be one of received_at_desc, received_at_asc")
+	}
+	if filter.TagMode != "any" && filter.TagMode != "all" {
+		return filter, errors.New("tag_mode must be one of any, all")
 	}
 
 	var err error
@@ -256,6 +260,60 @@ func (h *handlers) markRead(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// updateTagsBody is the JSON body for PATCH .../tags: {"add": [...], "remove": [...]}.
+type updateTagsBody struct {
+	Add    []string `json:"add"`
+	Remove []string `json:"remove"`
+}
+
+func (h *handlers) updateTags(c *gin.Context) {
+	id := c.Param("id")
+
+	var body updateTagsBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid_request", "invalid request body")
+		return
+	}
+
+	// Resolve the id to the canonical ID up front (per MessageStore.Get),
+	// so a short prefix only needs resolving once and every mutation below
+	// (and the published event) uses the full ID.
+	msg, err := h.store.Get(c.Request.Context(), id)
+	if err != nil {
+		handleStoreErr(c, id, err)
+		return
+	}
+
+	for _, t := range body.Remove {
+		if err := h.store.RemoveTag(c.Request.Context(), msg.ID, t); err != nil {
+			if errors.Is(err, store.ErrInvalidTag) {
+				respondValidation(c, err.Error())
+				return
+			}
+			handleStoreErr(c, id, err)
+			return
+		}
+	}
+	for _, t := range body.Add {
+		if err := h.store.AddTag(c.Request.Context(), msg.ID, t); err != nil {
+			if errors.Is(err, store.ErrInvalidTag) {
+				respondValidation(c, err.Error())
+				return
+			}
+			handleStoreErr(c, id, err)
+			return
+		}
+	}
+
+	updated, err := h.store.Get(c.Request.Context(), msg.ID)
+	if err != nil {
+		handleStoreErr(c, id, err)
+		return
+	}
+	h.bus.Publish(events.MessageTagsUpdated(updated.ID, updated.Tags))
+	c.JSON(http.StatusOK, toSummary(updated))
 }
 
 func (h *handlers) deleteMessage(c *gin.Context) {

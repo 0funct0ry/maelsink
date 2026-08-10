@@ -342,6 +342,149 @@ func TestMemoryStore_TagFilterAndTagsAggregate(t *testing.T) {
 	if counts["release"] != 1 {
 		t.Fatalf("release count = %d, want 1", counts["release"])
 	}
+
+	_, total, err = s.List(ctx, ListFilter{Tags: []string{"smoke", "release"}})
+	if err != nil {
+		t.Fatalf("List (tags any): %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("tags any total = %d, want 2", total)
+	}
+
+	_, total, err = s.List(ctx, ListFilter{Tags: []string{"smoke", "release"}, TagMode: "all"})
+	if err != nil {
+		t.Fatalf("List (tags all): %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("tags all total = %d, want 1", total)
+	}
+}
+
+func TestMemoryStore_CcBccFilters(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	_ = s.Save(ctx, &Message{Subject: "a", Cc: []Address{{Address: "carol@example.com"}}})
+	_ = s.Save(ctx, &Message{Subject: "b", Bcc: []Address{{Address: "dave@example.com"}}})
+	_ = s.Save(ctx, &Message{Subject: "c"})
+
+	_, total, err := s.List(ctx, ListFilter{Cc: "carol"})
+	if err != nil {
+		t.Fatalf("List (cc): %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("cc total = %d, want 1", total)
+	}
+
+	_, total, err = s.List(ctx, ListFilter{Bcc: "dave"})
+	if err != nil {
+		t.Fatalf("List (bcc): %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("bcc total = %d, want 1", total)
+	}
+}
+
+func TestMemoryStore_AddRemoveTag(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{Subject: "hello", Tags: []string{"smoke"}}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := s.AddTag(ctx, msg.ID, "release"); err != nil {
+		t.Fatalf("AddTag: %v", err)
+	}
+	if err := s.AddTag(ctx, msg.ID, "release"); err != nil {
+		t.Fatalf("AddTag (idempotent second call): %v", err)
+	}
+
+	got, err := s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !tagsContain(got.Tags, "smoke") || !tagsContain(got.Tags, "release") {
+		t.Fatalf("Tags = %v, want smoke and release", got.Tags)
+	}
+
+	if err := s.RemoveTag(ctx, msg.ID, "smoke"); err != nil {
+		t.Fatalf("RemoveTag: %v", err)
+	}
+	if err := s.RemoveTag(ctx, msg.ID, "smoke"); err != nil {
+		t.Fatalf("RemoveTag (idempotent second call): %v", err)
+	}
+	if err := s.RemoveTag(ctx, msg.ID, "never-existed"); err != nil {
+		t.Fatalf("RemoveTag on absent tag: %v", err)
+	}
+
+	got, err = s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get after RemoveTag: %v", err)
+	}
+	if tagsContain(got.Tags, "smoke") {
+		t.Fatal("expected smoke to be removed")
+	}
+	if !tagsContain(got.Tags, "release") {
+		t.Fatal("expected release to remain")
+	}
+}
+
+func TestMemoryStore_AddRemoveTagMissing(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	if err := s.AddTag(ctx, "nope", "smoke"); err != ErrNotFound {
+		t.Fatalf("AddTag missing: got %v, want ErrNotFound", err)
+	}
+	if err := s.RemoveTag(ctx, "nope", "smoke"); err != ErrNotFound {
+		t.Fatalf("RemoveTag missing: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestMemoryStore_AddRemoveTagInvalid(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{Subject: "hello"}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := s.AddTag(ctx, msg.ID, "   "); err != ErrInvalidTag {
+		t.Fatalf("AddTag with blank tag: got %v, want ErrInvalidTag", err)
+	}
+	if err := s.RemoveTag(ctx, msg.ID, ""); err != ErrInvalidTag {
+		t.Fatalf("RemoveTag with empty tag: got %v, want ErrInvalidTag", err)
+	}
+}
+
+func TestMemoryStore_ConcurrentAddTagList(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{Subject: "hello"}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 25; i++ {
+			_ = s.AddTag(ctx, msg.ID, "smoke")
+			_ = s.RemoveTag(ctx, msg.ID, "smoke")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 25; i++ {
+			_, _, _ = s.List(ctx, ListFilter{})
+		}
+	}()
+	wg.Wait()
 }
 
 func TestMemoryStore_ReadHasAttachmentsParseWarningFilters(t *testing.T) {

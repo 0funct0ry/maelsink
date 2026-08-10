@@ -13,7 +13,7 @@ describe('ActiveFilterChips', () => {
   })
 
   it('ignores q and sidebar filters when deciding what to show', () => {
-    useMessageStore.setState({ query: { q: 'hello', tag: 'smoke', read: false } })
+    useMessageStore.setState({ query: { q: 'hello', tag: ['smoke'], read: false } })
     const { container } = render(<ActiveFilterChips />)
     expect(container).toBeEmptyDOMElement()
   })
@@ -28,7 +28,7 @@ describe('ActiveFilterChips', () => {
 
   it('removing a chip clears only that field', () => {
     const setQuery = vi.fn()
-    useMessageStore.setState({ setQuery, query: { q: 'keep-me', tag: 'keep-me-too', from: 'billing@x.com' } })
+    useMessageStore.setState({ setQuery, query: { q: 'keep-me', tag: ['keep-me-too'], from: 'billing@x.com' } })
     render(<ActiveFilterChips />)
 
     fireEvent.click(screen.getByLabelText('Remove from filter'))

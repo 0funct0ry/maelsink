@@ -34,7 +34,8 @@ export default function AppShell({ children }: AppShellProps) {
   // counts nor an open Detail screen's "deleted" state would ever update
   // in realtime.
   useEffect(() => {
-    const { applyMessageCreated, applyMessageDeleted, applyMessagesCleared } = useMessageStore.getState()
+    const { applyMessageCreated, applyMessageDeleted, applyMessagesCleared, applyMessageTagsUpdated } =
+      useMessageStore.getState()
     const { setWsStatus } = useUIStore.getState()
 
     const handleFrame = (frame: WsFrame) => {
@@ -47,6 +48,9 @@ export default function AppShell({ children }: AppShellProps) {
           break
         case 'messages.cleared':
           applyMessagesCleared()
+          break
+        case 'message.tags_updated':
+          applyMessageTagsUpdated(frame.payload as { id: string; tags: string[] })
           break
         default:
           // 'hello' / 'server.shutdown' are status-only, handled via

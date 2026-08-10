@@ -177,7 +177,30 @@ describe('Sidebar', () => {
     renderSidebar()
     await waitFor(() => expect(screen.getByText('smoke')).toBeInTheDocument())
     fireEvent.click(screen.getByText('smoke'))
-    expect(setQuery).toHaveBeenCalledWith(expect.objectContaining({ tag: 'smoke' }))
+    expect(setQuery).toHaveBeenCalledWith(expect.objectContaining({ tag: ['smoke'] }))
+  })
+
+  it('supports selecting multiple tags and toggling AND/OR mode', async () => {
+    vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
+    vi.mocked(apiClient.getTags).mockResolvedValue([
+      { tag: 'smoke', count: 4 },
+      { tag: 'release', count: 2 },
+    ])
+    const setQuery = vi.fn()
+    useMessageStore.setState({ setQuery, query: { tag: ['smoke'] } })
+    renderSidebar()
+    await waitFor(() => expect(screen.getByText('release')).toBeInTheDocument())
+
+    expect(screen.queryByText('Match:')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('release'))
+    expect(setQuery).toHaveBeenCalledWith(expect.objectContaining({ tag: ['smoke', 'release'] }))
+
+    useMessageStore.setState({ query: { tag: ['smoke', 'release'] } })
+    await waitFor(() => expect(screen.getByText('Match:')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('All'))
+    expect(setQuery).toHaveBeenCalledWith({ tag_mode: 'all' })
   })
 
   it('does not render a Tags section when there are no tags', async () => {

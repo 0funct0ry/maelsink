@@ -62,13 +62,20 @@ export default function Sidebar() {
       has_attachments: filter === 'attachments' ? true : undefined,
       parse_warning: filter === 'warnings' ? true : undefined,
       tag: undefined,
+      tag_mode: undefined,
     })
     navigate('/')
   }
 
-  function applyTag(tag: string) {
-    setQuery({ tag, read: undefined, has_attachments: undefined, parse_warning: undefined })
+  function toggleTag(tag: string) {
+    const current = query.tag ?? []
+    const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]
+    setQuery({ tag: next.length ? next : undefined, tag_mode: next.length >= 2 ? query.tag_mode : undefined })
     navigate('/')
+  }
+
+  function setTagMode(mode: 'any' | 'all') {
+    setQuery({ tag_mode: mode })
   }
 
   function applySavedSearch(search: SavedSearch) {
@@ -213,13 +220,14 @@ export default function Sidebar() {
           <nav className="flex flex-col gap-px">
             {tags.map((tc) => {
               const color = tagColor(tc.tag)
-              const isActiveItem = query.tag === tc.tag
+              const isActiveItem = (query.tag ?? []).includes(tc.tag)
               return (
                 <button
                   key={tc.tag}
                   type="button"
+                  aria-pressed={isActiveItem}
                   className={navItemClass(isActiveItem)}
-                  onClick={() => applyTag(tc.tag)}
+                  onClick={() => toggleTag(tc.tag)}
                 >
                   <span className="flex min-w-0 items-center gap-2.5 truncate">
                     <span className={`h-[7px] w-[7px] flex-none rounded-full ${color.dot}`} aria-hidden="true" />
@@ -231,6 +239,33 @@ export default function Sidebar() {
               )
             })}
           </nav>
+          {(query.tag?.length ?? 0) >= 2 && (
+            <div className="mt-1.5 flex items-center gap-1 px-2">
+              <span className="text-[11px] text-text-tertiary">Match:</span>
+              <div className="flex overflow-hidden rounded-sm border border-border-soft">
+                <button
+                  type="button"
+                  aria-pressed={(query.tag_mode ?? 'any') === 'any'}
+                  onClick={() => setTagMode('any')}
+                  className={`px-2 py-0.5 text-[11px] font-medium ${
+                    (query.tag_mode ?? 'any') === 'any' ? 'bg-accent-soft text-accent' : 'text-text-secondary hover:bg-surface'
+                  }`}
+                >
+                  Any
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={query.tag_mode === 'all'}
+                  onClick={() => setTagMode('all')}
+                  className={`px-2 py-0.5 text-[11px] font-medium ${
+                    query.tag_mode === 'all' ? 'bg-accent-soft text-accent' : 'text-text-secondary hover:bg-surface'
+                  }`}
+                >
+                  All
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -123,6 +123,13 @@ describe('MessageDetailScreen', () => {
     expect(screen.queryByText('signup-flow')).not.toBeInTheDocument()
   })
 
+  it('opens the tag edit modal from the "Edit tags" button', async () => {
+    useMessageStore.setState({ selected: { ...message, tags: ['smoke'] }, selectedStatus: 'idle', markRead: vi.fn() })
+    renderScreen()
+    fireEvent.click(await screen.findByText('Edit tags'))
+    expect(screen.getByRole('heading', { name: 'Edit tags' })).toBeInTheDocument()
+  })
+
   it('shows a formatted absolute date alongside the relative time', async () => {
     useMessageStore.setState({
       selected: { ...message, received_at: '2026-08-07T14:32:10Z' },

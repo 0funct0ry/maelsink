@@ -56,7 +56,7 @@ describe('InboxScreen', () => {
   })
 
   it('Export All link includes the active query filters', () => {
-    useMessageStore.setState({ query: { subject: 'invoice', tag: 'smoke' } })
+    useMessageStore.setState({ query: { subject: 'invoice', tag: ['smoke'] } })
     renderScreen()
     const link = screen.getByTitle('Export all messages as .zip')
     expect(link.getAttribute('href')).toContain('subject=invoice')

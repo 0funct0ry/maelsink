@@ -60,6 +60,7 @@ func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, bus *e
 		v1.DELETE("/messages", h.clearMessages)
 		v1.GET("/messages/:id", h.getMessage)
 		v1.PATCH("/messages/:id/read", h.markRead)
+		v1.PATCH("/messages/:id/tags", h.updateTags)
 		v1.DELETE("/messages/:id", h.deleteMessage)
 		v1.GET("/messages/:id/raw", h.rawMessage)
 		v1.GET("/messages/:id/export", h.exportMessage)

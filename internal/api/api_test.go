@@ -626,6 +626,116 @@ func TestAPI_TagFilterAndTagsEndpoint(t *testing.T) {
 	if counts["smoke"] != 2 || counts["release"] != 1 {
 		t.Fatalf("tag counts = %+v, want smoke=2 release=1", counts)
 	}
+
+	rec, body = doJSON(t, router, http.MethodGet, "/api/v1/messages?tag=smoke&tag=release", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET ?tag=smoke&tag=release = %d: %s", rec.Code, rec.Body.String())
+	}
+	if int(body["total"].(float64)) != 2 {
+		t.Fatalf("tags any total = %v, want 2", body["total"])
+	}
+
+	rec, body = doJSON(t, router, http.MethodGet, "/api/v1/messages?tag=smoke&tag=release&tag_mode=all", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET ?tag=smoke&tag=release&tag_mode=all = %d: %s", rec.Code, rec.Body.String())
+	}
+	if int(body["total"].(float64)) != 1 {
+		t.Fatalf("tags all total = %v, want 1", body["total"])
+	}
+
+	rec, _ = doJSON(t, router, http.MethodGet, "/api/v1/messages?tag_mode=bogus", nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("GET ?tag_mode=bogus = %d, want 400", rec.Code)
+	}
+}
+
+func TestAPI_UpdateTags(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now()
+	msg := sampleMessage("s1", "a@example.com", "b@example.com", now)
+	msg.Tags = []string{"smoke"}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	id := msg.ID
+
+	router, bus := newRouterWithBus(t, s, Config{})
+
+	t.Run("add and remove", func(t *testing.T) {
+		sub, unsub := bus.Subscribe()
+		defer unsub()
+
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/messages/"+id+"/tags",
+			strings.NewReader(`{"add":["release"],"remove":["smoke"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var body struct {
+			Tags []string `json:"tags"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(body.Tags) != 1 || body.Tags[0] != "release" {
+			t.Fatalf("response tags = %v, want [release]", body.Tags)
+		}
+
+		select {
+		case ev := <-sub:
+			if ev.Type != events.TypeMessageTagsUpdated {
+				t.Fatalf("got event type %q, want %q", ev.Type, events.TypeMessageTagsUpdated)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for message.tags_updated event")
+		}
+
+		got, err := s.Get(ctx, id)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if len(got.Tags) != 1 || got.Tags[0] != "release" {
+			t.Fatalf("stored tags = %v, want [release]", got.Tags)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/messages/does-not-exist/tags",
+			strings.NewReader(`{"add":["x"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", rec.Code)
+		}
+	})
+
+	t.Run("empty tag is a validation error", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/messages/"+id+"/tags",
+			strings.NewReader(`{"add":["  "]}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("invalid body", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/messages/"+id+"/tags",
+			strings.NewReader(`not json`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+	})
 }
 
 func TestAPI_ReadHasAttachmentsParseWarningFilters(t *testing.T) {

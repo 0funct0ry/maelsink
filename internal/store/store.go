@@ -23,6 +23,10 @@ var ErrAmbiguousID = errors.New("store: ambiguous message id prefix")
 // detail (SQL dialect, column names) that would leak through otherwise.
 var ErrInvalidQuery = errors.New("store: invalid search query")
 
+// ErrInvalidTag is returned by AddTag/RemoveTag when the given tag is empty
+// or whitespace-only after trimming.
+var ErrInvalidTag = errors.New("store: invalid tag")
+
 // IDLength is the length, in hex characters, of a full message ID produced
 // by NewID. Get and Delete treat any shorter string as a prefix to resolve
 // against stored IDs (docker-CLI-style short references), and any string of
@@ -52,8 +56,15 @@ type ListFilter struct {
 	// Sort is one of the Sort* constants; "" defaults to SortReceivedAtDesc.
 	Sort string
 	// Tag, when non-empty, matches messages carrying this exact tag
-	// (case-sensitive exact match against one entry of Message.Tags).
+	// (case-sensitive exact match against one entry of Message.Tags). Kept
+	// as sugar for Tags: []string{Tag} — set either, not both.
 	Tag string
+	// Tags, when non-empty, matches messages against multiple tags at once,
+	// combined per TagMode. If both Tag and Tags are set, Tags wins.
+	Tags []string
+	// TagMode is "any" (OR, the default/zero value) or "all" (AND),
+	// controlling how Tags are combined. Ignored when len(Tags) < 2.
+	TagMode string
 	// Read, when non-nil, filters to messages with Read == *Read.
 	Read *bool
 	// HasAttachments, when non-nil, filters to messages whose
@@ -107,6 +118,16 @@ type MessageStore interface {
 	// to the given value. Idempotent — setting a message's read flag to a
 	// value it already holds is a no-op success.
 	MarkRead(ctx context.Context, id string, read bool) error
+	// AddTag adds tag (trimmed) to the message's tag set (full ID or
+	// unambiguous prefix, per Get). Adding a tag the message already has is
+	// a no-op success. Returns ErrInvalidTag if tag is empty/whitespace-only
+	// after trimming.
+	AddTag(ctx context.Context, id, tag string) error
+	// RemoveTag removes tag (trimmed) from the message's tag set (full ID or
+	// unambiguous prefix, per Get). Removing a tag the message doesn't have
+	// is a no-op success. Returns ErrInvalidTag if tag is empty/whitespace-only
+	// after trimming.
+	RemoveTag(ctx context.Context, id, tag string) error
 	// Stats returns a snapshot summary of the store's current contents.
 	Stats(ctx context.Context) (Stats, error)
 	// Tags returns every distinct tag currently in use with its message

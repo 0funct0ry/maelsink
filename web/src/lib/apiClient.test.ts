@@ -26,6 +26,45 @@ describe('apiClient', () => {
     expect(seenUrl).toContain('limit=10')
   })
 
+  it('listMessages sends repeatable tag params and tag_mode', async () => {
+    let seenUrl = ''
+    mockFetch(
+      vi.fn(async (url) => {
+        seenUrl = String(url)
+        return new Response(JSON.stringify({ messages: [], total: 0, limit: 50, offset: 0 }), { status: 200 })
+      }) as unknown as typeof fetch,
+    )
+    await apiClient.listMessages({ tag: ['a', 'b'], tag_mode: 'all' })
+    const params = new URL(seenUrl, 'http://x').searchParams
+    expect(params.getAll('tag')).toEqual(['a', 'b'])
+    expect(params.get('tag_mode')).toBe('all')
+  })
+
+  it('updateMessageTags issues a PATCH to the tags endpoint', async () => {
+    let seenUrl = ''
+    let seenMethod = ''
+    let seenBody = ''
+    mockFetch(
+      vi.fn(async (url, init) => {
+        seenUrl = String(url)
+        seenMethod = init?.method ?? ''
+        seenBody = String(init?.body ?? '')
+        return new Response(JSON.stringify({ id: 'abc', tags: ['release'] }), { status: 200 })
+      }) as unknown as typeof fetch,
+    )
+    const result = await apiClient.updateMessageTags('abc', { add: ['release'], remove: ['smoke'] })
+    expect(seenUrl).toContain('/api/v1/messages/abc/tags')
+    expect(seenMethod).toBe('PATCH')
+    expect(JSON.parse(seenBody)).toEqual({ add: ['release'], remove: ['smoke'] })
+    expect(result.tags).toEqual(['release'])
+  })
+
+  it('exportAllUrl forwards repeatable tag params', () => {
+    expect(apiClient.exportAllUrl({ tag: ['a', 'b'], tag_mode: 'all' })).toBe(
+      '/api/v1/messages/export?tag=a&tag=b&tag_mode=all',
+    )
+  })
+
   it('getMessage fetches the detail endpoint', async () => {
     mockFetch(
       vi.fn(async () => new Response(JSON.stringify({ id: 'abc' }), { status: 200 })) as unknown as typeof fetch,

@@ -563,13 +563,20 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 		where = append(where, `m.received_at <= ?`)
 		args = append(args, filter.Until.UTC().Format(timeLayout))
 	}
-	if filter.Tag != "" {
-		// tags is a JSON array column; match an exact string element via a
-		// LIKE against its quoted JSON encoding to avoid a per-row json_each
-		// join for the common case of a simple tag string (no embedded
-		// quotes/backslashes possible from X-Tag header values we store).
-		where = append(where, `EXISTS (SELECT 1 FROM json_each(m.tags) WHERE json_each.value = ?)`)
-		args = append(args, filter.Tag)
+	if tags := effectiveTags(filter); len(tags) > 0 {
+		if filter.TagMode == "all" {
+			for _, t := range tags {
+				where = append(where, `EXISTS (SELECT 1 FROM json_each(m.tags) WHERE json_each.value = ?)`)
+				args = append(args, t)
+			}
+		} else {
+			placeholders := make([]string, len(tags))
+			for i, t := range tags {
+				placeholders[i] = "?"
+				args = append(args, t)
+			}
+			where = append(where, `EXISTS (SELECT 1 FROM json_each(m.tags) WHERE json_each.value IN (`+strings.Join(placeholders, ",")+`))`)
+		}
 	}
 	if filter.Read != nil {
 		where = append(where, `m.read = ?`)
@@ -647,6 +654,18 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 	}
 
 	return out, total, nil
+}
+
+// effectiveTags returns filter.Tags, falling back to filter.Tag as sugar for
+// a single-element slice when Tags is unset.
+func effectiveTags(filter store.ListFilter) []string {
+	if len(filter.Tags) > 0 {
+		return filter.Tags
+	}
+	if filter.Tag != "" {
+		return []string{filter.Tag}
+	}
+	return nil
 }
 
 // likeContains escapes SQLite LIKE metacharacters in s and wraps it for a
@@ -732,6 +751,92 @@ func (s *Store) MarkRead(ctx context.Context, id string, read bool) error {
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE messages SET read = ? WHERE id = ?`, read, full); err != nil {
 		return fmt.Errorf("sqlite: setting message read flag: %w", err)
+	}
+	return nil
+}
+
+// AddTag adds tag to the message's tag set. See store.MessageStore.AddTag.
+func (s *Store) AddTag(ctx context.Context, id, tag string) error {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return store.ErrInvalidTag
+	}
+
+	// Resolve the ID and validate before opening a tx: the connection pool
+	// is capped at 1 (see Open), so any s.db.* call made while a tx is open
+	// would deadlock rather than fail fast with SQLITE_BUSY.
+	full, err := s.resolveID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	return s.mutateTags(ctx, full, func(tags []string) []string {
+		for _, t := range tags {
+			if t == tag {
+				return tags
+			}
+		}
+		return append(tags, tag)
+	})
+}
+
+// RemoveTag removes tag from the message's tag set. See store.MessageStore.RemoveTag.
+func (s *Store) RemoveTag(ctx context.Context, id, tag string) error {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return store.ErrInvalidTag
+	}
+
+	full, err := s.resolveID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	return s.mutateTags(ctx, full, func(tags []string) []string {
+		next := make([]string, 0, len(tags))
+		for _, t := range tags {
+			if t != tag {
+				next = append(next, t)
+			}
+		}
+		return next
+	})
+}
+
+// mutateTags applies mutate to the message's current tag set inside a
+// transaction and persists the result. id must already be a resolved, full
+// message ID.
+func (s *Store) mutateTags(ctx context.Context, id string, mutate func([]string) []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	var tagsStr string
+	if err := tx.QueryRowContext(ctx, `SELECT tags FROM messages WHERE id = ?`, id).Scan(&tagsStr); err != nil {
+		if err == sql.ErrNoRows {
+			return store.ErrNotFound
+		}
+		return fmt.Errorf("sqlite: reading tags: %w", err)
+	}
+	tags, err := parseTagsJSON(tagsStr)
+	if err != nil {
+		return fmt.Errorf("sqlite: parsing tags: %w", err)
+	}
+
+	next := mutate(tags)
+
+	nextJSON, err := tagsJSON(next)
+	if err != nil {
+		return fmt.Errorf("sqlite: encoding tags: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET tags = ? WHERE id = ?`, nextJSON, id); err != nil {
+		return fmt.Errorf("sqlite: updating tags: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: committing tag update: %w", err)
 	}
 	return nil
 }

@@ -48,13 +48,21 @@ describe('savedSearches', () => {
 
   it('deletes a saved search by name', () => {
     saveSearch('bugs', { subject: 'bug' })
-    saveSearch('smoke', { tag: 'smoke' })
+    saveSearch('smoke', { tag: ['smoke'] })
     deleteSavedSearch('bugs')
-    expect(listSavedSearches()).toEqual([{ name: 'smoke', query: { tag: 'smoke' } }])
+    expect(listSavedSearches()).toEqual([{ name: 'smoke', query: { tag: ['smoke'] } }])
   })
 
   it('tolerates corrupted storage', () => {
     window.localStorage.setItem('maelsink.saved_searches', 'not json')
     expect(listSavedSearches()).toEqual([])
+  })
+
+  it('normalizes a legacy single-tag string into an array', () => {
+    window.localStorage.setItem(
+      'maelsink.saved_searches',
+      JSON.stringify([{ name: 'legacy', query: { tag: 'smoke' } }]),
+    )
+    expect(listSavedSearches()).toEqual([{ name: 'legacy', query: { tag: ['smoke'] } }])
   })
 })

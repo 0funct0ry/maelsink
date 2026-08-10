@@ -188,7 +188,7 @@ describe('FieldFilterBar', () => {
     const setQuery = vi.fn()
     useMessageStore.setState({
       setQuery,
-      query: { q: 'keep-me', tag: 'keep-me-too', from: 'a@x.com', to: 'b@x.com', cc: 'c@x.com', bcc: 'd@x.com', subject: 'hi' },
+      query: { q: 'keep-me', tag: ['keep-me-too'], from: 'a@x.com', to: 'b@x.com', cc: 'c@x.com', bcc: 'd@x.com', subject: 'hi' },
     })
     render(<FieldFilterBar />)
 

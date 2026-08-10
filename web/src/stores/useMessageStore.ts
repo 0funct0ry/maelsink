@@ -36,6 +36,7 @@ interface MessageState {
   setPage: (offset: number) => void
   fetchMessage: (id: string) => Promise<void>
   markRead: (id: string, read?: boolean) => Promise<void>
+  updateTagsOptimistic: (id: string, add: string[], remove: string[]) => Promise<void>
   deleteMessageOptimistic: (id: string) => Promise<void>
   clearAll: () => Promise<void>
   clearSelected: () => void
@@ -45,6 +46,7 @@ interface MessageState {
   applyMessageCreated: (summary: MessageSummary) => void
   applyMessageDeleted: (id: string) => void
   applyMessagesCleared: () => void
+  applyMessageTagsUpdated: (payload: { id: string; tags: string[] }) => void
 }
 
 export const useMessageStore = create<MessageState>((set, get) => ({
@@ -128,6 +130,35 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }
   },
 
+  updateTagsOptimistic: async (id, add, remove) => {
+    const { messages, selected } = get()
+    const index = messages.findIndex((m) => m.id === id)
+    const prevTags = index !== -1 ? messages[index].tags : selected?.id === id ? selected.tags : undefined
+    if (prevTags === undefined) return
+
+    const nextTags = prevTags.filter((t) => !remove.includes(t)).concat(add.filter((t) => !prevTags.includes(t)))
+
+    set((state) => ({
+      messages: state.messages.map((m) => (m.id === id ? { ...m, tags: nextTags } : m)),
+      selected: state.selected && state.selected.id === id ? { ...state.selected, tags: nextTags } : state.selected,
+    }))
+
+    try {
+      const updated = await apiClient.updateMessageTags(id, { add, remove })
+      set((state) => ({
+        messages: state.messages.map((m) => (m.id === id ? { ...m, tags: updated.tags } : m)),
+        selected: state.selected && state.selected.id === id ? { ...state.selected, tags: updated.tags } : state.selected,
+      }))
+      void get().fetchSidebarData()
+    } catch {
+      set((state) => ({
+        messages: state.messages.map((m) => (m.id === id ? { ...m, tags: prevTags } : m)),
+        selected: state.selected && state.selected.id === id ? { ...state.selected, tags: prevTags } : state.selected,
+      }))
+      useUIStore.getState().pushToast('danger', 'Failed to update tags')
+    }
+  },
+
   deleteMessageOptimistic: async (id) => {
     const { messages, total } = get()
     const index = messages.findIndex((m) => m.id === id)
@@ -193,6 +224,14 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       }
       return { messages, total }
     })
+    void get().fetchSidebarData()
+  },
+
+  applyMessageTagsUpdated: (payload) => {
+    set((state) => ({
+      messages: state.messages.map((m) => (m.id === payload.id ? { ...m, tags: payload.tags } : m)),
+      selected: state.selected && state.selected.id === payload.id ? { ...state.selected, tags: payload.tags } : state.selected,
+    }))
     void get().fetchSidebarData()
   },
 

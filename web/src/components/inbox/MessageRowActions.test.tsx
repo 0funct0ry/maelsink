@@ -32,9 +32,22 @@ function makeMessage(overrides: Partial<MessageSummary> = {}): MessageSummary {
 
 describe('MessageRowActions', () => {
   beforeEach(() => {
-    useMessageStore.setState({ deleteMessageOptimistic: vi.fn(), markRead: vi.fn() })
+    useMessageStore.setState({
+      deleteMessageOptimistic: vi.fn(),
+      markRead: vi.fn(),
+      updateTagsOptimistic: vi.fn(),
+      sidebarTags: [],
+    })
     useUIStore.setState({ modal: null, toasts: [] })
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:mock'), revokeObjectURL: vi.fn() })
+  })
+
+  it('opens the tag edit modal from "Edit tags" and keeps it open after the menu closes', () => {
+    render(<MessageRowActions message={makeMessage({ tags: ['smoke'] })} onPreview={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    fireEvent.click(screen.getByText('Edit tags'))
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Edit tags' })).toBeInTheDocument()
   })
 
   it('exports the message and pushes a success toast', async () => {

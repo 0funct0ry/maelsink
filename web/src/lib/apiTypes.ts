@@ -110,7 +110,8 @@ export interface ListMessagesParams {
   since?: string
   until?: string
   sort?: 'received_at_desc' | 'received_at_asc'
-  tag?: string
+  tag?: string[]
+  tag_mode?: 'any' | 'all'
   read?: boolean
   has_attachments?: boolean
   parse_warning?: boolean

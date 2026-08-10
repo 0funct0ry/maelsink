@@ -12,12 +12,24 @@ export interface SavedSearch {
 
 const STORAGE_KEY = 'maelsink.saved_searches'
 
+/** Coerces a legacy single-tag string (pre-M8.2) into the current
+ * string[] shape, so old saved searches keep working after the sidebar's
+ * tag filter became multi-select. */
+function normalizeQuery(query: ListMessagesParams): ListMessagesParams {
+  const legacyTag = query.tag as unknown
+  if (typeof legacyTag === 'string') {
+    return { ...query, tag: [legacyTag] }
+  }
+  return query
+}
+
 function readAll(): SavedSearch[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as SavedSearch[]) : []
+    if (!Array.isArray(parsed)) return []
+    return (parsed as SavedSearch[]).map((s) => ({ ...s, query: normalizeQuery(s.query) }))
   } catch {
     return []
   }
