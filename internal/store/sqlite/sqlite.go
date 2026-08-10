@@ -544,6 +544,14 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 		where = append(where, `m.subject LIKE ? ESCAPE '\'`)
 		args = append(args, likeContains(filter.Subject))
 	}
+	if filter.Cc != "" {
+		where = append(where, `m.cc_addrs LIKE ? ESCAPE '\'`)
+		args = append(args, likeContains(filter.Cc))
+	}
+	if filter.Bcc != "" {
+		where = append(where, `m.bcc_addrs LIKE ? ESCAPE '\'`)
+		args = append(args, likeContains(filter.Bcc))
+	}
 	if !filter.Since.IsZero() {
 		where = append(where, `m.received_at >= ?`)
 		args = append(args, filter.Since.UTC().Format(timeLayout))

@@ -15,6 +15,8 @@ var (
 	listFrom    string
 	listTo      string
 	listSubject string
+	listCc      string
+	listBcc     string
 	listLimit   int
 	listOffset  int
 	listSince   string
@@ -41,6 +43,8 @@ func init() {
 	listCmd.Flags().StringVar(&listFrom, "from", "", "filter by from address substring")
 	listCmd.Flags().StringVar(&listTo, "to", "", "filter by to address substring")
 	listCmd.Flags().StringVar(&listSubject, "subject", "", "filter by subject substring")
+	listCmd.Flags().StringVar(&listCc, "cc", "", "filter by cc address substring")
+	listCmd.Flags().StringVar(&listBcc, "bcc", "", "filter by bcc address substring")
 	listCmd.Flags().IntVar(&listLimit, "limit", 0, "max messages to return (0 = server default)")
 	listCmd.Flags().IntVar(&listOffset, "offset", 0, "pagination offset")
 	listCmd.Flags().StringVar(&listSince, "since", "", "only messages received at/after this RFC3339 timestamp")
@@ -50,7 +54,7 @@ func init() {
 
 func runList(cmd *cobra.Command, args []string) error {
 	resp, err := listFlags.client().List(cmd.Context(), cliclient.ListParams{
-		Query: listQ, From: listFrom, To: listTo, Subject: listSubject,
+		Query: listQ, From: listFrom, To: listTo, Subject: listSubject, Cc: listCc, Bcc: listBcc,
 		Limit: listLimit, Offset: listOffset, Since: listSince, Until: listUntil, Sort: listSort,
 	})
 	if err != nil {

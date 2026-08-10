@@ -16,6 +16,7 @@ type MessageSummary struct {
 	From            string   `json:"from"`
 	To              []string `json:"to"`
 	Cc              []string `json:"cc"`
+	Bcc             []string `json:"bcc"`
 	Subject         string   `json:"subject"`
 	SizeBytes       int64    `json:"size_bytes"`
 	HasAttachments  bool     `json:"has_attachments"`
@@ -85,6 +86,7 @@ func NewMessageSummary(msg *Message) MessageSummary {
 		From:            from,
 		To:              addrStrings(msg.To),
 		Cc:              addrStrings(msg.Cc),
+		Bcc:             addrStrings(msg.Bcc),
 		Subject:         msg.Subject,
 		SizeBytes:       msg.Size,
 		HasAttachments:  msg.AttachmentCount > 0,

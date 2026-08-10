@@ -7,6 +7,7 @@ export interface MessageSummary {
   from: string
   to: string[]
   cc: string[]
+  bcc: string[]
   subject: string
   size_bytes: number
   has_attachments: boolean
@@ -98,6 +99,8 @@ export interface ListMessagesParams {
   q?: string
   from?: string
   to?: string
+  cc?: string
+  bcc?: string
   subject?: string
   limit?: number
   offset?: number

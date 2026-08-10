@@ -17,6 +17,7 @@ type MessageSummary struct {
 	From            string   `json:"from"`
 	To              []string `json:"to"`
 	Cc              []string `json:"cc"`
+	Bcc             []string `json:"bcc"`
 	Subject         string   `json:"subject"`
 	SizeBytes       int64    `json:"size_bytes"`
 	HasAttachments  bool     `json:"has_attachments"`
@@ -87,6 +88,8 @@ type ListParams struct {
 	From    string
 	To      string
 	Subject string
+	Cc      string
+	Bcc     string
 	Limit   int
 	Offset  int
 	Since   string

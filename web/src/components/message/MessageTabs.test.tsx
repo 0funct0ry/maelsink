@@ -12,6 +12,7 @@ const message: MessageDetail = {
   from: 'a@example.com',
   to: ['b@example.com'],
   cc: [],
+  bcc: [],
   subject: 'Hello',
   size_bytes: 100,
   has_attachments: false,

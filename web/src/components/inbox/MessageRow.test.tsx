@@ -10,6 +10,7 @@ function makeMessage(overrides: Partial<MessageSummary> = {}): MessageSummary {
     from: 'alice@example.com',
     to: ['bob@example.com'],
     cc: [],
+    bcc: [],
     subject: 'Hello world',
     size_bytes: 2048,
     has_attachments: false,

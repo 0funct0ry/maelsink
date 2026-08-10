@@ -13,6 +13,7 @@ function summary(id: string): MessageSummary {
     from: 'a@example.com',
     to: ['b@example.com'],
     cc: [],
+    bcc: [],
     subject: 'hi',
     size_bytes: 10,
     has_attachments: false,

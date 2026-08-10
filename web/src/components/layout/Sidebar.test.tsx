@@ -233,6 +233,7 @@ describe('Sidebar', () => {
       from: 'a@example.com',
       to: ['b@example.com'],
       cc: [],
+      bcc: [],
       subject: 'New mail',
       size_bytes: 10,
       has_attachments: false,

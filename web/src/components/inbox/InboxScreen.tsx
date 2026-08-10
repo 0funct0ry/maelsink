@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { exportAllUrl } from '../../lib/apiClient'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
+import ActiveFilterChips from './ActiveFilterChips'
+import FieldFilterBar from './FieldFilterBar'
 import MessageList from './MessageList'
 import MessagePreviewModal from './MessagePreviewModal'
 import Pagination from './Pagination'
@@ -28,6 +30,7 @@ export default function InboxScreen() {
           <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-text-primary">Messages</h1>
         </div>
         <div className="flex items-center gap-2">
+          <FieldFilterBar />
           <div className="relative">
             <button
               type="button"
@@ -71,6 +74,8 @@ export default function InboxScreen() {
           </a>
         </div>
       </div>
+
+      <ActiveFilterChips />
 
       <div className="flex-1 overflow-y-auto">
         <MessageList onOpenMessage={(id) => navigate(`/messages/${id}`)} onPreviewMessage={setPreviewId} />

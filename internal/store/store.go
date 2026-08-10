@@ -42,11 +42,11 @@ type ListFilter struct {
 	Limit  int
 	Offset int
 
-	// Query performs an FTS5 match against subject/from/to/text_body
+	// Query performs an FTS5 match against subject/from/to/cc/bcc/text_body
 	// (messages_fts).
 	Query string
-	// From, To, Subject are case-insensitive substring filters.
-	From, To, Subject string
+	// From, To, Subject, Cc, Bcc are case-insensitive substring filters.
+	From, To, Subject, Cc, Bcc string
 	// Since, Until bound received_at (inclusive); zero value means unset.
 	Since, Until time.Time
 	// Sort is one of the Sort* constants; "" defaults to SortReceivedAtDesc.

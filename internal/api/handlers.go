@@ -108,6 +108,8 @@ func parseListFilter(c *gin.Context) (store.ListFilter, error) {
 		From:    c.Query("from"),
 		To:      c.Query("to"),
 		Subject: c.Query("subject"),
+		Cc:      c.Query("cc"),
+		Bcc:     c.Query("bcc"),
 		Sort:    c.DefaultQuery("sort", store.SortReceivedAtDesc),
 		Tag:     c.Query("tag"),
 	}

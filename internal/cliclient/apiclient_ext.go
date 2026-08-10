@@ -44,6 +44,8 @@ func listQuery(p ListParams) url.Values {
 	setIfNotEmpty(q, "from", p.From)
 	setIfNotEmpty(q, "to", p.To)
 	setIfNotEmpty(q, "subject", p.Subject)
+	setIfNotEmpty(q, "cc", p.Cc)
+	setIfNotEmpty(q, "bcc", p.Bcc)
 	setIfNotEmpty(q, "since", p.Since)
 	setIfNotEmpty(q, "until", p.Until)
 	setIfNotEmpty(q, "sort", p.Sort)
