@@ -74,6 +74,9 @@ func RenderDetail(w io.Writer, m *MessageDetail) {
 	fmt.Fprintf(tw, "Received:\t%s\n", m.ReceivedAt)
 	fmt.Fprintf(tw, "Size:\t%d bytes\n", m.SizeBytes)
 	fmt.Fprintf(tw, "Attachments:\t%d\n", m.AttachmentCount)
+	if len(m.Tags) > 0 {
+		fmt.Fprintf(tw, "Tags:\t%s\n", strings.Join(m.Tags, ", "))
+	}
 	if m.ParseWarning {
 		fmt.Fprintf(tw, "Parse Warning:\tyes\n")
 	}

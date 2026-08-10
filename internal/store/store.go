@@ -42,6 +42,17 @@ type ListFilter struct {
 	Since, Until time.Time
 	// Sort is one of the Sort* constants; "" defaults to SortReceivedAtDesc.
 	Sort string
+	// Tag, when non-empty, matches messages carrying this exact tag
+	// (case-sensitive exact match against one entry of Message.Tags).
+	Tag string
+	// Read, when non-nil, filters to messages with Read == *Read.
+	Read *bool
+	// HasAttachments, when non-nil, filters to messages whose
+	// AttachmentCount is >0 (true) or 0 (false).
+	HasAttachments *bool
+	// ParseWarning, when non-nil, filters to messages with
+	// ParseWarning == *ParseWarning.
+	ParseWarning *bool
 }
 
 // Stats summarizes the store's current contents for GET /api/v1/stats.
@@ -50,6 +61,20 @@ type Stats struct {
 	TotalSizeBytes   int64
 	OldestReceivedAt *time.Time
 	NewestReceivedAt *time.Time
+
+	// UnreadCount, AttachmentCount, ParseWarningCount are cheap aggregate
+	// counts backing the Web UI sidebar's mailbox filter section (M6.1) —
+	// computed without loading full message lists.
+	UnreadCount       int
+	AttachmentCount   int
+	ParseWarningCount int
+}
+
+// TagCount is one row of GET /api/v1/tags: a distinct tag value currently in
+// use and how many messages carry it.
+type TagCount struct {
+	Tag   string
+	Count int
 }
 
 // MessageStore is the storage-agnostic interface every backend (in-memory
@@ -69,12 +94,15 @@ type MessageStore interface {
 	// Delete accepts a full ID or unambiguous prefix, per Get.
 	Delete(ctx context.Context, id string) error
 	Clear(ctx context.Context) error
-	// MarkRead marks the message (full ID or unambiguous prefix, per Get) as
-	// read. Idempotent — marking an already-read message read again is a
-	// no-op success.
-	MarkRead(ctx context.Context, id string) error
+	// MarkRead sets the read flag (full ID or unambiguous prefix, per Get)
+	// to the given value. Idempotent — setting a message's read flag to a
+	// value it already holds is a no-op success.
+	MarkRead(ctx context.Context, id string, read bool) error
 	// Stats returns a snapshot summary of the store's current contents.
 	Stats(ctx context.Context) (Stats, error)
+	// Tags returns every distinct tag currently in use with its message
+	// count, for GET /api/v1/tags.
+	Tags(ctx context.Context) ([]TagCount, error)
 	// Ping verifies the underlying storage is reachable, for health checks.
 	Ping(ctx context.Context) error
 }

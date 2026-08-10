@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import TopBar from './TopBar'
 import Sidebar from './Sidebar'
 import ToastContainer from '../common/ToastContainer'
@@ -17,10 +18,32 @@ interface AppShellProps {
 export default function AppShell({ children }: AppShellProps) {
   const modal = useUIStore((state) => state.modal)
   const closeModal = useUIStore((state) => state.closeModal)
+  const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     void useMessageStore.getState().fetchMessages()
   }, [])
+
+  // Global Escape-to-back: from a message detail route, Escape returns to
+  // the Inbox — mirrors MOCKUP.html's keyboard affordances alongside the
+  // existing "/" focus-search shortcut (SearchBar.tsx). Skipped when a modal
+  // is open (Escape there should close the modal, not also navigate) and
+  // when focus is in a text input/textarea, so it never steals Escape from
+  // an in-progress edit.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (modal) return
+      if (!location.pathname.startsWith('/messages/')) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      navigate('/')
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [modal, location.pathname, navigate])
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden">

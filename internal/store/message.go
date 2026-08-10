@@ -92,4 +92,10 @@ type Message struct {
 	// Attachments/InlineImages bodies) so summary views can still show
 	// has_attachments/attachment_count without a second query per message.
 	AttachmentCount int
+
+	// Tags is derived from every "X-Tag" header present on the message
+	// (order and duplicates preserved, per SPEC.md §4's header philosophy).
+	// Apps under test set X-Tag to group related test emails without
+	// relying on subject-line pattern matching (see MOCKUP.html).
+	Tags []string
 }

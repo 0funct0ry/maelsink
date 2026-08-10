@@ -3,7 +3,9 @@ package api
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,6 +36,8 @@ type messageSummary struct {
 	ReceivedAt      string   `json:"received_at"`
 	ParseWarning    bool     `json:"parse_warning"`
 	Read            bool     `json:"read"`
+	Tags            []string `json:"tags"`
+	Preview         string   `json:"preview"`
 }
 
 // attachmentSummary is a single entry in messageDetail.Attachments.
@@ -68,6 +72,46 @@ func addrStrings(addrs []store.Address) []string {
 	return out
 }
 
+const previewMaxLen = 120
+
+// tagsOrEmpty avoids sending `"tags": null` to clients (nil vs. empty slice
+// both mean "no tags", but JSON null forces every caller to null-check).
+func tagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
+}
+
+// messagePreview computes a short, plain-text-only truncated preview: the
+// first ~120 chars of TextBody, or of HTMLBody with tags stripped if no
+// TextBody exists. It is computed at query time so list responses never
+// carry the full body.
+func messagePreview(msg *store.Message) string {
+	text := strings.TrimSpace(msg.TextBody)
+	if text == "" {
+		text = strings.TrimSpace(stripHTMLTags(msg.HTMLBody))
+	}
+	text = collapseWhitespace(text)
+	r := []rune(text)
+	if len(r) > previewMaxLen {
+		return string(r[:previewMaxLen])
+	}
+	return string(r)
+}
+
+var htmlTagRe = regexp.MustCompile(`(?s)<[^>]*>`)
+
+func stripHTMLTags(html string) string {
+	return htmlTagRe.ReplaceAllString(html, " ")
+}
+
+var whitespaceRe = regexp.MustCompile(`\s+`)
+
+func collapseWhitespace(s string) string {
+	return strings.TrimSpace(whitespaceRe.ReplaceAllString(s, " "))
+}
+
 func toSummary(msg *store.Message) messageSummary {
 	from := ""
 	if len(msg.From) > 0 {
@@ -85,6 +129,8 @@ func toSummary(msg *store.Message) messageSummary {
 		ReceivedAt:      msg.ReceivedAt.UTC().Format(time.RFC3339),
 		ParseWarning:    msg.ParseWarning,
 		Read:            msg.Read,
+		Tags:            tagsOrEmpty(msg.Tags),
+		Preview:         messagePreview(msg),
 	}
 }
 
@@ -133,9 +179,21 @@ func parseListFilter(c *gin.Context) (store.ListFilter, error) {
 		To:      c.Query("to"),
 		Subject: c.Query("subject"),
 		Sort:    c.DefaultQuery("sort", store.SortReceivedAtDesc),
+		Tag:     c.Query("tag"),
 	}
 	if filter.Sort != store.SortReceivedAtDesc && filter.Sort != store.SortReceivedAtAsc {
 		return filter, errors.New("sort must be one of received_at_desc, received_at_asc")
+	}
+
+	var err error
+	if filter.Read, err = parseOptionalBoolQuery(c, "read"); err != nil {
+		return filter, err
+	}
+	if filter.HasAttachments, err = parseOptionalBoolQuery(c, "has_attachments"); err != nil {
+		return filter, err
+	}
+	if filter.ParseWarning, err = parseOptionalBoolQuery(c, "parse_warning"); err != nil {
+		return filter, err
 	}
 
 	filter.Limit = defaultLimit
@@ -174,6 +232,20 @@ func parseListFilter(c *gin.Context) (store.ListFilter, error) {
 	}
 
 	return filter, nil
+}
+
+// parseOptionalBoolQuery returns nil (unset) when the query param is
+// absent, else a pointer to its parsed bool value.
+func parseOptionalBoolQuery(c *gin.Context, name string) (*bool, error) {
+	v := c.Query(name)
+	if v == "" {
+		return nil, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return nil, errors.New(name + " must be a boolean")
+	}
+	return &b, nil
 }
 
 func (h *handlers) listMessages(c *gin.Context) {
@@ -221,9 +293,29 @@ func (h *handlers) getMessage(c *gin.Context) {
 	c.JSON(http.StatusOK, toDetail(msg))
 }
 
+// markReadBody is an optional JSON body for PATCH .../read: {"read": false}
+// marks the message unread; an absent/empty body (or {"read": true}) marks
+// it read, preserving the endpoint's original mark-as-read-only behavior.
+type markReadBody struct {
+	Read *bool `json:"read"`
+}
+
 func (h *handlers) markRead(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.store.MarkRead(c.Request.Context(), id); err != nil {
+
+	read := true
+	var body markReadBody
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			respondError(c, http.StatusBadRequest, "invalid_request", "invalid request body")
+			return
+		}
+		if body.Read != nil {
+			read = *body.Read
+		}
+	}
+
+	if err := h.store.MarkRead(c.Request.Context(), id, read); err != nil {
 		handleStoreErr(c, id, err)
 		return
 	}
@@ -306,8 +398,11 @@ func (h *handlers) stats(c *gin.Context) {
 	}
 
 	resp := gin.H{
-		"total_messages":   s.TotalMessages,
-		"total_size_bytes": s.TotalSizeBytes,
+		"total_messages":      s.TotalMessages,
+		"total_size_bytes":    s.TotalSizeBytes,
+		"unread_count":        s.UnreadCount,
+		"attachment_count":    s.AttachmentCount,
+		"parse_warning_count": s.ParseWarningCount,
 	}
 	if s.OldestReceivedAt != nil {
 		resp["oldest_received_at"] = s.OldestReceivedAt.UTC().Format(time.RFC3339)
@@ -320,6 +415,25 @@ func (h *handlers) stats(c *gin.Context) {
 		resp["newest_received_at"] = nil
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// tagCountJSON is one row of GET /api/v1/tags.
+type tagCountJSON struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+func (h *handlers) listTags(c *gin.Context) {
+	tags, err := h.store.Tags(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err.Error())
+		return
+	}
+	out := make([]tagCountJSON, len(tags))
+	for i, t := range tags {
+		out[i] = tagCountJSON{Tag: t.Tag, Count: t.Count}
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *handlers) health(c *gin.Context) {

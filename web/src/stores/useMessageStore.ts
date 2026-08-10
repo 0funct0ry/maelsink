@@ -24,7 +24,7 @@ interface MessageState {
   setQuery: (patch: Partial<ListMessagesParams>) => void
   setPage: (offset: number) => void
   fetchMessage: (id: string) => Promise<void>
-  markRead: (id: string) => Promise<void>
+  markRead: (id: string, read?: boolean) => Promise<void>
   deleteMessageOptimistic: (id: string) => Promise<void>
   clearAll: () => Promise<void>
   clearSelected: () => void
@@ -78,16 +78,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }
   },
 
-  markRead: async (id) => {
+  markRead: async (id, read = true) => {
     try {
-      await apiClient.markRead(id)
+      await apiClient.markRead(id, read)
       set((state) => ({
-        messages: state.messages.map((m) => (m.id === id ? { ...m, read: true } : m)),
-        selected: state.selected && state.selected.id === id ? { ...state.selected, read: true } : state.selected,
+        messages: state.messages.map((m) => (m.id === id ? { ...m, read } : m)),
+        selected: state.selected && state.selected.id === id ? { ...state.selected, read } : state.selected,
       }))
     } catch {
-      // Non-critical (read state is advisory); silently ignore failures
-      // rather than interrupting the user with a toast for this.
+      useUIStore.getState().pushToast('danger', `Failed to mark message as ${read ? 'read' : 'unread'}`)
     }
   },
 
@@ -118,6 +117,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     try {
       await apiClient.clearMessages()
       set({ messages: [], total: 0, offset: 0 })
+      useUIStore.getState().pushToast('success', 'All messages cleared')
     } catch {
       useUIStore.getState().pushToast('danger', 'Failed to clear messages')
     }

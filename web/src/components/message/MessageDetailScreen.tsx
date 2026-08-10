@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, Trash2 } from 'lucide-react'
 import { useMessageStore } from '../../stores/useMessageStore'
+import { useUIStore } from '../../stores/useUIStore'
 import { exportMessage } from '../../lib/apiClient'
-import { formatExactTime, formatRelativeTime } from '../../lib/format'
+import { formatAbsoluteDate, formatExactTime, formatRelativeTime } from '../../lib/format'
 import Button from '../common/Button'
 import ConfirmDialog from '../common/ConfirmDialog'
+import TagBadge from '../common/TagBadge'
 import StatusBadges from './StatusBadges'
 import MessageTabs from './MessageTabs'
 import AttachmentGrid from './AttachmentGrid'
@@ -57,6 +59,9 @@ export default function MessageDetailScreen() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
+      useUIStore.getState().pushToast('success', 'Message exported')
+    } catch {
+      useUIStore.getState().pushToast('danger', 'Failed to export message')
     } finally {
       setExporting(false)
     }
@@ -150,10 +155,20 @@ export default function MessageDetailScreen() {
             >
               {formatRelativeTime(message.received_at)}
             </span>
+            <span className="break-all font-mono text-[12.6px] text-text-tertiary">
+              ({formatAbsoluteDate(message.received_at)})
+            </span>
           </div>
         </div>
-        <div className="mt-2.5">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
           <StatusBadges message={message} />
+          {message.tags.length > 0 && (
+            <span className="flex flex-wrap items-center gap-1.5">
+              {message.tags.map((tag) => (
+                <TagBadge key={tag} tag={tag} />
+              ))}
+            </span>
+          )}
         </div>
       </div>
 

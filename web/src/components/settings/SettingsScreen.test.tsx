@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import SettingsScreen from './SettingsScreen'
 import { getStats, getVersion } from '../../lib/apiClient'
-import { getInfo } from '../../lib/uiApiClient'
+import { getConfig, getInfo } from '../../lib/uiApiClient'
 
 vi.mock('../../lib/apiClient')
 vi.mock('../../lib/uiApiClient')
@@ -11,6 +11,9 @@ describe('SettingsScreen', () => {
     vi.mocked(getStats).mockResolvedValue({
       total_messages: 1,
       total_size_bytes: 100,
+      unread_count: 0,
+      attachment_count: 0,
+      parse_warning_count: 0,
       oldest_received_at: null,
       newest_received_at: null,
     })
@@ -18,6 +21,7 @@ describe('SettingsScreen', () => {
       smtp: { host: '127.0.0.1', port: 1025 },
       auth_enabled: false,
     })
+    vi.mocked(getConfig).mockResolvedValue([])
   })
 
   it('renders the Settings heading', () => {

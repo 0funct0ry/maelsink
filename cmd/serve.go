@@ -109,8 +109,9 @@ func init() {
 
 // resolveConfig loads the layered config using the flags actually set on
 // cmd (Changed==true), so unset flags never override the file/env layers
-// with their zero value.
-func resolveConfig(cmd *cobra.Command) (config.Config, error) {
+// with their zero value. It also resolves per-key Provenance (M6.1) for the
+// Settings screen's GET /ui-api/v1/config endpoint.
+func resolveConfig(cmd *cobra.Command) (config.Config, config.Provenance, error) {
 	f := cmd.Flags()
 	var overrides config.FlagOverrides
 
@@ -209,11 +210,11 @@ func resolveConfig(cmd *cobra.Command) (config.Config, error) {
 		overrides.ServerShutdownTimeoutSeconds = &flagServerShutdownTimeoutSeconds
 	}
 
-	return config.Load(config.Options{ConfigFile: cfgFile, Flags: overrides})
+	return config.LoadWithProvenance(config.Options{ConfigFile: cfgFile, Flags: overrides}, f)
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
-	cfg, err := resolveConfig(cmd)
+	cfg, provenance, err := resolveConfig(cmd)
 	if err != nil {
 		return err
 	}
@@ -279,10 +280,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 	var webSrv *http.Server
 	if cfg.Web.Enabled {
 		webuiRouter := webui.New(messageStore, logger, webui.Config{
-			BasePath: cfg.Web.BasePath,
-			Auth:     api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
-			SMTPHost: cfg.SMTP.Host,
-			SMTPPort: cfg.SMTP.Port,
+			BasePath:      cfg.Web.BasePath,
+			Auth:          api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
+			SMTPHost:      cfg.SMTP.Host,
+			SMTPPort:      cfg.SMTP.Port,
+			ConfigEntries: config.Dump(cfg, provenance),
 		})
 		webSrv = &http.Server{
 			Addr:    fmt.Sprintf("%s:%d", cfg.Web.Host, cfg.Web.Port),

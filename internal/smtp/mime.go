@@ -29,6 +29,7 @@ func Parse(raw []byte) (msg *store.Message) {
 	}()
 
 	msg.Headers = parseRawHeaders(raw)
+	msg.Tags = extractTags(msg.Headers)
 
 	m, err := mail.ReadMessage(bytes.NewReader(raw))
 	if err != nil {
@@ -72,6 +73,22 @@ func Parse(raw []byte) (msg *store.Message) {
 		}
 	}
 	return msg
+}
+
+// extractTags collects every "X-Tag" header value, preserving order and
+// duplicates (apps under test may send multiple X-Tag lines on one
+// message), per SPEC.md §4's header-preservation philosophy.
+func extractTags(headers []store.Header) []string {
+	var tags []string
+	for _, h := range headers {
+		if strings.EqualFold(h.Name, "X-Tag") {
+			v := strings.TrimSpace(decodeHeaderValue(h.Value))
+			if v != "" {
+				tags = append(tags, v)
+			}
+		}
+	}
+	return tags
 }
 
 // parseRawHeaders manually scans the header block (everything before the

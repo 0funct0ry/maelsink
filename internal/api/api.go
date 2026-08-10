@@ -62,6 +62,7 @@ func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, cfg Co
 		v1.GET("/messages/:id/export", h.exportMessage)
 		v1.GET("/messages/:id/attachments/:attId", h.getAttachment)
 		v1.GET("/stats", h.stats)
+		v1.GET("/tags", h.listTags)
 		v1.GET("/health", h.health)
 		v1.GET("/version", h.version)
 	}

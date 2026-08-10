@@ -19,6 +19,8 @@ const message: MessageDetail = {
   received_at: '2024-01-01T00:00:00Z',
   parse_warning: false,
   read: true,
+  tags: [],
+  preview: '',
   headers: [{ name: 'From', value: 'a@example.com' }],
   text_body: 'plain text body',
   html_body: '<p>hi</p>',

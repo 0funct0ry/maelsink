@@ -20,6 +20,8 @@ function summary(id: string): MessageSummary {
     received_at: '2026-01-01T00:00:00Z',
     parse_warning: false,
     read: false,
+    tags: [],
+    preview: '',
   }
 }
 
@@ -146,6 +148,7 @@ describe('clearAll', () => {
     expect(useMessageStore.getState().messages).toEqual([])
     expect(useMessageStore.getState().total).toBe(0)
     expect(useMessageStore.getState().offset).toBe(0)
+    expect(useUIStore.getState().toasts.some((t) => t.variant === 'success')).toBe(true)
   })
 
   it('toasts on failure without clearing', async () => {
@@ -171,6 +174,25 @@ describe('markRead', () => {
 
     expect(useMessageStore.getState().messages[0].read).toBe(true)
     expect(useMessageStore.getState().selected?.read).toBe(true)
+  })
+
+  it('marks the row unread when passed read=false', async () => {
+    useMessageStore.setState({ messages: [{ ...summary('a'), read: true }] })
+    vi.mocked(apiClient.markRead).mockResolvedValue(undefined)
+
+    await useMessageStore.getState().markRead('a', false)
+
+    expect(apiClient.markRead).toHaveBeenCalledWith('a', false)
+    expect(useMessageStore.getState().messages[0].read).toBe(false)
+  })
+
+  it('pushes a danger toast if the request fails', async () => {
+    useMessageStore.setState({ messages: [summary('a')] })
+    vi.mocked(apiClient.markRead).mockRejectedValue(new Error('boom'))
+
+    await useMessageStore.getState().markRead('a')
+
+    expect(useUIStore.getState().toasts).toHaveLength(1)
   })
 })
 

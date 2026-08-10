@@ -10,9 +10,10 @@ describe('PrecedenceChain', () => {
     expect(screen.getByText('CLI flag')).toBeInTheDocument()
   })
 
-  it('makes clear this is a static legend, not live data', () => {
+  it('no longer disclaims the data as illustrative-only, now that provenance is live', () => {
     render(<PrecedenceChain />)
-    expect(screen.getByText(/legend — not live data/i)).toBeInTheDocument()
-    expect(screen.getByText(/does not currently track which layer resolved/i)).toBeInTheDocument()
+    expect(screen.queryByText(/legend — not live data/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/does not currently track which layer resolved/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/shows exactly/i)).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatBytes, formatExactTime, formatRelativeTime, truncateList } from './format'
+import { formatAbsoluteDate, formatBytes, formatExactTime, formatRelativeTime, truncateList } from './format'
 
 describe('formatBytes', () => {
   it('renders zero and negative as 0 B', () => {
@@ -51,6 +51,12 @@ describe('formatRelativeTime', () => {
 describe('formatExactTime', () => {
   it('returns a non-empty locale string', () => {
     expect(formatExactTime('2026-01-01T12:00:00Z').length).toBeGreaterThan(0)
+  })
+})
+
+describe('formatAbsoluteDate', () => {
+  it('renders an RFC 1123-style UTC string', () => {
+    expect(formatAbsoluteDate('2026-08-07T14:32:10Z')).toBe('Fri, 07 Aug 2026 14:32:10 GMT')
   })
 })
 

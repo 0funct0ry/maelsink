@@ -4,9 +4,10 @@ import MessageRow from './MessageRow'
 
 interface MessageListProps {
   onOpenMessage: (id: string) => void
+  onPreviewMessage: (id: string) => void
 }
 
-export default function MessageList({ onOpenMessage }: MessageListProps) {
+export default function MessageList({ onOpenMessage, onPreviewMessage }: MessageListProps) {
   const messages = useMessageStore((state) => state.messages)
   const listStatus = useMessageStore((state) => state.listStatus)
   const listError = useMessageStore((state) => state.listError)
@@ -34,7 +35,12 @@ export default function MessageList({ onOpenMessage }: MessageListProps) {
   return (
     <div>
       {messages.map((message) => (
-        <MessageRow key={message.id} message={message} onOpen={() => onOpenMessage(message.id)} />
+        <MessageRow
+          key={message.id}
+          message={message}
+          onOpen={() => onOpenMessage(message.id)}
+          onPreview={() => onPreviewMessage(message.id)}
+        />
       ))}
     </div>
   )

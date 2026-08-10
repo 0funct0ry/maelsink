@@ -35,6 +35,42 @@ Hi Bob, this is a plain text message.
 	}
 }
 
+func TestParse_XTagHeadersCollectedInOrderWithDuplicates(t *testing.T) {
+	raw := crlf(`From: a@example.com
+To: b@example.com
+Subject: Hello
+X-Tag: smoke
+X-Tag: release
+Content-Type: text/plain; charset=utf-8
+
+body
+`)
+	msg := Parse(raw)
+	want := []string{"smoke", "release"}
+	if len(msg.Tags) != len(want) {
+		t.Fatalf("Tags = %v, want %v", msg.Tags, want)
+	}
+	for i := range want {
+		if msg.Tags[i] != want[i] {
+			t.Fatalf("Tags = %v, want %v", msg.Tags, want)
+		}
+	}
+}
+
+func TestParse_NoXTagHeaderMeansNoTags(t *testing.T) {
+	raw := crlf(`From: a@example.com
+To: b@example.com
+Subject: Hello
+Content-Type: text/plain; charset=utf-8
+
+body
+`)
+	msg := Parse(raw)
+	if len(msg.Tags) != 0 {
+		t.Fatalf("Tags = %v, want none", msg.Tags)
+	}
+}
+
 func TestParse_MultipartAlternative(t *testing.T) {
 	raw := crlf(`From: a@example.com
 To: b@example.com

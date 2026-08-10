@@ -15,6 +15,9 @@ describe('StatsCard', () => {
     vi.mocked(getStats).mockResolvedValue({
       total_messages: 42,
       total_size_bytes: 1536,
+      unread_count: 0,
+      attachment_count: 0,
+      parse_warning_count: 0,
       oldest_received_at: '2024-01-01T00:00:00Z',
       newest_received_at: '2024-01-02T00:00:00Z',
     })
@@ -27,6 +30,9 @@ describe('StatsCard', () => {
     vi.mocked(getStats).mockResolvedValue({
       total_messages: 0,
       total_size_bytes: 0,
+      unread_count: 0,
+      attachment_count: 0,
+      parse_warning_count: 0,
       oldest_received_at: null,
       newest_received_at: null,
     })

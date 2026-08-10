@@ -1,6 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TopBar from './TopBar'
+import { useMessageStore } from '../../stores/useMessageStore'
+import { useUIStore } from '../../stores/useUIStore'
 import * as uiApiClient from '../../lib/uiApiClient'
 
 vi.mock('../../lib/uiApiClient')
@@ -14,6 +16,10 @@ function renderTopBar() {
 }
 
 describe('TopBar', () => {
+  beforeEach(() => {
+    useUIStore.setState({ modal: null })
+  })
+
   it('renders the wordmark', () => {
     vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
     renderTopBar()
@@ -36,10 +42,30 @@ describe('TopBar', () => {
     expect(screen.queryByText(/smtp:\/\//)).not.toBeInTheDocument()
   })
 
-  it('renders a global search box and a settings shortcut', () => {
+  it('renders a global search box, a clear-all shortcut, and a settings shortcut', () => {
     vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
     renderTopBar()
     expect(screen.getByRole('searchbox')).toBeInTheDocument()
+    expect(screen.getByLabelText('Clear all messages')).toBeInTheDocument()
     expect(screen.getByLabelText('Settings')).toBeInTheDocument()
+  })
+
+  it('opens a confirm dialog via useUIStore when the clear-all icon is clicked', () => {
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
+    renderTopBar()
+    fireEvent.click(screen.getByLabelText('Clear all messages'))
+    expect(useUIStore.getState().modal).toMatchObject({ kind: 'confirm', danger: true })
+  })
+
+  it('calls clearAll when the opened confirm is invoked', () => {
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
+    const clearAll = vi.fn().mockResolvedValue(undefined)
+    useMessageStore.setState({ clearAll })
+    renderTopBar()
+    fireEvent.click(screen.getByLabelText('Clear all messages'))
+    act(() => {
+      useUIStore.getState().modal?.onConfirm()
+    })
+    expect(clearAll).toHaveBeenCalledTimes(1)
   })
 })

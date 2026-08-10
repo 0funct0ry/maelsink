@@ -158,7 +158,31 @@ func messageMatchesFilter(msg *Message, filter ListFilter) bool {
 	if !filter.Until.IsZero() && msg.ReceivedAt.After(filter.Until) {
 		return false
 	}
+	if filter.Tag != "" && !tagsContain(msg.Tags, filter.Tag) {
+		return false
+	}
+	if filter.Read != nil && msg.Read != *filter.Read {
+		return false
+	}
+	if filter.HasAttachments != nil {
+		has := len(msg.Attachments)+len(msg.InlineImages) > 0
+		if has != *filter.HasAttachments {
+			return false
+		}
+	}
+	if filter.ParseWarning != nil && msg.ParseWarning != *filter.ParseWarning {
+		return false
+	}
 	return true
+}
+
+func tagsContain(tags []string, tag string) bool {
+	for _, t := range tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
 }
 
 func addrsContain(addrs []Address, substr string) bool {
@@ -186,8 +210,39 @@ func (s *MemoryStore) Stats(_ context.Context) (Stats, error) {
 		if stats.NewestReceivedAt == nil || rt.After(*stats.NewestReceivedAt) {
 			stats.NewestReceivedAt = &rt
 		}
+		if !msg.Read {
+			stats.UnreadCount++
+		}
+		if len(msg.Attachments)+len(msg.InlineImages) > 0 {
+			stats.AttachmentCount++
+		}
+		if msg.ParseWarning {
+			stats.ParseWarningCount++
+		}
 	}
 	return stats, nil
+}
+
+// Tags returns every distinct tag currently in use with its message count.
+func (s *MemoryStore) Tags(_ context.Context) ([]TagCount, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	counts := make(map[string]int)
+	var order []string
+	for _, msg := range s.messages {
+		for _, t := range msg.Tags {
+			if _, ok := counts[t]; !ok {
+				order = append(order, t)
+			}
+			counts[t]++
+		}
+	}
+	result := make([]TagCount, 0, len(order))
+	for _, t := range order {
+		result = append(result, TagCount{Tag: t, Count: counts[t]})
+	}
+	return result, nil
 }
 
 // Ping always succeeds for the in-memory store.
@@ -215,9 +270,9 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	return nil
 }
 
-// MarkRead marks the message with the given ID or unambiguous ID prefix as
-// read, or returns ErrNotFound/ErrAmbiguousID.
-func (s *MemoryStore) MarkRead(_ context.Context, id string) error {
+// MarkRead sets the read flag of the message with the given ID or
+// unambiguous ID prefix, or returns ErrNotFound/ErrAmbiguousID.
+func (s *MemoryStore) MarkRead(_ context.Context, id string, read bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -225,7 +280,7 @@ func (s *MemoryStore) MarkRead(_ context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	s.messages[s.byID[full]].Read = true
+	s.messages[s.byID[full]].Read = read
 	return nil
 }
 

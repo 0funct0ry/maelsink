@@ -3,14 +3,17 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { exportAllUrl } from '../../lib/apiClient'
 import { useMessageStore } from '../../stores/useMessageStore'
+import { useUIStore } from '../../stores/useUIStore'
 import MessageList from './MessageList'
+import MessagePreviewModal from './MessagePreviewModal'
 import Pagination from './Pagination'
 
 export default function InboxScreen() {
   const navigate = useNavigate()
+  const [previewId, setPreviewId] = useState<string | null>(null)
   const fetchMessages = useMessageStore((state) => state.fetchMessages)
-  const total = useMessageStore((state) => state.total)
   const sort = useMessageStore((state) => state.query.sort ?? 'received_at_desc')
+  const query = useMessageStore((state) => state.query)
   const setQuery = useMessageStore((state) => state.setQuery)
   const [sortOpen, setSortOpen] = useState(false)
 
@@ -22,8 +25,7 @@ export default function InboxScreen() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border-soft px-[22px] py-3">
         <div>
-          <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-text-primary">All messages</h1>
-          <p className="mt-0.5 font-mono text-[12.5px] text-text-tertiary">{total} captured</p>
+          <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-text-primary">Messages</h1>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -59,9 +61,10 @@ export default function InboxScreen() {
             )}
           </div>
           <a
-            href={exportAllUrl()}
+            href={exportAllUrl(query)}
             download
             title="Export all messages as .zip"
+            onClick={() => useUIStore.getState().pushToast('info', 'Export started')}
             className="flex h-8 w-8 items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-surface hover:text-text-primary"
           >
             <Download className="h-[17px] w-[17px]" aria-hidden="true" />
@@ -70,10 +73,12 @@ export default function InboxScreen() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <MessageList onOpenMessage={(id) => navigate(`/messages/${id}`)} />
+        <MessageList onOpenMessage={(id) => navigate(`/messages/${id}`)} onPreviewMessage={setPreviewId} />
       </div>
 
       <Pagination />
+
+      <MessagePreviewModal messageId={previewId} onClose={() => setPreviewId(null)} />
     </div>
   )
 }

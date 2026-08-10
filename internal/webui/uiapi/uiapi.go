@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/0funct0ry/maelsink/internal/api"
+	"github.com/0funct0ry/maelsink/internal/config"
 )
 
 // Config configures the router built by RegisterRoutes.
@@ -24,6 +25,12 @@ type Config struct {
 
 	SMTPHost string
 	SMTPPort int
+
+	// ConfigEntries backs GET /ui-api/v1/config (M6.1's Settings screen
+	// provenance table) — precomputed once at startup by cmd/serve.go via
+	// config.Dump, since config values never change during the process
+	// lifetime.
+	ConfigEntries []config.Entry
 }
 
 type smtpInfo struct {
@@ -47,6 +54,13 @@ func RegisterRoutes(rg *gin.RouterGroup, cfg Config) {
 				SMTP:        smtpInfo{Host: cfg.SMTPHost, Port: cfg.SMTPPort},
 				AuthEnabled: cfg.Auth.Enabled,
 			})
+		})
+		v1.GET("/config", func(c *gin.Context) {
+			entries := cfg.ConfigEntries
+			if entries == nil {
+				entries = []config.Entry{}
+			}
+			c.JSON(http.StatusOK, entries)
 		})
 	}
 }

@@ -43,6 +43,16 @@ export function formatExactTime(iso: string): string {
 }
 
 /**
+ * Formatted absolute date/time in UTC, RFC 1123-style (e.g.
+ * "Fri, 07 Aug 2026 14:32:10 GMT") — Date.prototype.toUTCString's format,
+ * shown alongside (not replacing) the relative-time-with-exact-tooltip
+ * treatment on the Message Detail screen.
+ */
+export function formatAbsoluteDate(iso: string): string {
+  return new Date(iso).toUTCString()
+}
+
+/**
  * Renders a list of addresses as "first, +N more" once it exceeds `max`
  * entries (default 1: show the first, badge the rest).
  */

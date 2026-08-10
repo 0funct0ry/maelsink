@@ -28,6 +28,9 @@ Each email:
     of 175 canned body templates (5 per use-case x 35 use-cases), each
     rendered with randomized realistic data so consecutive emails of
     the same template still differ.
+  * carries zero or more randomized "X-Tag" headers (maelsink's message-
+    tagging feature) so generated traffic exercises the Web UI's tag
+    chips/sidebar tag nav/`?tag=` filter.
 """
 
 import argparse
@@ -100,6 +103,19 @@ ADDRESS_POOL = [
 ]
 
 assert len(ADDRESS_POOL) == 50
+
+
+# --------------------------------------------------------------------------
+# 1b. Tag pool for maelsink's X-Tag header (SPEC.md's message-tagging
+#     feature) — lets the generated traffic exercise the Web UI's tag
+#     chips/sidebar tag nav/`?tag=` filter with realistic, varied tags.
+# --------------------------------------------------------------------------
+
+TAG_POOL = [
+    "signup-flow", "billing", "receipts", "shipping", "2fa", "security",
+    "password-reset", "welcome", "onboarding", "invoice", "appointments",
+    "cart-abandonment", "smoke", "regression", "staging", "load-test",
+]
 
 
 # --------------------------------------------------------------------------
@@ -282,6 +298,19 @@ def rand_otp():
 
 def rand_ip():
     return ".".join(str(random.randint(1, 254)) for _ in range(4))
+
+
+def rand_tags(category_key):
+    """Pick a realistic, varied set of X-Tag values for one message: the
+    use-case's own category (so e.g. every password-reset email carries a
+    "password-reset" tag) plus zero to two extra tags from TAG_POOL, and
+    roughly a third of messages get no tags at all (to exercise the
+    Web UI's "no tags" row/filter state too)."""
+    if random.random() < 0.33:
+        return []
+    tags = {category_key.replace("_", "-")}
+    tags.update(random.sample(TAG_POOL, random.randint(0, 2)))
+    return sorted(tags)
 
 
 def rand_amount(low, high):
@@ -2014,20 +2043,25 @@ def render_random_email():
         unsubscribe_addr=unsubscribe_addr,
     )
     text = render_text_fallback(title, plain_lines)
-    return subject, to_addr, from_addr, html, text, category_key
+    tags = rand_tags(category_key)
+    return subject, to_addr, from_addr, html, text, category_key, tags
 
 
 # --------------------------------------------------------------------------
 # 7. SMTP sending
 # --------------------------------------------------------------------------
 
-def build_message(subject, to_addr, from_addr, html, text):
+def build_message(subject, to_addr, from_addr, html, text, tags=None):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = from_addr
     msg["To"] = to_addr
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid()
+    for tag in tags or []:
+        # A separate header per tag (not comma-joined) — maelsink collects
+        # every "X-Tag" line on a message, preserving order/duplicates.
+        msg.add_header("X-Tag", tag)
     msg.attach(MIMEText(text, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     return msg
@@ -2045,12 +2079,13 @@ def send_emails(host, port, count, use_tls, username, password, verbose):
             smtp.login(username, password)
 
         for i in range(1, count + 1):
-            subject, to_addr, from_addr, html, text, category = render_random_email()
-            msg = build_message(subject, to_addr, from_addr, html, text)
+            subject, to_addr, from_addr, html, text, category, tags = render_random_email()
+            msg = build_message(subject, to_addr, from_addr, html, text, tags)
             smtp.sendmail(from_addr, [to_addr], msg.as_string())
             sent += 1
             if verbose:
-                print(f"[{i}/{count}] ({category}) {from_addr} -> {to_addr} :: {subject}")
+                tag_suffix = f" [{', '.join(tags)}]" if tags else ""
+                print(f"[{i}/{count}] ({category}) {from_addr} -> {to_addr} :: {subject}{tag_suffix}")
     finally:
         try:
             smtp.quit()

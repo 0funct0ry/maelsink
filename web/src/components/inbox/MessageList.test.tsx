@@ -19,6 +19,8 @@ function makeMessage(overrides: Partial<MessageSummary> = {}): MessageSummary {
     received_at: new Date().toISOString(),
     parse_warning: false,
     read: true,
+    tags: [],
+    preview: '',
     ...overrides,
   }
 }
@@ -30,7 +32,7 @@ describe('MessageList', () => {
 
   it('shows a loading skeleton', () => {
     useMessageStore.setState({ listStatus: 'loading', messages: [], listError: null })
-    const { container } = render(<MessageList onOpenMessage={vi.fn()} />)
+    const { container } = render(<MessageList onOpenMessage={vi.fn()} onPreviewMessage={vi.fn()} />)
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
   })
 
@@ -40,13 +42,13 @@ describe('MessageList', () => {
       messages: [],
       listError: { message: 'boom' } as never,
     })
-    render(<MessageList onOpenMessage={vi.fn()} />)
+    render(<MessageList onOpenMessage={vi.fn()} onPreviewMessage={vi.fn()} />)
     expect(screen.getByText('boom')).toBeInTheDocument()
   })
 
   it('shows the empty state when there are no messages', () => {
     useMessageStore.setState({ listStatus: 'idle', messages: [], listError: null })
-    render(<MessageList onOpenMessage={vi.fn()} />)
+    render(<MessageList onOpenMessage={vi.fn()} onPreviewMessage={vi.fn()} />)
     expect(screen.getByText('No messages yet')).toBeInTheDocument()
   })
 
@@ -57,7 +59,7 @@ describe('MessageList', () => {
       messages: [makeMessage({ id: 'a', subject: 'First' }), makeMessage({ id: 'b', subject: 'Second' })],
       deleteMessageOptimistic: vi.fn(),
     })
-    render(<MessageList onOpenMessage={vi.fn()} />)
+    render(<MessageList onOpenMessage={vi.fn()} onPreviewMessage={vi.fn()} />)
     expect(screen.getByText('First')).toBeInTheDocument()
     expect(screen.getByText('Second')).toBeInTheDocument()
   })

@@ -24,6 +24,8 @@ type MessageSummary struct {
 	ReceivedAt      string   `json:"received_at"`
 	ParseWarning    bool     `json:"parse_warning"`
 	Read            bool     `json:"read"`
+	Tags            []string `json:"tags"`
+	Preview         string   `json:"preview"`
 }
 
 // Header is a single message header (name/value).

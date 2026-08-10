@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/0funct0ry/maelsink/internal/api"
+	"github.com/0funct0ry/maelsink/internal/config"
 	"github.com/0funct0ry/maelsink/internal/store"
 	"github.com/0funct0ry/maelsink/internal/webui/uiapi"
 )
@@ -41,6 +42,11 @@ type Config struct {
 	// no other way to learn the SMTP listener's address.
 	SMTPHost string
 	SMTPPort int
+
+	// ConfigEntries backs GET /ui-api/v1/config (M6.1): every non-secret
+	// config key's resolved value plus its provenance, precomputed once at
+	// startup (config values are immutable for the process lifetime).
+	ConfigEntries []config.Entry
 }
 
 // New builds the Web UI router: the embedded SPA under cfg.BasePath, with
@@ -56,10 +62,11 @@ func New(messageStore store.MessageStore, logger *slog.Logger, cfg Config) *gin.
 		Auth:     cfg.Auth,
 	})
 	uiapi.RegisterRoutes(&engine.RouterGroup, uiapi.Config{
-		BasePath: cfg.BasePath,
-		Auth:     cfg.Auth,
-		SMTPHost: cfg.SMTPHost,
-		SMTPPort: cfg.SMTPPort,
+		BasePath:      cfg.BasePath,
+		Auth:          cfg.Auth,
+		SMTPHost:      cfg.SMTPHost,
+		SMTPPort:      cfg.SMTPPort,
+		ConfigEntries: cfg.ConfigEntries,
 	})
 
 	assets, err := fs.Sub(distFS, "dist")

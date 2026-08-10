@@ -1,46 +1,89 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import ConfigTable from './ConfigTable'
-import { getInfo } from '../../lib/uiApiClient'
+import { getConfig } from '../../lib/uiApiClient'
+import type { ConfigEntry } from '../../lib/apiTypes'
 
 vi.mock('../../lib/uiApiClient')
 
+const sampleEntries: ConfigEntry[] = [
+  { section: 'smtp', key: 'smtp.host', value: '127.0.0.1', source: { layer: 'default', origin: '' } },
+  { section: 'smtp', key: 'smtp.port', value: 1025, source: { layer: 'file', origin: 'maelsink.yaml' } },
+  {
+    section: 'web',
+    key: 'web.host',
+    value: '0.0.0.0',
+    source: { layer: 'env', origin: 'MAELSINK_WEB_HOST' },
+  },
+  {
+    section: 'api',
+    key: 'api.port',
+    value: 9999,
+    source: { layer: 'flag', origin: '--api-port=9999' },
+  },
+]
+
 describe('ConfigTable', () => {
   it('shows a loading state before data arrives', () => {
-    vi.mocked(getInfo).mockReturnValue(new Promise(() => {}))
+    vi.mocked(getConfig).mockReturnValue(new Promise(() => {}))
     render(<ConfigTable />)
     expect(screen.getByTestId('config-loading')).toBeInTheDocument()
   })
 
-  it('renders the smtp host/port and auth rows', async () => {
-    vi.mocked(getInfo).mockResolvedValue({
-      smtp: { host: '127.0.0.1', port: 1025 },
-      auth_enabled: true,
-    })
+  it('renders entries grouped by section with key/value/source/origin', async () => {
+    vi.mocked(getConfig).mockResolvedValue(sampleEntries)
     render(<ConfigTable />)
-    await waitFor(() => expect(screen.getByText('SMTP Host')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('smtp.host')).toBeInTheDocument())
+
+    expect(screen.getByText('smtp')).toBeInTheDocument()
+    expect(screen.getByText('web')).toBeInTheDocument()
+    expect(screen.getByText('api')).toBeInTheDocument()
+
     expect(screen.getByText('127.0.0.1')).toBeInTheDocument()
-    expect(screen.getByText('SMTP Port')).toBeInTheDocument()
     expect(screen.getByText('1025')).toBeInTheDocument()
-    expect(screen.getByText('API Auth Enabled')).toBeInTheDocument()
-    expect(screen.getByText('true')).toBeInTheDocument()
+    expect(screen.getByText('maelsink.yaml')).toBeInTheDocument()
+    expect(screen.getByText('MAELSINK_WEB_HOST')).toBeInTheDocument()
+    expect(screen.getByText('--api-port=9999')).toBeInTheDocument()
+
+    expect(screen.getAllByText('Default').length).toBeGreaterThan(0)
+    expect(screen.getByText('Config file')).toBeInTheDocument()
+    expect(screen.getByText('Environment variable')).toBeInTheDocument()
+    expect(screen.getByText('CLI flag')).toBeInTheDocument()
   })
 
-  it('filters rows by label substring, case-insensitively', async () => {
-    vi.mocked(getInfo).mockResolvedValue({
-      smtp: { host: '127.0.0.1', port: 1025 },
-      auth_enabled: false,
-    })
+  it('filters rows by key substring, case-insensitively', async () => {
+    vi.mocked(getConfig).mockResolvedValue(sampleEntries)
     render(<ConfigTable />)
-    await waitFor(() => expect(screen.getByText('SMTP Host')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('smtp.host')).toBeInTheDocument())
 
-    fireEvent.change(screen.getByLabelText(/filter config fields/i), { target: { value: 'auth' } })
+    fireEvent.change(screen.getByLabelText(/filter config fields/i), { target: { value: 'web' } })
 
-    expect(screen.queryByText('SMTP Host')).not.toBeInTheDocument()
-    expect(screen.getByText('API Auth Enabled')).toBeInTheDocument()
+    expect(screen.queryByText('smtp.host')).not.toBeInTheDocument()
+    expect(screen.getByText('web.host')).toBeInTheDocument()
+  })
+
+  it('filters rows by source chip', async () => {
+    vi.mocked(getConfig).mockResolvedValue(sampleEntries)
+    render(<ConfigTable />)
+    await waitFor(() => expect(screen.getByText('smtp.host')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Flag' }))
+
+    expect(screen.queryByText('smtp.host')).not.toBeInTheDocument()
+    expect(screen.getByText('api.port')).toBeInTheDocument()
+  })
+
+  it('shows "No matching fields" when the filter excludes everything', async () => {
+    vi.mocked(getConfig).mockResolvedValue(sampleEntries)
+    render(<ConfigTable />)
+    await waitFor(() => expect(screen.getByText('smtp.host')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText(/filter config fields/i), { target: { value: 'nonexistent' } })
+
+    expect(screen.getByText('No matching fields.')).toBeInTheDocument()
   })
 
   it('shows an inline error without crashing on failure', async () => {
-    vi.mocked(getInfo).mockRejectedValue(new Error('boom'))
+    vi.mocked(getConfig).mockRejectedValue(new Error('boom'))
     render(<ConfigTable />)
     await waitFor(() => expect(screen.getByText(/failed to load config/i)).toBeInTheDocument())
   })

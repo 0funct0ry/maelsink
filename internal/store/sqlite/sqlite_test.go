@@ -291,10 +291,10 @@ func TestStore_MarkRead(t *testing.T) {
 		t.Fatal("new message should default to unread")
 	}
 
-	if err := s.MarkRead(ctx, msg.ID); err != nil {
+	if err := s.MarkRead(ctx, msg.ID, true); err != nil {
 		t.Fatalf("MarkRead: %v", err)
 	}
-	if err := s.MarkRead(ctx, msg.ID); err != nil {
+	if err := s.MarkRead(ctx, msg.ID, true); err != nil {
 		t.Fatalf("MarkRead (idempotent second call): %v", err)
 	}
 
@@ -305,11 +305,22 @@ func TestStore_MarkRead(t *testing.T) {
 	if !got.Read {
 		t.Fatal("expected message to be marked read")
 	}
+
+	if err := s.MarkRead(ctx, msg.ID, false); err != nil {
+		t.Fatalf("MarkRead(false): %v", err)
+	}
+	got, err = s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get after MarkRead(false): %v", err)
+	}
+	if got.Read {
+		t.Fatal("expected message to be marked unread")
+	}
 }
 
 func TestStore_MarkReadMissing(t *testing.T) {
 	s, _ := newTestStore(t, false)
-	if err := s.MarkRead(context.Background(), "nope"); err != store.ErrNotFound {
+	if err := s.MarkRead(context.Background(), "nope", true); err != store.ErrNotFound {
 		t.Fatalf("MarkRead missing: got %v, want ErrNotFound", err)
 	}
 }
@@ -572,5 +583,125 @@ func TestStore_Ping(t *testing.T) {
 	s, _ := newTestStore(t, false)
 	if err := s.Ping(context.Background()); err != nil {
 		t.Fatalf("Ping: %v", err)
+	}
+}
+
+func TestStore_TagsRoundTripAndFilter(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	m1 := sampleMessage()
+	m1.Tags = []string{"smoke", "release"}
+	if err := s.Save(ctx, m1); err != nil {
+		t.Fatalf("Save m1: %v", err)
+	}
+
+	m2 := sampleMessage()
+	m2.Tags = []string{"smoke"}
+	if err := s.Save(ctx, m2); err != nil {
+		t.Fatalf("Save m2: %v", err)
+	}
+
+	m3 := sampleMessage()
+	if err := s.Save(ctx, m3); err != nil {
+		t.Fatalf("Save m3: %v", err)
+	}
+
+	got, err := s.Get(ctx, m1.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.Tags) != 2 || got.Tags[0] != "smoke" || got.Tags[1] != "release" {
+		t.Fatalf("Get tags = %v, want [smoke release]", got.Tags)
+	}
+
+	msgs, total, err := s.List(ctx, store.ListFilter{Tag: "smoke"})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("total = %d, want 2", total)
+	}
+	for _, m := range msgs {
+		if len(m.Tags) == 0 {
+			t.Fatalf("listed message missing tags")
+		}
+	}
+
+	tags, err := s.Tags(ctx)
+	if err != nil {
+		t.Fatalf("Tags: %v", err)
+	}
+	counts := map[string]int{}
+	for _, tc := range tags {
+		counts[tc.Tag] = tc.Count
+	}
+	if counts["smoke"] != 2 {
+		t.Fatalf("smoke count = %d, want 2", counts["smoke"])
+	}
+	if counts["release"] != 1 {
+		t.Fatalf("release count = %d, want 1", counts["release"])
+	}
+}
+
+func TestStore_ReadHasAttachmentsParseWarningFilters(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	unread := sampleMessage()
+	unread.Attachments = nil
+	unread.InlineImages = nil
+	if err := s.Save(ctx, unread); err != nil {
+		t.Fatalf("Save unread: %v", err)
+	}
+
+	read := sampleMessage()
+	read.Read = true
+	read.Attachments = nil
+	read.InlineImages = nil
+	if err := s.Save(ctx, read); err != nil {
+		t.Fatalf("Save read: %v", err)
+	}
+
+	withAttachment := sampleMessage()
+	if err := s.Save(ctx, withAttachment); err != nil {
+		t.Fatalf("Save withAttachment: %v", err)
+	}
+
+	warn := sampleMessage()
+	warn.Attachments = nil
+	warn.InlineImages = nil
+	warn.ParseWarning = true
+	if err := s.Save(ctx, warn); err != nil {
+		t.Fatalf("Save warn: %v", err)
+	}
+
+	trueVal, falseVal := true, false
+
+	if _, total, err := s.List(ctx, store.ListFilter{Read: &falseVal}); err != nil || total != 3 {
+		t.Fatalf("unread filter: total=%d err=%v, want 3", total, err)
+	}
+	if _, total, err := s.List(ctx, store.ListFilter{Read: &trueVal}); err != nil || total != 1 {
+		t.Fatalf("read filter: total=%d err=%v, want 1", total, err)
+	}
+	if _, total, err := s.List(ctx, store.ListFilter{HasAttachments: &trueVal}); err != nil || total != 1 {
+		t.Fatalf("has_attachments filter: total=%d err=%v, want 1", total, err)
+	}
+	if _, total, err := s.List(ctx, store.ListFilter{ParseWarning: &trueVal}); err != nil || total != 1 {
+		t.Fatalf("parse_warning filter: total=%d err=%v, want 1", total, err)
+	}
+
+	stats, err := s.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.UnreadCount != 3 {
+		t.Fatalf("UnreadCount = %d, want 3", stats.UnreadCount)
+	}
+	if stats.AttachmentCount != 1 {
+		t.Fatalf("AttachmentCount = %d, want 1", stats.AttachmentCount)
+	}
+	if stats.ParseWarningCount != 1 {
+		t.Fatalf("ParseWarningCount = %d, want 1", stats.ParseWarningCount)
 	}
 }

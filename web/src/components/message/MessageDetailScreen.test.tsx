@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import MessageDetailScreen from './MessageDetailScreen'
 import { useMessageStore } from '../../stores/useMessageStore'
+import { useUIStore } from '../../stores/useUIStore'
 import * as apiClient from '../../lib/apiClient'
 import type { MessageDetail } from '../../lib/apiTypes'
 
@@ -27,6 +28,8 @@ const message: MessageDetail = {
   received_at: '2024-01-01T00:00:00Z',
   parse_warning: false,
   read: false,
+  tags: [],
+  preview: '',
   headers: [],
   text_body: 'body',
   html_body: '<p>hi</p>',
@@ -89,6 +92,34 @@ describe('MessageDetailScreen', () => {
     await waitFor(() => expect(markRead).toHaveBeenCalledWith('m1'))
   })
 
+  it('renders tag chips when the message has tags', async () => {
+    useMessageStore.setState({
+      selected: { ...message, tags: ['signup-flow', 'smoke'] },
+      selectedStatus: 'idle',
+      markRead: vi.fn(),
+    })
+    renderScreen()
+    expect(await screen.findByText('signup-flow')).toBeInTheDocument()
+    expect(screen.getByText('smoke')).toBeInTheDocument()
+  })
+
+  it('renders no tag chips when the message has no tags', async () => {
+    useMessageStore.setState({ selected: message, selectedStatus: 'idle', markRead: vi.fn() })
+    renderScreen()
+    await screen.findByText('Hello world')
+    expect(screen.queryByText('signup-flow')).not.toBeInTheDocument()
+  })
+
+  it('shows a formatted absolute date alongside the relative time', async () => {
+    useMessageStore.setState({
+      selected: { ...message, received_at: '2026-08-07T14:32:10Z' },
+      selectedStatus: 'idle',
+      markRead: vi.fn(),
+    })
+    renderScreen()
+    expect(await screen.findByText('(Fri, 07 Aug 2026 14:32:10 GMT)')).toBeInTheDocument()
+  })
+
   it('does not call markRead again when already read', async () => {
     const markRead = vi.fn()
     useMessageStore.setState({ selected: { ...message, read: true }, selectedStatus: 'idle', markRead })
@@ -114,5 +145,27 @@ describe('MessageDetailScreen', () => {
     renderScreen()
     fireEvent.click(screen.getByText('Export .eml'))
     await waitFor(() => expect(apiClient.exportMessage).toHaveBeenCalledWith('m1'))
+  })
+
+  it('pushes a success toast once export completes', async () => {
+    useUIStore.setState({ toasts: [] })
+    vi.mocked(apiClient.exportMessage).mockResolvedValue(new Blob(['x']))
+    useMessageStore.setState({ selected: message, selectedStatus: 'idle' })
+    renderScreen()
+    fireEvent.click(screen.getByText('Export .eml'))
+    await waitFor(() =>
+      expect(useUIStore.getState().toasts.some((t) => t.message === 'Message exported')).toBe(true),
+    )
+  })
+
+  it('pushes a danger toast if export fails', async () => {
+    useUIStore.setState({ toasts: [] })
+    vi.mocked(apiClient.exportMessage).mockRejectedValue(new Error('boom'))
+    useMessageStore.setState({ selected: message, selectedStatus: 'idle' })
+    renderScreen()
+    fireEvent.click(screen.getByText('Export .eml'))
+    await waitFor(() =>
+      expect(useUIStore.getState().toasts.some((t) => t.message === 'Failed to export message')).toBe(true),
+    )
   })
 })

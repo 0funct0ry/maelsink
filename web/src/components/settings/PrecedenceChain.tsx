@@ -6,18 +6,18 @@ const STAGES = [
 ]
 
 /**
- * Static, illustrative legend of maelsink's config precedence order. This is
- * NOT live per-key provenance data — the backend doesn't track which layer
- * resolved a given value, so this component takes no props and never fetches.
+ * Static legend of maelsink's config precedence order. The chain itself
+ * stays a fixed visual (it's always default -> file -> env -> flag), but
+ * since M6.1 the values in ConfigTable below it are backed by real
+ * per-key provenance (internal/config.ResolveProvenance via
+ * GET /ui-api/v1/config), so the caption no longer needs to disclaim this
+ * as illustrative-only.
  */
 export default function PrecedenceChain() {
   return (
     <div className="rounded-md border border-border-soft bg-surface p-3.5">
       <p className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide text-text-tertiary">
         Override precedence (lowest → highest)
-      </p>
-      <p className="mb-2.5 text-xs uppercase tracking-wide text-text-tertiary">
-        Legend — not live data
       </p>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -39,8 +39,8 @@ export default function PrecedenceChain() {
       <p className="mt-2.5 text-xs leading-relaxed text-text-tertiary">
         A value set by a CLI flag always wins, even if it&apos;s also set in{' '}
         <span className="font-mono">maelsink.yaml</span> or as a{' '}
-        <span className="font-mono">MAELSINK_*</span> env var. This is illustrative — maelsink
-        does not currently track which layer resolved a specific value.
+        <span className="font-mono">MAELSINK_*</span> env var. The table below shows exactly
+        which layer resolved each key, live, for this running server.
       </p>
     </div>
   )

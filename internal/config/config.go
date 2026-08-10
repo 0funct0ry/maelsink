@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -223,6 +224,26 @@ type Options struct {
 // precedence: built-in defaults, the YAML config file, MAELSINK_* env vars,
 // then CLI flags.
 func Load(opts Options) (Config, error) {
+	cfg, _, err := load(opts)
+	return cfg, err
+}
+
+// LoadWithProvenance behaves like Load but additionally resolves per-key
+// Provenance (SPEC.md §8.1's Settings screen source/origin columns) via
+// ResolveProvenance, using flagSet to detect which flags were explicitly
+// set (Changed==true).
+func LoadWithProvenance(opts Options, flagSet *pflag.FlagSet) (Config, Provenance, error) {
+	cfg, v, err := load(opts)
+	if err != nil {
+		return Config{}, nil, err
+	}
+	return cfg, ResolveProvenance(v, flagSet, ProvenanceKeys()), nil
+}
+
+// load is Load's shared implementation, additionally returning the *viper.
+// Viper instance used to resolve cfg so ResolveProvenance can inspect it
+// (v.InConfig, v.ConfigFileUsed) after the fact.
+func load(opts Options) (Config, *viper.Viper, error) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 
@@ -231,14 +252,14 @@ func Load(opts Options) (Config, error) {
 	if opts.ConfigFile != "" {
 		v.SetConfigFile(opts.ConfigFile)
 		if err := v.ReadInConfig(); err != nil {
-			return Config{}, fmt.Errorf("config: reading %q: %w", opts.ConfigFile, err)
+			return Config{}, nil, fmt.Errorf("config: reading %q: %w", opts.ConfigFile, err)
 		}
 	} else {
 		v.SetConfigName("maelsink")
 		v.AddConfigPath(".")
 		if err := v.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				return Config{}, fmt.Errorf("config: reading maelsink.yaml: %w", err)
+				return Config{}, nil, fmt.Errorf("config: reading maelsink.yaml: %w", err)
 			}
 		}
 	}
@@ -250,12 +271,12 @@ func Load(opts Options) (Config, error) {
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return Config{}, fmt.Errorf("config: unmarshal: %w", err)
+		return Config{}, nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
 
 	applyFlagOverrides(&cfg, opts.Flags)
 
-	return cfg, nil
+	return cfg, v, nil
 }
 
 // Validate performs basic sanity checks on a resolved Config.

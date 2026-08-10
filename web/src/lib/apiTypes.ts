@@ -14,6 +14,8 @@ export interface MessageSummary {
   received_at: string
   parse_warning: boolean
   read: boolean
+  tags: string[]
+  preview: string
 }
 
 export interface HeaderEntry {
@@ -49,6 +51,26 @@ export interface Stats {
   total_size_bytes: number
   oldest_received_at: string | null
   newest_received_at: string | null
+  unread_count: number
+  attachment_count: number
+  parse_warning_count: number
+}
+
+export interface TagCount {
+  tag: string
+  count: number
+}
+
+export interface ConfigSource {
+  layer: 'default' | 'file' | 'env' | 'flag'
+  origin: string
+}
+
+export interface ConfigEntry {
+  section: string
+  key: string
+  value: unknown
+  source: ConfigSource
 }
 
 export interface Version {
@@ -82,4 +104,8 @@ export interface ListMessagesParams {
   since?: string
   until?: string
   sort?: 'received_at_desc' | 'received_at_asc'
+  tag?: string
+  read?: boolean
+  has_attachments?: boolean
+  parse_warning?: boolean
 }

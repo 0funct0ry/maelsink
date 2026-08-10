@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import AppShell from './AppShell'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
@@ -9,11 +9,14 @@ import * as uiApiClient from '../../lib/uiApiClient'
 vi.mock('../../lib/apiClient')
 vi.mock('../../lib/uiApiClient')
 
-function renderShell() {
+function renderShell(initialEntries: string[] = ['/']) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <AppShell>
-        <div>content</div>
+        <Routes>
+          <Route path="/" element={<div>content</div>} />
+          <Route path="/messages/:id" element={<div>message detail</div>} />
+        </Routes>
       </AppShell>
     </MemoryRouter>,
   )
@@ -22,6 +25,7 @@ function renderShell() {
 describe('AppShell', () => {
   beforeEach(() => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
+    vi.mocked(apiClient.getTags).mockRejectedValue(new Error('offline'))
     vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
     useUIStore.setState({ modal: null })
   })
@@ -60,5 +64,31 @@ describe('AppShell', () => {
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expect(useUIStore.getState().modal).toBeNull()
+  })
+
+  it('Escape navigates from a message detail route back to the Inbox', () => {
+    renderShell(['/messages/abc123'])
+    expect(screen.getByText('message detail')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(screen.getByText('content')).toBeInTheDocument()
+  })
+
+  it('Escape does nothing when already on the Inbox route', () => {
+    renderShell(['/'])
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByText('content')).toBeInTheDocument()
+  })
+
+  it('Escape does not navigate while a confirm modal is open', () => {
+    renderShell(['/messages/abc123'])
+    act(() => {
+      useUIStore.getState().openConfirm({ title: 'Sure?', body: 'Body', onConfirm: () => {} })
+    })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(screen.getByText('message detail')).toBeInTheDocument()
   })
 })

@@ -13,7 +13,7 @@ var showCmd = &cobra.Command{
 	Short: "Print the fully resolved effective configuration",
 	Long:  `Loads maelsink.yaml (or --config), layers MAELSINK_* env vars and any flags given here, and prints the result as YAML.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := resolveConfig(cmd)
+		cfg, _, err := resolveConfig(cmd)
 		if err != nil {
 			return err
 		}

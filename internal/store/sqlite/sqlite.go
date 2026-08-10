@@ -95,6 +95,28 @@ func parseAddrsJSON(s string) ([]store.Address, error) {
 	return addrs, nil
 }
 
+func tagsJSON(tags []string) (string, error) {
+	if tags == nil {
+		tags = []string{}
+	}
+	b, err := json.Marshal(tags)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func parseTagsJSON(s string) ([]string, error) {
+	if s == "" {
+		return nil, nil
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(s), &tags); err != nil {
+		return nil, err
+	}
+	return tags, nil
+}
+
 // attachmentFilePath returns the on-disk path for the given attachment ID.
 func (s *Store) attachmentFilePath(id string) string {
 	return filepath.Join(s.diskPath, id)
@@ -129,6 +151,10 @@ func (s *Store) Save(ctx context.Context, msg *store.Message) error {
 	if err != nil {
 		return fmt.Errorf("sqlite: encoding bcc_addrs: %w", err)
 	}
+	tagsJSONStr, err := tagsJSON(msg.Tags)
+	if err != nil {
+		return fmt.Errorf("sqlite: encoding tags: %w", err)
+	}
 
 	hasAttachments := len(msg.Attachments) > 0 || len(msg.InlineImages) > 0
 
@@ -148,11 +174,11 @@ func (s *Store) Save(ctx context.Context, msg *store.Message) error {
 	_, err = tx.ExecContext(ctx, `INSERT INTO messages (
 		id, message_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject,
 		text_body, html_body, raw_source, size_bytes, raw_size_bytes,
-		has_attachments, parse_warning, parse_error, received_at, client_ip, client_helo, read
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		has_attachments, parse_warning, parse_error, received_at, client_ip, client_helo, read, tags
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		msg.ID, headerValue(msg.Headers, "Message-Id"), fromAddr, toJSON, ccJSON, bccJSON,
 		msg.Subject, msg.TextBody, msg.HTMLBody, msg.RawSource, msg.Size, int64(len(msg.RawSource)),
-		hasAttachments, msg.ParseWarning, msg.ParseError, msg.ReceivedAt.Format(timeLayout), "", "", msg.Read,
+		hasAttachments, msg.ParseWarning, msg.ParseError, msg.ReceivedAt.Format(timeLayout), "", "", msg.Read, tagsJSONStr,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: inserting message: %w", err)
@@ -309,7 +335,7 @@ func (s *Store) Get(ctx context.Context, id string) (*store.Message, error) {
 
 	row := s.db.QueryRowContext(ctx, `SELECT
 		id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, text_body, html_body,
-		raw_source, size_bytes, parse_warning, parse_error, received_at, read
+		raw_source, size_bytes, parse_warning, parse_error, received_at, read, tags
 	FROM messages WHERE id = ?`, full)
 
 	msg, err := scanMessage(row)
@@ -338,11 +364,11 @@ func scanMessage(row scannable) (*store.Message, error) {
 		rawSource                                                          []byte
 		size                                                               int64
 		parseWarning, read                                                 bool
-		parseError, receivedAt                                             string
+		parseError, receivedAt, tagsJSONStr                                string
 	)
 
 	if err := row.Scan(&id, &fromAddr, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
-		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read); err != nil {
+		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &tagsJSONStr); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.ErrNotFound
 		}
@@ -354,6 +380,11 @@ func scanMessage(row scannable) (*store.Message, error) {
 		return nil, err
 	}
 	msg.Read = read
+	tags, err := parseTagsJSON(tagsJSONStr)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: decoding tags: %w", err)
+	}
+	msg.Tags = tags
 	return msg, nil
 }
 
@@ -503,6 +534,29 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 		where = append(where, `m.received_at <= ?`)
 		args = append(args, filter.Until.UTC().Format(timeLayout))
 	}
+	if filter.Tag != "" {
+		// tags is a JSON array column; match an exact string element via a
+		// LIKE against its quoted JSON encoding to avoid a per-row json_each
+		// join for the common case of a simple tag string (no embedded
+		// quotes/backslashes possible from X-Tag header values we store).
+		where = append(where, `EXISTS (SELECT 1 FROM json_each(m.tags) WHERE json_each.value = ?)`)
+		args = append(args, filter.Tag)
+	}
+	if filter.Read != nil {
+		where = append(where, `m.read = ?`)
+		args = append(args, *filter.Read)
+	}
+	if filter.HasAttachments != nil {
+		if *filter.HasAttachments {
+			where = append(where, `m.has_attachments = 1`)
+		} else {
+			where = append(where, `m.has_attachments = 0`)
+		}
+	}
+	if filter.ParseWarning != nil {
+		where = append(where, `m.parse_warning = ?`)
+		args = append(args, *filter.ParseWarning)
+	}
 
 	fromClause := `FROM messages m ` + strings.Join(joins, " ")
 	whereClause := ""
@@ -523,7 +577,7 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 
 	query := `SELECT
 		m.id, m.from_addr, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.subject, m.text_body, m.html_body,
-		m.raw_source, m.size_bytes, m.parse_warning, m.parse_error, m.received_at, m.read,
+		m.raw_source, m.size_bytes, m.parse_warning, m.parse_error, m.received_at, m.read, m.tags,
 		(SELECT COUNT(*) FROM attachments a WHERE a.message_id = m.id) AS attachment_count
 	` + fromClause + whereClause + ` ORDER BY ` + order
 
@@ -580,12 +634,12 @@ func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 		rawSource                                                          []byte
 		size                                                               int64
 		parseWarning, read                                                 bool
-		parseError, receivedAt                                             string
+		parseError, receivedAt, tagsJSONStr                                string
 		attachmentCount                                                    int
 	)
 
 	if err := row.Scan(&id, &fromAddr, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
-		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &attachmentCount); err != nil {
+		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &tagsJSONStr, &attachmentCount); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 0, store.ErrNotFound
 		}
@@ -597,6 +651,11 @@ func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 		return nil, 0, err
 	}
 	msg.Read = read
+	tags, err := parseTagsJSON(tagsJSONStr)
+	if err != nil {
+		return nil, 0, fmt.Errorf("sqlite: decoding tags: %w", err)
+	}
+	msg.Tags = tags
 	return msg, attachmentCount, nil
 }
 
@@ -634,15 +693,15 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// MarkRead marks the message with the given ID or unambiguous ID prefix as
-// read, or returns store.ErrNotFound/store.ErrAmbiguousID.
-func (s *Store) MarkRead(ctx context.Context, id string) error {
+// MarkRead sets the read flag of the message with the given ID or
+// unambiguous ID prefix, or returns store.ErrNotFound/store.ErrAmbiguousID.
+func (s *Store) MarkRead(ctx context.Context, id string, read bool) error {
 	full, err := s.resolveID(ctx, id)
 	if err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE messages SET read = 1 WHERE id = ?`, full); err != nil {
-		return fmt.Errorf("sqlite: marking message read: %w", err)
+	if _, err := s.db.ExecContext(ctx, `UPDATE messages SET read = ? WHERE id = ?`, read, full); err != nil {
+		return fmt.Errorf("sqlite: setting message read flag: %w", err)
 	}
 	return nil
 }
@@ -712,7 +771,41 @@ func (s *Store) Stats(ctx context.Context) (store.Stats, error) {
 		}
 		stats.NewestReceivedAt = &t
 	}
+
+	err = s.db.QueryRowContext(ctx, `SELECT
+		COALESCE(SUM(CASE WHEN read = 0 THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN has_attachments = 1 THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN parse_warning = 1 THEN 1 ELSE 0 END), 0)
+	FROM messages`).Scan(&stats.UnreadCount, &stats.AttachmentCount, &stats.ParseWarningCount)
+	if err != nil {
+		return store.Stats{}, fmt.Errorf("sqlite: querying stat counts: %w", err)
+	}
+
 	return stats, nil
+}
+
+// Tags returns every distinct tag currently in use with its message count.
+func (s *Store) Tags(ctx context.Context) ([]store.TagCount, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT json_each.value AS tag, COUNT(*) AS cnt
+		FROM messages, json_each(messages.tags)
+		GROUP BY json_each.value
+		ORDER BY cnt DESC, tag ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: querying tags: %w", err)
+	}
+	defer rows.Close()
+
+	out := []store.TagCount{}
+	for rows.Next() {
+		var tc store.TagCount
+		if err := rows.Scan(&tc.Tag, &tc.Count); err != nil {
+			return nil, fmt.Errorf("sqlite: scanning tag: %w", err)
+		}
+		out = append(out, tc)
+	}
+	return out, rows.Err()
 }
 
 // Ping verifies the underlying database connection is reachable.

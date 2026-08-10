@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/mail"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -185,6 +186,29 @@ func TestAPI_FullEndpointCoverage(t *testing.T) {
 		_, body := doJSON(t, router, http.MethodGet, "/api/v1/messages/"+id, nil)
 		if body["read"] != true {
 			t.Fatalf("expected message marked read, got %+v", body)
+		}
+	})
+
+	t.Run("mark unread", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/messages/"+id+"/read", strings.NewReader(`{"read":false}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		_, body := doJSON(t, router, http.MethodGet, "/api/v1/messages/"+id, nil)
+		if body["read"] != false {
+			t.Fatalf("expected message marked unread, got %+v", body)
+		}
+
+		// Restore to read for the remaining subtests in this run.
+		req = httptest.NewRequest(http.MethodPatch, "/api/v1/messages/"+id+"/read", nil)
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
 
@@ -502,5 +526,104 @@ func TestAPI_Health_DegradesOnClosedDB(t *testing.T) {
 	}
 	if body["status"] == "ok" || body["db"] != "error" {
 		t.Fatalf("expected degraded status, got %+v", body)
+	}
+}
+
+func TestAPI_TagFilterAndTagsEndpoint(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now()
+	m1 := sampleMessage("s1", "a@example.com", "b@example.com", now)
+	m1.Tags = []string{"smoke", "release"}
+	m2 := sampleMessage("s2", "a@example.com", "b@example.com", now)
+	m2.Tags = []string{"smoke"}
+	m3 := sampleMessage("s3", "a@example.com", "b@example.com", now)
+
+	for _, m := range []*store.Message{m1, m2, m3} {
+		if err := s.Save(ctx, m); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+
+	router := newRouter(t, s, Config{})
+
+	rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages?tag=smoke", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET ?tag=smoke = %d: %s", rec.Code, rec.Body.String())
+	}
+	if int(body["total"].(float64)) != 2 {
+		t.Fatalf("total = %v, want 2", body["total"])
+	}
+
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tags", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/tags = %d: %s", rec.Code, rec.Body.String())
+	}
+	var tags []tagCountJSON
+	if err := json.Unmarshal(rec.Body.Bytes(), &tags); err != nil {
+		t.Fatalf("unmarshal tags: %v", err)
+	}
+	counts := map[string]int{}
+	for _, tc := range tags {
+		counts[tc.Tag] = tc.Count
+	}
+	if counts["smoke"] != 2 || counts["release"] != 1 {
+		t.Fatalf("tag counts = %+v, want smoke=2 release=1", counts)
+	}
+}
+
+func TestAPI_ReadHasAttachmentsParseWarningFilters(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	unread := sampleMessage("u", "a@example.com", "b@example.com", now)
+	unread.Attachments = nil
+	if err := s.Save(ctx, unread); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	router := newRouter(t, s, Config{})
+
+	rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages?read=false", nil)
+	if rec.Code != http.StatusOK || int(body["total"].(float64)) != 1 {
+		t.Fatalf("read=false: code=%d body=%+v", rec.Code, body)
+	}
+
+	rec, body = doJSON(t, router, http.MethodGet, "/api/v1/messages?has_attachments=true", nil)
+	if rec.Code != http.StatusOK || int(body["total"].(float64)) != 0 {
+		t.Fatalf("has_attachments=true: code=%d body=%+v", rec.Code, body)
+	}
+
+	rec, _ = doJSON(t, router, http.MethodGet, "/api/v1/messages?read=notabool", nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("read=notabool: expected 400, got %d", rec.Code)
+	}
+}
+
+func TestAPI_PreviewFieldOnSummary(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	msg := sampleMessage("s", "a@example.com", "b@example.com", time.Now())
+	msg.TextBody = "hello world, this is the body of the message"
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	router := newRouter(t, s, Config{})
+	rec, body := doJSON(t, router, http.MethodGet, "/api/v1/messages", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/messages = %d", rec.Code)
+	}
+	msgs := body["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	summary := msgs[0].(map[string]any)
+	if summary["preview"] != "hello world, this is the body of the message" {
+		t.Fatalf("preview = %v", summary["preview"])
 	}
 }

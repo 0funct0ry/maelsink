@@ -1,15 +1,21 @@
-import { Mail, Settings } from 'lucide-react'
+import { Mail, Settings, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getInfo } from '../../lib/uiApiClient'
+import { useMessageStore } from '../../stores/useMessageStore'
+import { useUIStore } from '../../stores/useUIStore'
 import SearchBar from '../inbox/SearchBar'
 import IconButton from '../common/IconButton'
 
 // 56px top bar per STYLE_GUIDE.md §1.4 / MOCKUP.html's .topbar: brand mark +
-// wordmark, a live SMTP connection pill, a global search box, and a
-// settings shortcut — all always-visible chrome, not per-screen content.
+// wordmark, a live SMTP connection pill, a global search box, and
+// settings/clear-all shortcuts — all always-visible chrome, not per-screen
+// content. Clear-all lives here (not just in the Sidebar) so it's reachable
+// from every screen, including Message Detail where the Sidebar's own
+// bottom-pinned button isn't visible below the fold on short viewports.
 export default function TopBar() {
   const navigate = useNavigate()
+  const openConfirm = useUIStore((state) => state.openConfirm)
   const [smtp, setSmtp] = useState<{ host: string; port: number } | null>(null)
 
   useEffect(() => {
@@ -25,6 +31,18 @@ export default function TopBar() {
       cancelled = true
     }
   }, [])
+
+  function handleClearAll() {
+    openConfirm({
+      title: 'Clear all messages?',
+      body: 'This will permanently delete every message in the inbox. This action cannot be undone.',
+      confirmLabel: 'Clear all',
+      danger: true,
+      onConfirm: () => {
+        void useMessageStore.getState().clearAll()
+      },
+    })
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-5 border-b border-border bg-bg px-5">
@@ -52,6 +70,12 @@ export default function TopBar() {
       </div>
 
       <div className="ml-auto flex flex-none items-center gap-2">
+        <IconButton
+          icon={<Trash2 className="h-[17px] w-[17px]" aria-hidden="true" />}
+          aria-label="Clear all messages"
+          variant="danger"
+          onClick={handleClearAll}
+        />
         <IconButton
           icon={<Settings className="h-[17px] w-[17px]" aria-hidden="true" />}
           aria-label="Settings"

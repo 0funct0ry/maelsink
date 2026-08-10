@@ -6,6 +6,8 @@ import { useUIStore } from '../stores/useUIStore'
 export interface FetchJsonOptions {
   method?: string
   query?: Record<string, string | number | boolean | undefined>
+  /** JSON-serializable request body; sets Content-Type: application/json. */
+  body?: unknown
   /** Skip attaching Authorization — never needed today, kept for completeness. */
   skipAuth?: boolean
 }
@@ -51,9 +53,17 @@ export async function fetchJson<T>(path: string, opts: FetchJsonOptions = {}): P
     if (token) headers.Authorization = `Bearer ${token}`
   }
 
+  if (opts.body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+  }
+
   let res: Response
   try {
-    res = await fetch(url, { method: opts.method ?? 'GET', headers })
+    res = await fetch(url, {
+      method: opts.method ?? 'GET',
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    })
   } catch (cause) {
     throw new NetworkError(cause)
   }
