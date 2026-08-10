@@ -58,10 +58,6 @@ function VersionCard() {
             <dt className="text-text-tertiary">Commit</dt>
             <dd className="font-mono text-text-primary">{version.commit}</dd>
           </div>
-          <div className="flex gap-2">
-            <dt className="text-text-tertiary">Go</dt>
-            <dd className="font-mono text-text-primary">{version.go}</dd>
-          </div>
         </dl>
       )}
     </div>

@@ -133,8 +133,10 @@ func (s *Store) Save(ctx context.Context, msg *store.Message) error {
 	}
 
 	fromAddr := ""
+	fromName := ""
 	if len(msg.From) > 0 {
 		fromAddr = msg.From[0].Address
+		fromName = msg.From[0].Name
 	} else {
 		fromAddr = msg.EnvelopeFrom
 	}
@@ -172,11 +174,11 @@ func (s *Store) Save(ctx context.Context, msg *store.Message) error {
 	}
 
 	_, err = tx.ExecContext(ctx, `INSERT INTO messages (
-		id, message_id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject,
+		id, message_id, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, subject,
 		text_body, html_body, raw_source, size_bytes, raw_size_bytes,
 		has_attachments, parse_warning, parse_error, received_at, client_ip, client_helo, read, tags
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		msg.ID, headerValue(msg.Headers, "Message-Id"), fromAddr, toJSON, ccJSON, bccJSON,
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		msg.ID, headerValue(msg.Headers, "Message-Id"), fromAddr, nullableString(fromName), toJSON, ccJSON, bccJSON,
 		msg.Subject, msg.TextBody, msg.HTMLBody, msg.RawSource, msg.Size, int64(len(msg.RawSource)),
 		hasAttachments, msg.ParseWarning, msg.ParseError, msg.ReceivedAt.Format(timeLayout), "", "", msg.Read, tagsJSONStr,
 	)
@@ -334,7 +336,7 @@ func (s *Store) Get(ctx context.Context, id string) (*store.Message, error) {
 	}
 
 	row := s.db.QueryRowContext(ctx, `SELECT
-		id, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, text_body, html_body,
+		id, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, subject, text_body, html_body,
 		raw_source, size_bytes, parse_warning, parse_error, received_at, read, tags
 	FROM messages WHERE id = ?`, full)
 
@@ -361,13 +363,14 @@ type scannable interface {
 func scanMessage(row scannable) (*store.Message, error) {
 	var (
 		id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string
+		fromName                                                           sql.NullString
 		rawSource                                                          []byte
 		size                                                               int64
 		parseWarning, read                                                 bool
 		parseError, receivedAt, tagsJSONStr                                string
 	)
 
-	if err := row.Scan(&id, &fromAddr, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
+	if err := row.Scan(&id, &fromAddr, &fromName, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
 		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &tagsJSONStr); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.ErrNotFound
@@ -375,7 +378,7 @@ func scanMessage(row scannable) (*store.Message, error) {
 		return nil, fmt.Errorf("sqlite: scanning message: %w", err)
 	}
 
-	msg, err := messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
+	msg, err := messageFromScannedFields(id, fromAddr, fromName.String, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +391,7 @@ func scanMessage(row scannable) (*store.Message, error) {
 	return msg, nil
 }
 
-func messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string, rawSource []byte, size int64, parseWarning bool, parseError, receivedAt string) (*store.Message, error) {
+func messageFromScannedFields(id, fromAddr, fromName, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string, rawSource []byte, size int64, parseWarning bool, parseError, receivedAt string) (*store.Message, error) {
 	to, err := parseAddrsJSON(toJSON)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: decoding to_addrs: %w", err)
@@ -409,7 +412,7 @@ func messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, te
 
 	var from []store.Address
 	if fromAddr != "" {
-		from = []store.Address{{Address: fromAddr}}
+		from = []store.Address{{Name: fromName, Address: fromAddr}}
 	}
 
 	return &store.Message{
@@ -602,7 +605,7 @@ func (s *Store) List(ctx context.Context, filter store.ListFilter) ([]*store.Mes
 	}
 
 	query := `SELECT
-		m.id, m.from_addr, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.subject, m.text_body, m.html_body,
+		m.id, m.from_addr, m.from_name, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.subject, m.text_body, m.html_body,
 		m.raw_source, m.size_bytes, m.parse_warning, m.parse_error, m.received_at, m.read, m.tags,
 		(SELECT COUNT(*) FROM attachments a WHERE a.message_id = m.id) AS attachment_count
 	` + fromClause + whereClause + ` ORDER BY ` + order
@@ -657,6 +660,7 @@ func likeContains(s string) string {
 func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 	var (
 		id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody string
+		fromName                                                           sql.NullString
 		rawSource                                                          []byte
 		size                                                               int64
 		parseWarning, read                                                 bool
@@ -664,7 +668,7 @@ func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 		attachmentCount                                                    int
 	)
 
-	if err := row.Scan(&id, &fromAddr, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
+	if err := row.Scan(&id, &fromAddr, &fromName, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
 		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &tagsJSONStr, &attachmentCount); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 0, store.ErrNotFound
@@ -672,7 +676,7 @@ func scanMessageWithCount(row scannable) (*store.Message, int, error) {
 		return nil, 0, fmt.Errorf("sqlite: scanning message: %w", err)
 	}
 
-	msg, err := messageFromScannedFields(id, fromAddr, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
+	msg, err := messageFromScannedFields(id, fromAddr, fromName.String, toJSON, ccJSON, bccJSON, subject, textBody, htmlBody, rawSource, size, parseWarning, parseError, receivedAt)
 	if err != nil {
 		return nil, 0, err
 	}

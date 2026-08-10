@@ -172,6 +172,11 @@ func handleDATA(sess *session, _ string) bool {
 		sess.resetTransaction()
 		return false
 	}
+	// Save does not populate msg.AttachmentCount on the in-memory struct (only
+	// Store.Get/List compute it, from a re-fetch); set it here so the
+	// realtime message.created event carries an accurate attachment count
+	// instead of the zero value, matching what a page refresh would show.
+	msg.AttachmentCount = len(msg.Attachments) + len(msg.InlineImages)
 	sess.srv.bus.Publish(events.MessageCreated(store.NewMessageSummary(msg)))
 
 	sess.srv.logger.Info("smtp: message accepted",

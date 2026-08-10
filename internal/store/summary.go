@@ -14,8 +14,11 @@ import (
 type MessageSummary struct {
 	ID              string   `json:"id"`
 	From            string   `json:"from"`
+	FromName        string   `json:"from_name,omitempty"`
 	To              []string `json:"to"`
+	ToNames         []string `json:"to_names,omitempty"`
 	Cc              []string `json:"cc"`
+	CcNames         []string `json:"cc_names,omitempty"`
 	Bcc             []string `json:"bcc"`
 	Subject         string   `json:"subject"`
 	SizeBytes       int64    `json:"size_bytes"`
@@ -35,6 +38,25 @@ func addrStrings(addrs []Address) []string {
 	out := make([]string, len(addrs))
 	for i, a := range addrs {
 		out[i] = a.Address
+	}
+	return out
+}
+
+// addrNames returns the display name for each Address, index-aligned with
+// addrStrings' output (empty string where no name was present), so callers
+// can zip the two together. Returns nil if none of the addresses have a
+// name, keeping the JSON field omitted rather than sending an all-empty array.
+func addrNames(addrs []Address) []string {
+	any := false
+	out := make([]string, len(addrs))
+	for i, a := range addrs {
+		out[i] = a.Name
+		if a.Name != "" {
+			any = true
+		}
+	}
+	if !any {
+		return nil
 	}
 	return out
 }
@@ -78,14 +100,19 @@ func messagePreview(msg *Message) string {
 // NewMessageSummary builds the summary JSON shape for msg.
 func NewMessageSummary(msg *Message) MessageSummary {
 	from := ""
+	fromName := ""
 	if len(msg.From) > 0 {
 		from = msg.From[0].Address
+		fromName = msg.From[0].Name
 	}
 	return MessageSummary{
 		ID:              msg.ID,
 		From:            from,
+		FromName:        fromName,
 		To:              addrStrings(msg.To),
+		ToNames:         addrNames(msg.To),
 		Cc:              addrStrings(msg.Cc),
+		CcNames:         addrNames(msg.Cc),
 		Bcc:             addrStrings(msg.Bcc),
 		Subject:         msg.Subject,
 		SizeBytes:       msg.Size,

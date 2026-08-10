@@ -54,7 +54,7 @@ describe('MessageRow', () => {
 
   it('shows a "+N more" badge when there are multiple recipients', () => {
     renderRow({ to: ['bob@example.com', 'carol@example.com', 'dave@example.com'] })
-    expect(screen.getByText('bob@example.com')).toBeInTheDocument()
+    expect(screen.getByText('To: bob@example.com')).toBeInTheDocument()
     expect(screen.getByText('+2 more')).toBeInTheDocument()
   })
 

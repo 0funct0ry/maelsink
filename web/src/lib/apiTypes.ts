@@ -5,8 +5,11 @@
 export interface MessageSummary {
   id: string
   from: string
+  from_name?: string
   to: string[]
+  to_names?: string[]
   cc: string[]
+  cc_names?: string[]
   bcc: string[]
   subject: string
   size_bytes: number

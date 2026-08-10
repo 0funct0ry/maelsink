@@ -35,7 +35,7 @@ describe('SettingsScreen', () => {
     render(<SettingsScreen />)
     await waitFor(() => expect(screen.getByText('1.2.3')).toBeInTheDocument())
     expect(screen.getByText('abc123')).toBeInTheDocument()
-    expect(screen.getByText('go1.26.4')).toBeInTheDocument()
+    expect(screen.queryByText('go1.26.4')).not.toBeInTheDocument()
   })
 
   it('shows an inline version error without crashing the rest of the screen', async () => {

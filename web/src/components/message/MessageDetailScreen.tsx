@@ -4,7 +4,7 @@ import { ArrowLeft, Download, Trash2 } from 'lucide-react'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
 import { exportMessage } from '../../lib/apiClient'
-import { formatAbsoluteDate, formatExactTime, formatRelativeTime } from '../../lib/format'
+import { formatAbsoluteDate, formatAddress, formatAddressList, formatExactTime, formatRelativeTime } from '../../lib/format'
 import Button from '../common/Button'
 import ConfirmDialog from '../common/ConfirmDialog'
 import TagBadge from '../common/TagBadge'
@@ -135,16 +135,22 @@ export default function MessageDetailScreen() {
         <div className="flex flex-col gap-1.5">
           <div className="flex gap-2.5 text-[13px]">
             <span className="w-11 flex-none text-text-tertiary">From</span>
-            <span className="break-all font-mono text-[12.6px] text-text-primary">{message.from}</span>
+            <span className="break-all font-mono text-[12.6px] text-text-primary">
+              {formatAddress(message.from, message.from_name)}
+            </span>
           </div>
           <div className="flex gap-2.5 text-[13px]">
             <span className="w-11 flex-none text-text-tertiary">To</span>
-            <span className="break-all font-mono text-[12.6px] text-text-primary">{message.to.join(', ')}</span>
+            <span className="break-all font-mono text-[12.6px] text-text-primary">
+              {formatAddressList(message.to, message.to_names)}
+            </span>
           </div>
           {message.cc.length > 0 && (
             <div className="flex gap-2.5 text-[13px]">
               <span className="w-11 flex-none text-text-tertiary">Cc</span>
-              <span className="break-all font-mono text-[12.6px] text-text-primary">{message.cc.join(', ')}</span>
+              <span className="break-all font-mono text-[12.6px] text-text-primary">
+                {formatAddressList(message.cc, message.cc_names)}
+              </span>
             </div>
           )}
           <div className="flex gap-2.5 text-[13px]">

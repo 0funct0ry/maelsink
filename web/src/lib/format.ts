@@ -60,3 +60,19 @@ export function truncateList(items: string[], max = 1): { shown: string[]; more:
   if (items.length <= max) return { shown: items, more: 0 }
   return { shown: items.slice(0, max), more: items.length - max }
 }
+
+/**
+ * Formats a single address for display: "Name <email>" when a display name
+ * was captured, otherwise just the bare email.
+ */
+export function formatAddress(address: string, name?: string): string {
+  return name ? `${name} <${address}>` : address
+}
+
+/**
+ * Formats a list of addresses for display, pairing each entry with its
+ * display name (index-aligned in `names`) via formatAddress.
+ */
+export function formatAddressList(addresses: string[], names?: string[]): string {
+  return addresses.map((address, i) => formatAddress(address, names?.[i])).join(', ')
+}

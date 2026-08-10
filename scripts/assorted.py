@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-send_scifi_emails.py
+assorted.py
 
 Generates realistic-looking sci-fi-movie-themed text/HTML emails and sends
 them to a (typically local/test) SMTP server, such as MailHog, aiosmtpd's
@@ -9,8 +9,8 @@ debugging server, or any dev SMTP relay.
 Only uses the Python standard library.
 
 Usage:
-    python3 send_scifi_emails.py --host localhost --port 1025 --count 10
-    python3 send_scifi_emails.py --attachments --count 5
+    python3 assorted.py --host localhost --port 1025 --count 10
+    python3 assorted.py --attachments --count 5
 
 Intended for testing mail pipelines, spam filters, parsers, etc. against
 a local/dev SMTP server. Does NOT send real mail over the public internet
@@ -24,7 +24,7 @@ import uuid
 import io
 import zipfile
 from email.message import EmailMessage
-from email.utils import formatdate, make_msgid
+from email.utils import formatdate, make_msgid, formataddr
 from datetime import datetime, timezone
 
 # --------------------------------------------------------------------------
@@ -331,9 +331,20 @@ def make_random_attachment(rng: random.Random):
     return filename, maintype, subtype, data
 
 
+def _get_display_name(email: str) -> str:
+    """Derives a display name from the email address."""
+    local_part = email.split("@")[0]
+    # Replace dots with spaces and capitalize each word
+    name = local_part.replace(".", " ").title()
+    # Handle some special cases if needed, but .title() covers most
+    return name
+
+
 def build_message(rng: random.Random, include_attachments: bool) -> EmailMessage:
-    sender = rng.choice(EMAIL_ADDRESSES)
-    recipient = rng.choice([a for a in EMAIL_ADDRESSES if a != sender])
+    sender_email = rng.choice(EMAIL_ADDRESSES)
+    recipient_email = rng.choice([a for a in EMAIL_ADDRESSES if a != sender_email])
+    sender_name = _get_display_name(sender_email)
+    recipient_name = _get_display_name(recipient_email)
     subject, body_text = rng.choice(EMAIL_BODIES)
 
     # Occasionally add a Re:/Fwd: prefix for realism
@@ -343,8 +354,8 @@ def build_message(rng: random.Random, include_attachments: bool) -> EmailMessage
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = recipient
+    msg["From"] = formataddr((sender_name, sender_email))
+    msg["To"] = formataddr((recipient_name, recipient_email))
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid()
 
@@ -356,18 +367,96 @@ def build_message(rng: random.Random, include_attachments: bool) -> EmailMessage
         "Godspeed.",
         "This channel will now go dark.",
     ])
-    full_text = f"{body_text}\n\n{signoff}\n\n-- {sender}"
+    full_text = f"{body_text}\n\n{signoff}\n\n-- {sender_name} <{sender_email}>"
 
-    html_body = f"""\
-<html>
+    timestamp = datetime.now(timezone.utc).isoformat()
+    
+    # Themes
+    themes = [
+        # 1. Classic Terminal (Original)
+        f"""<html>
   <body style="font-family: monospace; background:#0a0a0a; color:#c9f7c9; padding:20px;">
     <h2 style="color:#8ef58e;">{subject}</h2>
     <p>{body_text}</p>
     <p style="font-style:italic; color:#6fbf6f;">{signoff}</p>
     <hr style="border-color:#2f4f2f;">
-    <p style="font-size:12px; color:#5a8f5a;">Sent from {sender} &middot; {datetime.now(timezone.utc).isoformat()}</p>
+    <p style="font-size:12px; color:#5a8f5a;">Sent from {sender_name} ({sender_email}) &middot; {timestamp}</p>
+  </body>
+</html>""",
+        # 2. Cyberpunk Neon
+        f"""<html>
+  <body style="font-family: 'Courier New', Courier, monospace; background:#050505; color:#f0f; padding:20px; border: 2px solid #0ff;">
+    <h2 style="color:#0ff; text-transform: uppercase; letter-spacing: 2px;">{subject}</h2>
+    <p style="color:#fff; background: rgba(255,0,255,0.1); padding: 10px;">{body_text}</p>
+    <p style="font-weight:bold; color:#f0f;">{signoff}</p>
+    <div style="font-size:10px; color:#0ff; margin-top:20px; border-top: 1px dashed #0ff; padding-top: 10px;">
+      NODE: {uuid.uuid4().hex[:8].upper()} | SRC: {sender_email} | {timestamp}
+    </div>
+  </body>
+</html>""",
+        # 3. Blueprint / Tactical
+        f"""<html>
+  <body style="font-family: sans-serif; background:#001a33; color:#80ccff; padding:30px; border-left: 5px solid #0059b3;">
+    <div style="font-size: 10px; color: #0059b3; margin-bottom: 10px;">CLASSIFIED // EYES ONLY</div>
+    <h2 style="color:#ffffff; margin-top: 0;">{subject}</h2>
+    <div style="background: rgba(128,204,255,0.05); padding: 20px; border: 1px solid #0059b3;">
+      <p style="line-height: 1.6;">{body_text}</p>
+    </div>
+    <p style="font-family: monospace; color:#ffffff; margin-top: 20px;">{signoff}</p>
+    <p style="font-size:11px; color:#0059b3;">Encrypted link established &middot; {timestamp}</p>
+  </body>
+</html>""",
+        # 4. Industrial / Weyland-Yutani Style
+        f"""<html>
+  <body style="font-family: 'Verdana', sans-serif; background:#222; color:#ccc; padding:0; margin:0;">
+    <div style="background:#f39c12; color:#000; padding:10px; font-weight:bold; text-align:center;">
+      INTERNAL MEMO - AUTHORIZED PERSONNEL ONLY
+    </div>
+    <div style="padding:30px;">
+      <h2 style="color:#f39c12; border-bottom: 2px solid #f39c12; padding-bottom: 5px;">{subject}</h2>
+      <p style="color:#eee;">{body_text}</p>
+      <p style="margin-top:40px; border-left: 3px solid #f39c12; padding-left: 10px;">{signoff}<br><small>{sender_name}</small></p>
+      <div style="margin-top:50px; font-size:10px; color:#666;">
+        Property of Weyland-Yutani Corp. &middot; Building Better Worlds &middot; {timestamp}
+      </div>
+    </div>
+  </body>
+</html>""",
+        # 5. Retro Amber Terminal
+        f"""<html>
+  <body style="font-family: 'Lucida Console', Monaco, monospace; background:#1a1100; color:#ffb000; padding:20px;">
+    <div style="border: 1px solid #ffb000; padding: 15px;">
+      <div style="background:#ffb000; color:#1a1100; padding: 2px 10px; display:inline-block; font-weight:bold; margin-bottom:15px;">
+        COMM-LINK ACTIVE
+      </div>
+      <h2 style="margin-top:0;">> {subject}</h2>
+      <p>> {body_text}</p>
+      <p style="margin-top:30px;">> {signoff}</p>
+      <div style="margin-top:20px; font-size:12px; opacity:0.7;">
+        [AUTHENTICATION VERIFIED] -- {timestamp}
+      </div>
+    </div>
+  </body>
+</html>""",
+        # 6. Minimalist Space Station
+        f"""<html>
+  <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f0f4f8; color:#2d3748; padding:40px;">
+    <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+      <div style="color: #4a5568; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+        Station Communication Hub
+      </div>
+      <h2 style="color:#1a202c; margin-top: 0;">{subject}</h2>
+      <p style="font-size: 16px; line-height: 1.6;">{body_text}</p>
+      <p style="color:#718096; font-style: italic; margin-top: 30px;">{signoff}</p>
+      <div style="margin-top:40px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #a0aec0; text-align: center;">
+        Orbit: Earth-Moon L1 &middot; {timestamp}
+      </div>
+    </div>
   </body>
 </html>"""
+    ]
+
+    html_body = rng.choice(themes)
 
     msg.set_content(full_text)
     msg.add_alternative(html_body, subtype="html")

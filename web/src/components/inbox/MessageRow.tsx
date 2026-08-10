@@ -45,12 +45,15 @@ export default function MessageRow({ message, onOpen, onPreview, highlighted }: 
         {!message.read && <span className="h-[7px] w-[7px] rounded-full bg-accent" aria-label="Unread" />}
       </span>
 
-      <span
-        className={`hidden truncate pt-0.5 font-mono text-[12.8px] md:block ${
-          message.read ? 'text-text-secondary' : 'font-medium text-text-primary'
-        }`}
-      >
-        {message.from}
+      <span className="hidden min-w-0 flex-col gap-0.5 md:flex">
+        <span
+          className={`truncate text-[12.8px] ${
+            message.read ? 'text-text-secondary' : 'font-semibold text-text-primary'
+          }`}
+        >
+          {message.from_name || message.from}
+        </span>
+        <span className="truncate text-[11px] text-text-tertiary">To: {shown[0]}</span>
       </span>
 
       <span className="flex min-w-0 flex-col gap-0.5">
@@ -61,11 +64,7 @@ export default function MessageRow({ message, onOpen, onPreview, highlighted }: 
             {message.subject}
           </span>
           {message.parse_warning && <Badge variant="warning">Parse warning</Badge>}
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-[13px] text-text-tertiary">
-            <span>— to</span>
-            <span className="truncate">{shown[0]}</span>
-            {more > 0 && <Badge>+{more} more</Badge>}
-          </span>
+          {more > 0 && <Badge>+{more} more</Badge>}
         </span>
         {message.tags.length > 0 && (
           <span className="msg-tag flex flex-wrap items-center gap-1.5">
