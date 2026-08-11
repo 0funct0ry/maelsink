@@ -51,6 +51,11 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 		return nil, err
 	}
 
+	if err := backfillTagsTable(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
 	return db, nil
 }
 
@@ -220,6 +225,15 @@ func (s *Store) Save(ctx context.Context, msg *store.Message) error {
 		if err := s.insertAttachment(ctx, tx, msg.ID, img.ID, img.Filename, img.ContentType, img.Size, img.ContentID, true, img.Data, &writtenFiles); err != nil {
 			rollbackFiles()
 			return err
+		}
+	}
+
+	now := time.Now().Format(timeLayout)
+	for _, t := range msg.Tags {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO tags (name, color, created_at) VALUES (?, ?, ?)`,
+			t, hashTagColor(t), now); err != nil {
+			rollbackFiles()
+			return fmt.Errorf("sqlite: registering tag %q: %w", t, err)
 		}
 	}
 
@@ -770,6 +784,12 @@ func (s *Store) AddTag(ctx context.Context, id, tag string) error {
 		return err
 	}
 
+	now := time.Now().Format(timeLayout)
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO tags (name, color, created_at) VALUES (?, ?, ?)`,
+		tag, hashTagColor(tag), now); err != nil {
+		return fmt.Errorf("sqlite: registering tag %q: %w", tag, err)
+	}
+
 	return s.mutateTags(ctx, full, func(tags []string) []string {
 		for _, t := range tags {
 			if t == tag {
@@ -919,28 +939,311 @@ func (s *Store) Stats(ctx context.Context) (store.Stats, error) {
 	return stats, nil
 }
 
-// Tags returns every distinct tag currently in use with its message count.
-func (s *Store) Tags(ctx context.Context) ([]store.TagCount, error) {
+// ListTagsWithStats returns every persisted tag with its usage stats. See
+// store.MessageStore.ListTagsWithStats.
+func (s *Store) ListTagsWithStats(ctx context.Context) ([]store.TagStats, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT json_each.value AS tag, COUNT(*) AS cnt
-		FROM messages, json_each(messages.tags)
-		GROUP BY json_each.value
-		ORDER BY cnt DESC, tag ASC
+		SELECT t.name, t.color, COALESCE(m.cnt, 0), m.last_used
+		FROM tags t
+		LEFT JOIN (
+			SELECT json_each.value AS tag, COUNT(*) AS cnt, MAX(messages.received_at) AS last_used
+			FROM messages, json_each(messages.tags)
+			GROUP BY json_each.value
+		) m ON m.tag = t.name
+		ORDER BY COALESCE(m.cnt, 0) DESC, m.last_used DESC, t.name ASC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: querying tags: %w", err)
 	}
 	defer rows.Close()
 
-	out := []store.TagCount{}
+	out := []store.TagStats{}
 	for rows.Next() {
-		var tc store.TagCount
-		if err := rows.Scan(&tc.Tag, &tc.Count); err != nil {
+		var (
+			ts          store.TagStats
+			lastUsedStr sql.NullString
+		)
+		if err := rows.Scan(&ts.Name, &ts.Color, &ts.Count, &lastUsedStr); err != nil {
 			return nil, fmt.Errorf("sqlite: scanning tag: %w", err)
 		}
-		out = append(out, tc)
+		if lastUsedStr.Valid {
+			t, err := time.Parse(timeLayout, lastUsedStr.String)
+			if err != nil {
+				return nil, fmt.Errorf("sqlite: parsing tag last_used: %w", err)
+			}
+			ts.LastUsed = &t
+		}
+		out = append(out, ts)
 	}
 	return out, rows.Err()
+}
+
+// validateTagName trims and validates a tag name, returning store.ErrInvalidTag
+// if empty/whitespace-only.
+func validateTagName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", store.ErrInvalidTag
+	}
+	return name, nil
+}
+
+// validateTagColor validates color against store.TagColors.
+func validateTagColor(color string) error {
+	if !store.IsValidTagColor(color) {
+		return store.ErrInvalidTag
+	}
+	return nil
+}
+
+func isUniqueConstraintErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint")
+}
+
+// tagMessageIDs returns the IDs of every message currently carrying tag.
+func (s *Store) tagMessageIDs(ctx context.Context, q interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, tag string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT DISTINCT messages.id FROM messages, json_each(messages.tags)
+		WHERE json_each.value = ?
+	`, tag)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: querying messages for tag: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("sqlite: scanning message id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// mutateTagsTx applies mutate to id's current tag set within an already-open
+// tx. Like mutateTags, but reuses a caller-supplied transaction instead of
+// opening its own, for RenameTag/DeleteTag's per-message loops.
+func mutateTagsTx(ctx context.Context, tx *sql.Tx, id string, mutate func([]string) []string) error {
+	var tagsStr string
+	if err := tx.QueryRowContext(ctx, `SELECT tags FROM messages WHERE id = ?`, id).Scan(&tagsStr); err != nil {
+		return fmt.Errorf("sqlite: reading tags: %w", err)
+	}
+	tags, err := parseTagsJSON(tagsStr)
+	if err != nil {
+		return fmt.Errorf("sqlite: parsing tags: %w", err)
+	}
+	nextJSON, err := tagsJSON(mutate(tags))
+	if err != nil {
+		return fmt.Errorf("sqlite: encoding tags: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET tags = ? WHERE id = ?`, nextJSON, id); err != nil {
+		return fmt.Errorf("sqlite: updating tags: %w", err)
+	}
+	return nil
+}
+
+// RenameTag renames oldName to newName, merging into newName's existing tag
+// row if one already exists. See store.MessageStore.RenameTag.
+func (s *Store) RenameTag(ctx context.Context, oldName, newName string) error {
+	oldName, err := validateTagName(oldName)
+	if err != nil {
+		return err
+	}
+	newName, err = validateTagName(newName)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tags WHERE name = ?`, oldName).Scan(&exists); err != nil {
+		return fmt.Errorf("sqlite: checking tag exists: %w", err)
+	}
+	if exists == 0 {
+		return store.ErrTagNotFound
+	}
+
+	var merged int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tags WHERE name = ?`, newName).Scan(&merged); err != nil {
+		return fmt.Errorf("sqlite: checking new tag name: %w", err)
+	}
+
+	ids, err := s.tagMessageIDs(ctx, tx, oldName)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := mutateTagsTx(ctx, tx, id, func(tags []string) []string {
+			next := make([]string, 0, len(tags))
+			hasNew := false
+			for _, t := range tags {
+				if t == oldName {
+					continue
+				}
+				if t == newName {
+					hasNew = true
+				}
+				next = append(next, t)
+			}
+			if !hasNew {
+				next = append(next, newName)
+			}
+			return next
+		}); err != nil {
+			return err
+		}
+	}
+
+	if merged > 0 {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE name = ?`, oldName); err != nil {
+			return fmt.Errorf("sqlite: deleting merged tag: %w", err)
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, `UPDATE tags SET name = ? WHERE name = ?`, newName, oldName); err != nil {
+			return fmt.Errorf("sqlite: renaming tag: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: committing tag rename: %w", err)
+	}
+	return nil
+}
+
+// RecolorTag updates name's persisted color. See store.MessageStore.RecolorTag.
+func (s *Store) RecolorTag(ctx context.Context, name, color string) error {
+	name, err := validateTagName(name)
+	if err != nil {
+		return err
+	}
+	if err := validateTagColor(color); err != nil {
+		return err
+	}
+
+	res, err := s.db.ExecContext(ctx, `UPDATE tags SET color = ? WHERE name = ?`, color, name)
+	if err != nil {
+		return fmt.Errorf("sqlite: recoloring tag: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("sqlite: checking rows affected: %w", err)
+	}
+	if n == 0 {
+		return store.ErrTagNotFound
+	}
+	return nil
+}
+
+// CreateTag inserts a new tag with no messages attached. See
+// store.MessageStore.CreateTag.
+func (s *Store) CreateTag(ctx context.Context, name, color string) error {
+	name, err := validateTagName(name)
+	if err != nil {
+		return err
+	}
+	if err := validateTagColor(color); err != nil {
+		return err
+	}
+
+	now := time.Now().Format(timeLayout)
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO tags (name, color, created_at) VALUES (?, ?, ?)`, name, color, now); err != nil {
+		if isUniqueConstraintErr(err) {
+			return store.ErrTagExists
+		}
+		return fmt.Errorf("sqlite: creating tag: %w", err)
+	}
+	return nil
+}
+
+// DeleteTag removes name from every message's tag set and deletes its tags
+// row. See store.MessageStore.DeleteTag.
+func (s *Store) DeleteTag(ctx context.Context, name string) error {
+	name, err := validateTagName(name)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tags WHERE name = ?`, name).Scan(&exists); err != nil {
+		return fmt.Errorf("sqlite: checking tag exists: %w", err)
+	}
+	if exists == 0 {
+		return store.ErrTagNotFound
+	}
+
+	ids, err := s.tagMessageIDs(ctx, tx, name)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := mutateTagsTx(ctx, tx, id, func(tags []string) []string {
+			next := make([]string, 0, len(tags))
+			for _, t := range tags {
+				if t != name {
+					next = append(next, t)
+				}
+			}
+			return next
+		}); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE name = ?`, name); err != nil {
+		return fmt.Errorf("sqlite: deleting tag: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: committing tag delete: %w", err)
+	}
+	return nil
+}
+
+// DeleteTagWithMessages deletes every message carrying name, then its tags
+// row. See store.MessageStore.DeleteTagWithMessages.
+func (s *Store) DeleteTagWithMessages(ctx context.Context, name string) error {
+	name, err := validateTagName(name)
+	if err != nil {
+		return err
+	}
+
+	var exists int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tags WHERE name = ?`, name).Scan(&exists); err != nil {
+		return fmt.Errorf("sqlite: checking tag exists: %w", err)
+	}
+	if exists == 0 {
+		return store.ErrTagNotFound
+	}
+
+	ids, err := s.tagMessageIDs(ctx, s.db, name)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := s.Delete(ctx, id); err != nil && err != store.ErrNotFound {
+			return err
+		}
+	}
+
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM tags WHERE name = ?`, name); err != nil {
+		return fmt.Errorf("sqlite: deleting tag: %w", err)
+	}
+	return nil
 }
 
 // Ping verifies the underlying database connection is reachable.

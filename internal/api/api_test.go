@@ -615,13 +615,13 @@ func TestAPI_TagFilterAndTagsEndpoint(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/tags = %d: %s", rec.Code, rec.Body.String())
 	}
-	var tags []tagCountJSON
+	var tags []tagStatsJSON
 	if err := json.Unmarshal(rec.Body.Bytes(), &tags); err != nil {
 		t.Fatalf("unmarshal tags: %v", err)
 	}
 	counts := map[string]int{}
 	for _, tc := range tags {
-		counts[tc.Tag] = tc.Count
+		counts[tc.Name] = tc.Count
 	}
 	if counts["smoke"] != 2 || counts["release"] != 1 {
 		t.Fatalf("tag counts = %+v, want smoke=2 release=1", counts)
@@ -788,5 +788,266 @@ func TestAPI_PreviewFieldOnSummary(t *testing.T) {
 	summary := msgs[0].(map[string]any)
 	if summary["preview"] != "hello world, this is the body of the message" {
 		t.Fatalf("preview = %v", summary["preview"])
+	}
+}
+
+func doTagJSON(t *testing.T, router http.Handler, method, path, body string) (*httptest.ResponseRecorder, map[string]any) {
+	t.Helper()
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reqBody)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	var out map[string]any
+	if rec.Body.Len() > 0 {
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	}
+	return rec, out
+}
+
+func TestAPI_CreateTag(t *testing.T) {
+	s, _ := newTestStore(t)
+	router, bus := newRouterWithBus(t, s, Config{})
+
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	rec, body := doTagJSON(t, router, http.MethodPost, "/api/v1/tags", `{"name":"fresh","color":"cyan"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /api/v1/tags = %d: %s", rec.Code, rec.Body.String())
+	}
+	if body["name"] != "fresh" || body["color"] != "cyan" {
+		t.Fatalf("created tag body = %+v", body)
+	}
+
+	select {
+	case ev := <-sub:
+		if ev.Type != events.TypeTagCreated {
+			t.Fatalf("got event type %q, want %q", ev.Type, events.TypeTagCreated)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for tag.created event")
+	}
+
+	rec, body = doTagJSON(t, router, http.MethodPost, "/api/v1/tags", `{"name":"fresh","color":"cyan"}`)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate POST /api/v1/tags = %d, want 409: %s", rec.Code, rec.Body.String())
+	}
+
+	rec, _ = doTagJSON(t, router, http.MethodPost, "/api/v1/tags", `{"name":"","color":"cyan"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty name POST /api/v1/tags = %d, want 400", rec.Code)
+	}
+}
+
+func TestAPI_PatchTag_Rename(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	msg := sampleMessage("s1", "a@example.com", "b@example.com", time.Now())
+	msg.Tags = []string{"old"}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	router, bus := newRouterWithBus(t, s, Config{})
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	rec, body := doTagJSON(t, router, http.MethodPatch, "/api/v1/tags/old", `{"name":"new"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH rename = %d: %s", rec.Code, rec.Body.String())
+	}
+	if body["name"] != "new" {
+		t.Fatalf("renamed tag body = %+v", body)
+	}
+
+	select {
+	case ev := <-sub:
+		if ev.Type != events.TypeTagRenamed {
+			t.Fatalf("got event type %q, want %q", ev.Type, events.TypeTagRenamed)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for tag.renamed event")
+	}
+
+	rec, _ = doTagJSON(t, router, http.MethodPatch, "/api/v1/tags/does-not-exist", `{"name":"whatever"}`)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("PATCH rename missing = %d, want 404", rec.Code)
+	}
+
+	rec, _ = doTagJSON(t, router, http.MethodPatch, "/api/v1/tags/new", `{}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH empty body = %d, want 400", rec.Code)
+	}
+}
+
+func TestAPI_PatchTag_RenameMerge(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	mA := sampleMessage("a", "a@example.com", "b@example.com", time.Now())
+	mA.Tags = []string{"foo"}
+	mB := sampleMessage("b", "a@example.com", "b@example.com", time.Now())
+	mB.Tags = []string{"bar"}
+	if err := s.Save(ctx, mA); err != nil {
+		t.Fatalf("Save mA: %v", err)
+	}
+	if err := s.Save(ctx, mB); err != nil {
+		t.Fatalf("Save mB: %v", err)
+	}
+
+	router, bus := newRouterWithBus(t, s, Config{})
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	rec, _ := doTagJSON(t, router, http.MethodPatch, "/api/v1/tags/foo", `{"name":"bar"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH merge = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case ev := <-sub:
+		if ev.Type != events.TypeTagRenamed {
+			t.Fatalf("got event type %q, want %q", ev.Type, events.TypeTagRenamed)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for tag.renamed event")
+	}
+
+	got, err := s.Get(ctx, mA.ID)
+	if err != nil {
+		t.Fatalf("Get mA: %v", err)
+	}
+	if len(got.Tags) != 1 || got.Tags[0] != "bar" {
+		t.Fatalf("mA tags = %v, want [bar]", got.Tags)
+	}
+}
+
+func TestAPI_PatchTag_Recolor(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateTag(ctx, "x", "indigo"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+
+	router, bus := newRouterWithBus(t, s, Config{})
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	rec, body := doTagJSON(t, router, http.MethodPatch, "/api/v1/tags/x", `{"color":"amber"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH recolor = %d: %s", rec.Code, rec.Body.String())
+	}
+	if body["color"] != "amber" {
+		t.Fatalf("recolored tag body = %+v", body)
+	}
+
+	select {
+	case ev := <-sub:
+		if ev.Type != events.TypeTagRecolored {
+			t.Fatalf("got event type %q, want %q", ev.Type, events.TypeTagRecolored)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for tag.recolored event")
+	}
+}
+
+func TestAPI_DeleteTag(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	msg := sampleMessage("s1", "a@example.com", "b@example.com", time.Now())
+	msg.Tags = []string{"gone"}
+	if err := s.Save(ctx, msg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	router, bus := newRouterWithBus(t, s, Config{})
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	rec, _ := doTagJSON(t, router, http.MethodDelete, "/api/v1/tags/gone", "")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/v1/tags/gone = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	select {
+	case ev := <-sub:
+		if ev.Type != events.TypeTagDeleted {
+			t.Fatalf("got event type %q, want %q", ev.Type, events.TypeTagDeleted)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for tag.deleted event")
+	}
+
+	got, err := s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.Tags) != 0 {
+		t.Fatalf("expected message to remain untagged, got Tags=%v", got.Tags)
+	}
+
+	rec, _ = doTagJSON(t, router, http.MethodDelete, "/api/v1/tags/gone", "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("DELETE missing tag = %d, want 404", rec.Code)
+	}
+}
+
+func TestAPI_DeleteTagWithMessages(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	mA := sampleMessage("a", "a@example.com", "b@example.com", time.Now())
+	mA.Tags = []string{"doomed"}
+	mB := sampleMessage("b", "a@example.com", "b@example.com", time.Now())
+	if err := s.Save(ctx, mA); err != nil {
+		t.Fatalf("Save mA: %v", err)
+	}
+	if err := s.Save(ctx, mB); err != nil {
+		t.Fatalf("Save mB: %v", err)
+	}
+
+	router, bus := newRouterWithBus(t, s, Config{})
+	sub, unsub := bus.Subscribe()
+	defer unsub()
+
+	rec, _ := doTagJSON(t, router, http.MethodDelete, "/api/v1/tags/doomed/messages", "")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/v1/tags/doomed/messages = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	sawMessageDeleted := false
+	sawTagDeleted := false
+	for i := 0; i < 2; i++ {
+		select {
+		case ev := <-sub:
+			switch ev.Type {
+			case events.TypeMessageDeleted:
+				sawMessageDeleted = true
+			case events.TypeTagDeleted:
+				sawTagDeleted = true
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for events")
+		}
+	}
+	if !sawMessageDeleted || !sawTagDeleted {
+		t.Fatalf("sawMessageDeleted=%v sawTagDeleted=%v", sawMessageDeleted, sawTagDeleted)
+	}
+
+	if _, err := s.Get(ctx, mA.ID); err != store.ErrNotFound {
+		t.Fatalf("mA should be deleted, got err %v", err)
+	}
+	if _, err := s.Get(ctx, mB.ID); err != nil {
+		t.Fatalf("mB should remain: %v", err)
+	}
+
+	rec, _ = doTagJSON(t, router, http.MethodDelete, "/api/v1/tags/doomed/messages", "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("DELETE missing tag-with-messages = %d, want 404", rec.Code)
 	}
 }

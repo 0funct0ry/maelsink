@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { formatBytes } from '../../lib/format'
-import { tagColor } from '../../lib/tagColor'
+import { paletteByToken } from '../../lib/tagColor'
 import { deleteSavedSearch, listSavedSearches, saveSearch, type SavedSearch } from '../../lib/savedSearches'
 import type { ListMessagesParams } from '../../lib/apiTypes'
 
@@ -50,6 +50,18 @@ export default function Sidebar() {
   }, [])
 
   const active = activeMailboxFilter(query)
+
+  // Top 5 by usage (M8.5) — ties broken by most recent last_used, ties in
+  // that broken by name for a stable order. Full list lives at /tags.
+  const topTags = [...tags]
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count
+      const aTime = a.last_used ? new Date(a.last_used).getTime() : 0
+      const bTime = b.last_used ? new Date(b.last_used).getTime() : 0
+      if (bTime !== aTime) return bTime - aTime
+      return a.name.localeCompare(b.name)
+    })
+    .slice(0, 5)
 
   // Every sidebar nav action (mailbox filter, tag, saved search) applies its
   // query *and* navigates to the Inbox — matching "All messages", which
@@ -218,27 +230,35 @@ export default function Sidebar() {
             Tags
           </div>
           <nav className="flex flex-col gap-px">
-            {tags.map((tc) => {
-              const color = tagColor(tc.tag)
-              const isActiveItem = (query.tag ?? []).includes(tc.tag)
+            {topTags.map((tc) => {
+              const color = paletteByToken(tc.color)
+              const isActiveItem = (query.tag ?? []).includes(tc.name)
               return (
                 <button
-                  key={tc.tag}
+                  key={tc.name}
                   type="button"
                   aria-pressed={isActiveItem}
                   className={navItemClass(isActiveItem)}
-                  onClick={() => toggleTag(tc.tag)}
+                  onClick={() => toggleTag(tc.name)}
                 >
                   <span className="flex min-w-0 items-center gap-2.5 truncate">
                     <span className={`h-[7px] w-[7px] flex-none rounded-full ${color.dot}`} aria-hidden="true" />
                     <TagIcon className="sr-only" aria-hidden="true" />
-                    <span className="truncate">{tc.tag}</span>
+                    <span className="truncate">{tc.name}</span>
                   </span>
                   <span className={countBadgeClass(isActiveItem)}>{tc.count}</span>
                 </button>
               )
             })}
           </nav>
+          {tags.length > 5 && (
+            <NavLink
+              to="/tags"
+              className="mt-1 block px-2 py-[7px] text-left text-[13px] font-medium text-accent hover:underline"
+            >
+              More…
+            </NavLink>
+          )}
           {(query.tag?.length ?? 0) >= 2 && (
             <div className="mt-1.5 flex items-center gap-1 px-2">
               <span className="text-[11px] text-text-tertiary">Match:</span>

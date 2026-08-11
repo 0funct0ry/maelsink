@@ -77,8 +77,8 @@ describe('TagEditModal', () => {
     useMessageStore.setState({
       updateTagsOptimistic: vi.fn(),
       sidebarTags: [
-        { tag: 'smoke', count: 3 },
-        { tag: 'release', count: 1 },
+        { name: 'smoke', color: 'indigo', count: 3, last_used: null },
+        { name: 'release', color: 'emerald', count: 1, last_used: null },
       ],
     })
     render(<TagEditModal open onClose={vi.fn()} message={makeMessage({ tags: ['smoke'] })} />)

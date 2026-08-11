@@ -67,6 +67,10 @@ func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, bus *e
 		v1.GET("/messages/:id/attachments/:attId", h.getAttachment)
 		v1.GET("/stats", h.stats)
 		v1.GET("/tags", h.listTags)
+		v1.POST("/tags", h.createTag)
+		v1.PATCH("/tags/:name", h.patchTag)
+		v1.DELETE("/tags/:name", h.deleteTag)
+		v1.DELETE("/tags/:name/messages", h.deleteTagWithMessages)
 		v1.GET("/health", h.health)
 		v1.GET("/version", h.version)
 	}

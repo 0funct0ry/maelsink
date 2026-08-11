@@ -13,6 +13,15 @@ export interface TagColor {
   bg: string
 }
 
+// PALETTE_TOKENS names each PALETTE entry, in the same order, matching the
+// persisted `tags.color` enum the backend validates against (M8.5 —
+// internal/store's TagColors). Index parity between the two arrays is load
+// -bearing: paletteByToken and hashString/tagColor's mod-8 index both rely
+// on it.
+export const PALETTE_TOKENS = ['indigo', 'emerald', 'amber', 'rose', 'cyan', 'fuchsia', 'lime', 'orange'] as const
+
+export type PaletteToken = (typeof PALETTE_TOKENS)[number]
+
 const PALETTE: TagColor[] = [
   { dot: 'bg-indigo-500', text: 'text-indigo-700', bg: 'bg-indigo-100' },
   { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-100' },
@@ -23,6 +32,15 @@ const PALETTE: TagColor[] = [
   { dot: 'bg-lime-600', text: 'text-lime-700', bg: 'bg-lime-100' },
   { dot: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-100' },
 ]
+
+/** Looks up a TagColor by its persisted palette token (M8.5's tags.color),
+ * falling back to the first palette entry for an unrecognized token rather
+ * than throwing — a tag row should never carry an invalid token (the
+ * backend validates it), but rendering defensively costs nothing. */
+export function paletteByToken(token: string): TagColor {
+  const idx = PALETTE_TOKENS.indexOf(token as PaletteToken)
+  return PALETTE[idx === -1 ? 0 : idx]
+}
 
 /** A small, stable string hash (FNV-1a-ish) — not cryptographic, just
  * deterministic across runs/sessions for a given tag string. */
@@ -35,7 +53,10 @@ function hashString(s: string): number {
   return h >>> 0
 }
 
-/** Returns the same TagColor for the same tag name every time. */
+/** Returns the same TagColor for the same tag name every time. Fallback only
+ * — since M8.5, color is persisted server-side per tag (see paletteByToken);
+ * this hash-based lookup is for contexts that only have a tag name and
+ * haven't loaded that tag's stats yet. */
 export function tagColor(tag: string): TagColor {
   const idx = hashString(tag) % PALETTE.length
   return PALETTE[idx]

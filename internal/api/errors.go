@@ -33,3 +33,11 @@ func respondValidation(c *gin.Context, message string) {
 func respondInternal(c *gin.Context, message string) {
 	respondError(c, 500, "internal_error", message)
 }
+
+func respondTagNotFound(c *gin.Context, name string) {
+	respondError(c, 404, "tag_not_found", "no tag named "+name)
+}
+
+func respondTagExists(c *gin.Context, name string) {
+	respondError(c, 409, "tag_exists", "tag "+name+" already exists")
+}

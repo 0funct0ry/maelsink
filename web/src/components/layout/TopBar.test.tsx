@@ -1,5 +1,5 @@
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import TopBar from './TopBar'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
@@ -13,6 +13,10 @@ function renderTopBar() {
       <TopBar />
     </MemoryRouter>,
   )
+}
+
+function LocationProbe() {
+  return <div data-testid="location">{useLocation().pathname}</div>
 }
 
 describe('TopBar', () => {
@@ -42,12 +46,25 @@ describe('TopBar', () => {
     expect(screen.queryByText(/smtp:\/\//)).not.toBeInTheDocument()
   })
 
-  it('renders a global search box, a clear-all shortcut, and a settings shortcut', () => {
+  it('renders a global search box, a clear-all shortcut, a tags shortcut, and a settings shortcut', () => {
     vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
     renderTopBar()
     expect(screen.getByRole('searchbox')).toBeInTheDocument()
     expect(screen.getByLabelText('Clear all messages')).toBeInTheDocument()
+    expect(screen.getByLabelText('Manage tags')).toBeInTheDocument()
     expect(screen.getByLabelText('Settings')).toBeInTheDocument()
+  })
+
+  it('navigates to /tags when the tags icon is clicked', () => {
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <TopBar />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByLabelText('Manage tags'))
+    expect(screen.getByTestId('location').textContent).toBe('/tags')
   })
 
   it('opens a confirm dialog via useUIStore when the clear-all icon is clicked', () => {

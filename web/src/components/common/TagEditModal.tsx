@@ -20,7 +20,7 @@ export default function TagEditModal({ open, onClose, message }: TagEditModalPro
   const sidebarTags = useMessageStore((state) => state.sidebarTags)
   const [value, setValue] = useState('')
 
-  const suggestions = sidebarTags.map((tc) => tc.tag).filter((tag) => !message.tags.includes(tag))
+  const suggestions = sidebarTags.map((tc) => tc.name).filter((tag) => !message.tags.includes(tag))
 
   function handleRemove(tag: string) {
     void updateTagsOptimistic(message.id, [], [tag])

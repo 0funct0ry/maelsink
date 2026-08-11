@@ -652,13 +652,13 @@ func TestStore_TagsRoundTripAndFilter(t *testing.T) {
 		}
 	}
 
-	tags, err := s.Tags(ctx)
+	tags, err := s.ListTagsWithStats(ctx)
 	if err != nil {
-		t.Fatalf("Tags: %v", err)
+		t.Fatalf("ListTagsWithStats: %v", err)
 	}
 	counts := map[string]int{}
 	for _, tc := range tags {
-		counts[tc.Tag] = tc.Count
+		counts[tc.Name] = tc.Count
 	}
 	if counts["smoke"] != 2 {
 		t.Fatalf("smoke count = %d, want 2", counts["smoke"])
@@ -816,5 +816,231 @@ func TestStore_ReadHasAttachmentsParseWarningFilters(t *testing.T) {
 	}
 	if stats.ParseWarningCount != 1 {
 		t.Fatalf("ParseWarningCount = %d, want 1", stats.ParseWarningCount)
+	}
+}
+
+func TestStore_ListTagsWithStats_ZeroMessageTag(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	if err := s.CreateTag(ctx, "empty", "indigo"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	m := &store.Message{Subject: "a", Tags: []string{"smoke"}}
+	if err := s.Save(ctx, m); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	tags, err := s.ListTagsWithStats(ctx)
+	if err != nil {
+		t.Fatalf("ListTagsWithStats: %v", err)
+	}
+	byName := map[string]store.TagStats{}
+	for _, tg := range tags {
+		byName[tg.Name] = tg
+	}
+	empty, ok := byName["empty"]
+	if !ok || empty.Count != 0 || empty.LastUsed != nil {
+		t.Fatalf("empty tag stats = %+v, want Count=0, LastUsed=nil, ok=%v", empty, ok)
+	}
+	smoke, ok := byName["smoke"]
+	if !ok || smoke.Count != 1 || smoke.LastUsed == nil {
+		t.Fatalf("smoke tag stats = %+v, want Count=1 with LastUsed set, ok=%v", smoke, ok)
+	}
+}
+
+func TestStore_RenameTag(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	m := &store.Message{Subject: "a", Tags: []string{"old"}}
+	if err := s.Save(ctx, m); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := s.RenameTag(ctx, "old", "new"); err != nil {
+		t.Fatalf("RenameTag: %v", err)
+	}
+	got, err := s.Get(ctx, m.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.Tags) != 1 || got.Tags[0] != "new" {
+		t.Fatalf("Tags = %v, want [new]", got.Tags)
+	}
+
+	if err := s.RenameTag(ctx, "does-not-exist", "whatever"); err != store.ErrTagNotFound {
+		t.Fatalf("RenameTag missing: got %v, want ErrTagNotFound", err)
+	}
+}
+
+func TestStore_RenameTagMerge(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	mA := &store.Message{Subject: "a", Tags: []string{"foo"}}
+	mB := &store.Message{Subject: "b", Tags: []string{"bar"}}
+	if err := s.Save(ctx, mA); err != nil {
+		t.Fatalf("Save mA: %v", err)
+	}
+	if err := s.Save(ctx, mB); err != nil {
+		t.Fatalf("Save mB: %v", err)
+	}
+
+	if err := s.RenameTag(ctx, "foo", "bar"); err != nil {
+		t.Fatalf("RenameTag (merge): %v", err)
+	}
+
+	gotA, err := s.Get(ctx, mA.ID)
+	if err != nil {
+		t.Fatalf("Get mA: %v", err)
+	}
+	if len(gotA.Tags) != 1 || gotA.Tags[0] != "bar" {
+		t.Fatalf("mA Tags = %v, want [bar]", gotA.Tags)
+	}
+
+	tags, err := s.ListTagsWithStats(ctx)
+	if err != nil {
+		t.Fatalf("ListTagsWithStats: %v", err)
+	}
+	for _, tg := range tags {
+		if tg.Name == "foo" {
+			t.Fatal("expected 'foo' tag row to be gone after merge")
+		}
+	}
+}
+
+func TestStore_RecolorTag(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	if err := s.CreateTag(ctx, "x", "indigo"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if err := s.RecolorTag(ctx, "x", "amber"); err != nil {
+		t.Fatalf("RecolorTag: %v", err)
+	}
+	tags, err := s.ListTagsWithStats(ctx)
+	if err != nil {
+		t.Fatalf("ListTagsWithStats: %v", err)
+	}
+	if len(tags) != 1 || tags[0].Color != "amber" {
+		t.Fatalf("tags = %+v, want single tag with color amber", tags)
+	}
+
+	if err := s.RecolorTag(ctx, "does-not-exist", "amber"); err != store.ErrTagNotFound {
+		t.Fatalf("RecolorTag missing: got %v, want ErrTagNotFound", err)
+	}
+	if err := s.RecolorTag(ctx, "x", "not-a-color"); err != store.ErrInvalidTag {
+		t.Fatalf("RecolorTag invalid color: got %v, want ErrInvalidTag", err)
+	}
+}
+
+func TestStore_CreateTag(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	if err := s.CreateTag(ctx, "fresh", "cyan"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if err := s.CreateTag(ctx, "fresh", "cyan"); err != store.ErrTagExists {
+		t.Fatalf("CreateTag duplicate: got %v, want ErrTagExists", err)
+	}
+	if err := s.CreateTag(ctx, "other", "not-a-color"); err != store.ErrInvalidTag {
+		t.Fatalf("CreateTag invalid color: got %v, want ErrInvalidTag", err)
+	}
+}
+
+func TestStore_DeleteTag(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	m := &store.Message{Subject: "a", Tags: []string{"gone"}}
+	if err := s.Save(ctx, m); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := s.DeleteTag(ctx, "gone"); err != nil {
+		t.Fatalf("DeleteTag: %v", err)
+	}
+	got, err := s.Get(ctx, m.ID)
+	if err != nil {
+		t.Fatalf("Get after DeleteTag: %v", err)
+	}
+	if len(got.Tags) != 0 {
+		t.Fatalf("expected message to still exist but be untagged, got Tags=%v", got.Tags)
+	}
+
+	if err := s.DeleteTag(ctx, "gone"); err != store.ErrTagNotFound {
+		t.Fatalf("DeleteTag missing: got %v, want ErrTagNotFound", err)
+	}
+}
+
+func TestStore_DeleteTagWithMessages(t *testing.T) {
+	s, _ := newTestStore(t, false)
+	ctx := context.Background()
+
+	mA := &store.Message{Subject: "a", Tags: []string{"doomed"}}
+	mB := &store.Message{Subject: "b"}
+	if err := s.Save(ctx, mA); err != nil {
+		t.Fatalf("Save mA: %v", err)
+	}
+	if err := s.Save(ctx, mB); err != nil {
+		t.Fatalf("Save mB: %v", err)
+	}
+
+	if err := s.DeleteTagWithMessages(ctx, "doomed"); err != nil {
+		t.Fatalf("DeleteTagWithMessages: %v", err)
+	}
+	if _, err := s.Get(ctx, mA.ID); err != store.ErrNotFound {
+		t.Fatalf("mA should be deleted, got err %v", err)
+	}
+	if _, err := s.Get(ctx, mB.ID); err != nil {
+		t.Fatalf("mB should remain: %v", err)
+	}
+
+	if err := s.DeleteTagWithMessages(ctx, "doomed"); err != store.ErrTagNotFound {
+		t.Fatalf("DeleteTagWithMessages missing: got %v, want ErrTagNotFound", err)
+	}
+}
+
+func TestStore_TagBackfillOnOpen(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	ctx := context.Background()
+
+	db, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	s := New(db, false, "")
+	if err := s.Save(ctx, &store.Message{Subject: "a", Tags: []string{"legacy"}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// Registered automatically by Save in the new schema, so re-opening
+	// should be a no-op for this tag rather than erroring or duplicating.
+	db.Close()
+
+	db2, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("re-Open: %v", err)
+	}
+	defer db2.Close()
+	s2 := New(db2, false, "")
+	tags, err := s2.ListTagsWithStats(ctx)
+	if err != nil {
+		t.Fatalf("ListTagsWithStats: %v", err)
+	}
+	found := false
+	for _, tg := range tags {
+		if tg.Name == "legacy" {
+			found = true
+			if tg.Count != 1 {
+				t.Fatalf("legacy tag count = %d, want 1", tg.Count)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected 'legacy' tag to survive reopen")
 	}
 }

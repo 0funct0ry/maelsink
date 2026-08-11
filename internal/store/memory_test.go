@@ -328,13 +328,13 @@ func TestMemoryStore_TagFilterAndTagsAggregate(t *testing.T) {
 		}
 	}
 
-	tags, err := s.Tags(ctx)
+	tags, err := s.ListTagsWithStats(ctx)
 	if err != nil {
-		t.Fatalf("Tags: %v", err)
+		t.Fatalf("ListTagsWithStats: %v", err)
 	}
 	counts := map[string]int{}
 	for _, tc := range tags {
-		counts[tc.Tag] = tc.Count
+		counts[tc.Name] = tc.Count
 	}
 	if counts["smoke"] != 2 {
 		t.Fatalf("smoke count = %d, want 2", counts["smoke"])
@@ -528,5 +528,174 @@ func TestMemoryStore_ReadHasAttachmentsParseWarningFilters(t *testing.T) {
 	}
 	if stats.ParseWarningCount != 1 {
 		t.Fatalf("ParseWarningCount = %d, want 1", stats.ParseWarningCount)
+	}
+}
+
+func TestMemoryStore_ListTagsWithStats_ZeroMessageTag(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	if err := s.CreateTag(ctx, "empty", "indigo"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	_ = s.Save(ctx, &Message{Subject: "a", Tags: []string{"smoke"}})
+
+	tags, err := s.ListTagsWithStats(ctx)
+	if err != nil {
+		t.Fatalf("ListTagsWithStats: %v", err)
+	}
+	byName := map[string]TagStats{}
+	for _, t := range tags {
+		byName[t.Name] = t
+	}
+	empty, ok := byName["empty"]
+	if !ok {
+		t.Fatal("expected 'empty' tag to be present")
+	}
+	if empty.Count != 0 || empty.LastUsed != nil {
+		t.Fatalf("empty tag stats = %+v, want Count=0, LastUsed=nil", empty)
+	}
+	smoke, ok := byName["smoke"]
+	if !ok || smoke.Count != 1 || smoke.LastUsed == nil {
+		t.Fatalf("smoke tag stats = %+v, want Count=1 with LastUsed set", smoke)
+	}
+	// smoke has 1 message vs empty's 0, so smoke should sort first.
+	if tags[0].Name != "smoke" {
+		t.Fatalf("tags[0] = %q, want smoke first (higher count)", tags[0].Name)
+	}
+}
+
+func TestMemoryStore_RenameTag(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{Subject: "a", Tags: []string{"old"}}
+	_ = s.Save(ctx, msg)
+
+	if err := s.RenameTag(ctx, "old", "new"); err != nil {
+		t.Fatalf("RenameTag: %v", err)
+	}
+	got, _ := s.Get(ctx, msg.ID)
+	if !tagsContain(got.Tags, "new") || tagsContain(got.Tags, "old") {
+		t.Fatalf("Tags = %v, want only 'new'", got.Tags)
+	}
+
+	if err := s.RenameTag(ctx, "does-not-exist", "whatever"); err != ErrTagNotFound {
+		t.Fatalf("RenameTag missing: got %v, want ErrTagNotFound", err)
+	}
+}
+
+func TestMemoryStore_RenameTagMerge(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msgA := &Message{Subject: "a", Tags: []string{"foo"}}
+	msgB := &Message{Subject: "b", Tags: []string{"bar"}}
+	_ = s.Save(ctx, msgA)
+	_ = s.Save(ctx, msgB)
+
+	if err := s.RenameTag(ctx, "foo", "bar"); err != nil {
+		t.Fatalf("RenameTag (merge): %v", err)
+	}
+
+	gotA, _ := s.Get(ctx, msgA.ID)
+	if !tagsContain(gotA.Tags, "bar") || tagsContain(gotA.Tags, "foo") {
+		t.Fatalf("msgA Tags = %v, want only 'bar'", gotA.Tags)
+	}
+	gotB, _ := s.Get(ctx, msgB.ID)
+	if !tagsContain(gotB.Tags, "bar") {
+		t.Fatalf("msgB Tags = %v, want 'bar' to remain", gotB.Tags)
+	}
+
+	tags, _ := s.ListTagsWithStats(ctx)
+	for _, tg := range tags {
+		if tg.Name == "foo" {
+			t.Fatal("expected 'foo' tag row to be gone after merge")
+		}
+	}
+}
+
+func TestMemoryStore_RecolorTag(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	if err := s.CreateTag(ctx, "x", "indigo"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if err := s.RecolorTag(ctx, "x", "amber"); err != nil {
+		t.Fatalf("RecolorTag: %v", err)
+	}
+	tags, _ := s.ListTagsWithStats(ctx)
+	if tags[0].Color != "amber" {
+		t.Fatalf("Color = %q, want amber", tags[0].Color)
+	}
+
+	if err := s.RecolorTag(ctx, "does-not-exist", "amber"); err != ErrTagNotFound {
+		t.Fatalf("RecolorTag missing: got %v, want ErrTagNotFound", err)
+	}
+	if err := s.RecolorTag(ctx, "x", "not-a-color"); err != ErrInvalidTag {
+		t.Fatalf("RecolorTag invalid color: got %v, want ErrInvalidTag", err)
+	}
+}
+
+func TestMemoryStore_CreateTag(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	if err := s.CreateTag(ctx, "fresh", "cyan"); err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	if err := s.CreateTag(ctx, "fresh", "cyan"); err != ErrTagExists {
+		t.Fatalf("CreateTag duplicate: got %v, want ErrTagExists", err)
+	}
+	if err := s.CreateTag(ctx, "other", "not-a-color"); err != ErrInvalidTag {
+		t.Fatalf("CreateTag invalid color: got %v, want ErrInvalidTag", err)
+	}
+}
+
+func TestMemoryStore_DeleteTag(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msg := &Message{Subject: "a", Tags: []string{"gone"}}
+	_ = s.Save(ctx, msg)
+
+	if err := s.DeleteTag(ctx, "gone"); err != nil {
+		t.Fatalf("DeleteTag: %v", err)
+	}
+	got, err := s.Get(ctx, msg.ID)
+	if err != nil {
+		t.Fatalf("Get after DeleteTag: %v", err)
+	}
+	if tagsContain(got.Tags, "gone") {
+		t.Fatal("expected message to still exist but be untagged")
+	}
+
+	if err := s.DeleteTag(ctx, "gone"); err != ErrTagNotFound {
+		t.Fatalf("DeleteTag missing: got %v, want ErrTagNotFound", err)
+	}
+}
+
+func TestMemoryStore_DeleteTagWithMessages(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	msgA := &Message{Subject: "a", Tags: []string{"doomed"}}
+	msgB := &Message{Subject: "b"}
+	_ = s.Save(ctx, msgA)
+	_ = s.Save(ctx, msgB)
+
+	if err := s.DeleteTagWithMessages(ctx, "doomed"); err != nil {
+		t.Fatalf("DeleteTagWithMessages: %v", err)
+	}
+	if _, err := s.Get(ctx, msgA.ID); err != ErrNotFound {
+		t.Fatalf("msgA should be deleted, got err %v", err)
+	}
+	if _, err := s.Get(ctx, msgB.ID); err != nil {
+		t.Fatalf("msgB should remain: %v", err)
+	}
+
+	if err := s.DeleteTagWithMessages(ctx, "doomed"); err != ErrTagNotFound {
+		t.Fatalf("DeleteTagWithMessages missing: got %v, want ErrTagNotFound", err)
 	}
 }

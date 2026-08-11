@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import * as apiClient from '../lib/apiClient'
 import { ApiClientError, HttpError } from '../lib/apiErrors'
-import type { ListMessagesParams, MessageDetail, MessageSummary, Stats, TagCount } from '../lib/apiTypes'
+import type { ListMessagesParams, MessageDetail, MessageSummary, Stats, TagStats } from '../lib/apiTypes'
 import { useUIStore } from './useUIStore'
 
 type FetchStatus = 'idle' | 'loading' | 'error'
@@ -28,7 +28,11 @@ interface MessageState {
    * mailbox counts and tag list stay in sync with realtime events without
    * the Sidebar owning its own separate fetch-once-on-mount state). */
   sidebarStats: Stats | null
-  sidebarTags: TagCount[]
+  /** Every persisted tag with its usage stats (M8.5) — the Sidebar derives
+   * its top-5 + "More…" view from this same list, so both it and
+   * TagManagementScreen share one source of truth kept live by the four
+   * tag.* WS events below. */
+  sidebarTags: TagStats[]
 
   fetchMessages: () => Promise<void>
   fetchSidebarData: () => Promise<void>
@@ -47,6 +51,10 @@ interface MessageState {
   applyMessageDeleted: (id: string) => void
   applyMessagesCleared: () => void
   applyMessageTagsUpdated: (payload: { id: string; tags: string[] }) => void
+  applyTagRenamed: (payload: { name: string; new_name: string; merged: boolean }) => void
+  applyTagRecolored: (payload: { name: string; color: string }) => void
+  applyTagCreated: (payload: { name: string; color: string }) => void
+  applyTagDeleted: (payload: { name: string }) => void
 }
 
 export const useMessageStore = create<MessageState>((set, get) => ({
@@ -86,7 +94,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       // Non-fatal: the storage card and mailbox counts just don't update.
     }
     try {
-      const tags = await apiClient.getTags()
+      const tags = await apiClient.listTags()
       set({ sidebarTags: tags })
     } catch {
       // Non-fatal: the tags nav group just doesn't update.
@@ -231,6 +239,33 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     set((state) => ({
       messages: state.messages.map((m) => (m.id === payload.id ? { ...m, tags: payload.tags } : m)),
       selected: state.selected && state.selected.id === payload.id ? { ...state.selected, tags: payload.tags } : state.selected,
+    }))
+    void get().fetchSidebarData()
+  },
+
+  applyTagRenamed: (payload) => {
+    // Optimistically drop the old name; fetchSidebarData reconciles counts
+    // (including the merge case, where new_name's count/last_used change).
+    set((state) => ({
+      sidebarTags: state.sidebarTags.filter((t) => t.name !== payload.name),
+    }))
+    void get().fetchSidebarData()
+  },
+
+  applyTagRecolored: (payload) => {
+    set((state) => ({
+      sidebarTags: state.sidebarTags.map((t) => (t.name === payload.name ? { ...t, color: payload.color } : t)),
+    }))
+    void get().fetchSidebarData()
+  },
+
+  applyTagCreated: () => {
+    void get().fetchSidebarData()
+  },
+
+  applyTagDeleted: (payload) => {
+    set((state) => ({
+      sidebarTags: state.sidebarTags.filter((t) => t.name !== payload.name),
     }))
     void get().fetchSidebarData()
   },

@@ -14,6 +14,10 @@ const (
 	TypeMessageDeleted     Type = "message.deleted"
 	TypeMessagesCleared    Type = "messages.cleared"
 	TypeMessageTagsUpdated Type = "message.tags_updated"
+	TypeTagRenamed         Type = "tag.renamed"
+	TypeTagRecolored       Type = "tag.recolored"
+	TypeTagCreated         Type = "tag.created"
+	TypeTagDeleted         Type = "tag.deleted"
 )
 
 // Event is the bus-internal envelope. Payload is whatever the caller wants
@@ -62,4 +66,56 @@ func MessagesCleared() Event {
 // store.MessageSummary.Tags).
 func MessageTagsUpdated(id string, tags []string) Event {
 	return Event{Type: TypeMessageTagsUpdated, Payload: tagsUpdatedPayload{ID: id, Tags: tags}}
+}
+
+// tagRenamedPayload is the {"name": "...", "new_name": "...", "merged": bool}
+// shape for tag.renamed.
+type tagRenamedPayload struct {
+	Name    string `json:"name"`
+	NewName string `json:"new_name"`
+	Merged  bool   `json:"merged"`
+}
+
+// tagRecoloredPayload is the {"name": "...", "color": "..."} shape for
+// tag.recolored.
+type tagRecoloredPayload struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+// tagCreatedPayload is the {"name": "...", "color": "..."} shape for
+// tag.created.
+type tagCreatedPayload struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+// tagDeletedPayload is the {"name": "..."} shape for tag.deleted.
+type tagDeletedPayload struct {
+	Name string `json:"name"`
+}
+
+// TagRenamed builds a tag.renamed event. merged is true when newName
+// already existed and the two tags were merged rather than oldName simply
+// being renamed.
+func TagRenamed(oldName, newName string, merged bool) Event {
+	return Event{Type: TypeTagRenamed, Payload: tagRenamedPayload{Name: oldName, NewName: newName, Merged: merged}}
+}
+
+// TagRecolored builds a tag.recolored event.
+func TagRecolored(name, color string) Event {
+	return Event{Type: TypeTagRecolored, Payload: tagRecoloredPayload{Name: name, Color: color}}
+}
+
+// TagCreated builds a tag.created event.
+func TagCreated(name, color string) Event {
+	return Event{Type: TypeTagCreated, Payload: tagCreatedPayload{Name: name, Color: color}}
+}
+
+// TagDeleted builds a tag.deleted event, used for both the untag-only and
+// delete-with-messages variants (the payload shape doesn't need to
+// distinguish them; DeleteTagWithMessages also publishes a MessageDeleted
+// per removed message).
+func TagDeleted(name string) Event {
+	return Event{Type: TypeTagDeleted, Payload: tagDeletedPayload{Name: name}}
 }

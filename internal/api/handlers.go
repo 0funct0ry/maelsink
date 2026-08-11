@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -423,23 +424,185 @@ func (h *handlers) stats(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// tagCountJSON is one row of GET /api/v1/tags.
-type tagCountJSON struct {
-	Tag   string `json:"tag"`
-	Count int    `json:"count"`
+// tagStatsJSON is one row of GET /api/v1/tags.
+type tagStatsJSON struct {
+	Name     string  `json:"name"`
+	Color    string  `json:"color"`
+	Count    int     `json:"count"`
+	LastUsed *string `json:"last_used"`
+}
+
+func toTagStatsJSON(t store.TagStats) tagStatsJSON {
+	out := tagStatsJSON{Name: t.Name, Color: t.Color, Count: t.Count}
+	if t.LastUsed != nil {
+		s := t.LastUsed.UTC().Format(time.RFC3339)
+		out.LastUsed = &s
+	}
+	return out
 }
 
 func (h *handlers) listTags(c *gin.Context) {
-	tags, err := h.store.Tags(c.Request.Context())
+	tags, err := h.store.ListTagsWithStats(c.Request.Context())
 	if err != nil {
 		respondInternal(c, err.Error())
 		return
 	}
-	out := make([]tagCountJSON, len(tags))
+	out := make([]tagStatsJSON, len(tags))
 	for i, t := range tags {
-		out[i] = tagCountJSON{Tag: t.Tag, Count: t.Count}
+		out[i] = toTagStatsJSON(t)
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+// handleTagStoreErr classifies an error from a tag mutation into the
+// matching error response.
+func handleTagStoreErr(c *gin.Context, name string, err error) {
+	switch {
+	case errors.Is(err, store.ErrTagNotFound):
+		respondTagNotFound(c, name)
+	case errors.Is(err, store.ErrTagExists):
+		respondTagExists(c, name)
+	case errors.Is(err, store.ErrInvalidTag):
+		respondValidation(c, err.Error())
+	default:
+		respondInternal(c, err.Error())
+	}
+}
+
+// findTagStats returns the TagStats row for name, or nil if it doesn't
+// exist.
+func (h *handlers) findTagStats(c *gin.Context, name string) (*store.TagStats, error) {
+	tags, err := h.store.ListTagsWithStats(c.Request.Context())
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tags {
+		if t.Name == name {
+			return &t, nil
+		}
+	}
+	return nil, nil
+}
+
+// createTagBody is the JSON body for POST /api/v1/tags.
+type createTagBody struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+func (h *handlers) createTag(c *gin.Context) {
+	var body createTagBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid_request", "invalid request body")
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Color) == "" {
+		respondValidation(c, "name and color are both required")
+		return
+	}
+
+	if err := h.store.CreateTag(c.Request.Context(), body.Name, body.Color); err != nil {
+		handleTagStoreErr(c, body.Name, err)
+		return
+	}
+	h.bus.Publish(events.TagCreated(body.Name, body.Color))
+
+	ts, err := h.findTagStats(c, strings.TrimSpace(body.Name))
+	if err != nil {
+		respondInternal(c, err.Error())
+		return
+	}
+	c.JSON(http.StatusCreated, toTagStatsJSON(*ts))
+}
+
+// patchTagBody is the JSON body for PATCH /api/v1/tags/:name.
+type patchTagBody struct {
+	Name  *string `json:"name"`
+	Color *string `json:"color"`
+}
+
+func (h *handlers) patchTag(c *gin.Context) {
+	name := c.Param("name")
+
+	var body patchTagBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		respondError(c, http.StatusBadRequest, "invalid_request", "invalid request body")
+		return
+	}
+	if (body.Name == nil || strings.TrimSpace(*body.Name) == "") && (body.Color == nil || strings.TrimSpace(*body.Color) == "") {
+		respondValidation(c, "at least one of name or color is required")
+		return
+	}
+
+	effectiveName := name
+
+	if body.Name != nil && strings.TrimSpace(*body.Name) != "" && strings.TrimSpace(*body.Name) != name {
+		newName := strings.TrimSpace(*body.Name)
+		existing, err := h.findTagStats(c, newName)
+		if err != nil {
+			respondInternal(c, err.Error())
+			return
+		}
+		merged := existing != nil
+
+		if err := h.store.RenameTag(c.Request.Context(), name, newName); err != nil {
+			handleTagStoreErr(c, name, err)
+			return
+		}
+		h.bus.Publish(events.TagRenamed(name, newName, merged))
+		effectiveName = newName
+	}
+
+	if body.Color != nil && strings.TrimSpace(*body.Color) != "" {
+		color := strings.TrimSpace(*body.Color)
+		if err := h.store.RecolorTag(c.Request.Context(), effectiveName, color); err != nil {
+			handleTagStoreErr(c, effectiveName, err)
+			return
+		}
+		h.bus.Publish(events.TagRecolored(effectiveName, color))
+	}
+
+	ts, err := h.findTagStats(c, effectiveName)
+	if err != nil {
+		respondInternal(c, err.Error())
+		return
+	}
+	if ts == nil {
+		respondTagNotFound(c, effectiveName)
+		return
+	}
+	c.JSON(http.StatusOK, toTagStatsJSON(*ts))
+}
+
+func (h *handlers) deleteTag(c *gin.Context) {
+	name := c.Param("name")
+	if err := h.store.DeleteTag(c.Request.Context(), name); err != nil {
+		handleTagStoreErr(c, name, err)
+		return
+	}
+	h.bus.Publish(events.TagDeleted(name))
+	c.Status(http.StatusNoContent)
+}
+
+func (h *handlers) deleteTagWithMessages(c *gin.Context) {
+	name := c.Param("name")
+
+	msgs, _, err := h.store.List(c.Request.Context(), store.ListFilter{Tag: name})
+	if err != nil {
+		respondInternal(c, err.Error())
+		return
+	}
+
+	if err := h.store.DeleteTagWithMessages(c.Request.Context(), name); err != nil {
+		handleTagStoreErr(c, name, err)
+		return
+	}
+
+	for _, msg := range msgs {
+		h.bus.Publish(events.MessageDeleted(msg.ID))
+	}
+	h.bus.Publish(events.TagDeleted(name))
+	c.Status(http.StatusNoContent)
 }
 
 func (h *handlers) health(c *gin.Context) {

@@ -4,23 +4,35 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // MemoryStore is an in-memory MessageStore. It is the only backend for
 // M1.0; M2.0 replaces it with a SQLite-backed implementation of the same
 // MessageStore interface.
 type MemoryStore struct {
-	mu       sync.RWMutex
-	messages []*Message
-	byID     map[string]int // id -> index into messages
+	mu          sync.RWMutex
+	messages    []*Message
+	byID        map[string]int // id -> index into messages
+	tagRegistry map[string]tagMeta
+}
+
+// tagMeta holds a persisted tag's color/created_at, independent of whether
+// any message currently carries it (a tag created via CreateTag with no
+// messages attached still needs somewhere to live).
+type tagMeta struct {
+	color     string
+	createdAt time.Time
 }
 
 // NewMemoryStore returns an empty, ready-to-use MemoryStore.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		byID: make(map[string]int),
+		byID:        make(map[string]int),
+		tagRegistry: make(map[string]tagMeta),
 	}
 }
 
@@ -32,6 +44,10 @@ func (s *MemoryStore) Save(_ context.Context, msg *Message) error {
 
 	if msg.ID == "" {
 		msg.ID = NewID()
+	}
+
+	for _, t := range msg.Tags {
+		s.ensureTagRegistered(t)
 	}
 
 	if idx, ok := s.byID[msg.ID]; ok {
@@ -258,26 +274,223 @@ func (s *MemoryStore) Stats(_ context.Context) (Stats, error) {
 	return stats, nil
 }
 
-// Tags returns every distinct tag currently in use with its message count.
-func (s *MemoryStore) Tags(_ context.Context) ([]TagCount, error) {
+// hashDefaultColor deterministically maps a tag name to one of TagColors,
+// bit-for-bit identical to web/src/lib/tagColor.ts's hash — used to give a
+// tag registered implicitly (via AddTag, never CreateTag) a stable color,
+// mirroring the SQLite backend's migration backfill.
+func hashDefaultColor(name string) string {
+	h := uint32(2166136261)
+	for i := 0; i < len(name); i++ {
+		h ^= uint32(name[i])
+		h *= 16777619
+	}
+	return TagColors[int(h)%len(TagColors)]
+}
+
+// ensureTagRegistered gives tag a registry entry (with a hash-derived
+// default color) if it doesn't already have one. Callers must hold s.mu for
+// writing.
+func (s *MemoryStore) ensureTagRegistered(tag string) {
+	if _, ok := s.tagRegistry[tag]; !ok {
+		s.tagRegistry[tag] = tagMeta{color: hashDefaultColor(tag), createdAt: time.Now()}
+	}
+}
+
+// ListTagsWithStats returns every persisted tag with its usage stats. See
+// MessageStore.ListTagsWithStats.
+func (s *MemoryStore) ListTagsWithStats(_ context.Context) ([]TagStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	counts := make(map[string]int)
-	var order []string
+	lastUsed := make(map[string]time.Time)
 	for _, msg := range s.messages {
 		for _, t := range msg.Tags {
-			if _, ok := counts[t]; !ok {
-				order = append(order, t)
-			}
 			counts[t]++
+			if lu, ok := lastUsed[t]; !ok || msg.ReceivedAt.After(lu) {
+				lastUsed[t] = msg.ReceivedAt
+			}
 		}
 	}
-	result := make([]TagCount, 0, len(order))
-	for _, t := range order {
-		result = append(result, TagCount{Tag: t, Count: counts[t]})
+
+	result := make([]TagStats, 0, len(s.tagRegistry))
+	for name, meta := range s.tagRegistry {
+		ts := TagStats{Name: name, Color: meta.color, Count: counts[name]}
+		if lu, ok := lastUsed[name]; ok {
+			luCopy := lu
+			ts.LastUsed = &luCopy
+		}
+		result = append(result, ts)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Count != result[j].Count {
+			return result[i].Count > result[j].Count
+		}
+		li, lj := result[i].LastUsed, result[j].LastUsed
+		switch {
+		case li == nil && lj == nil:
+		case li == nil:
+			return false
+		case lj == nil:
+			return true
+		case !li.Equal(*lj):
+			return li.After(*lj)
+		}
+		return result[i].Name < result[j].Name
+	})
 	return result, nil
+}
+
+// RenameTag renames oldName to newName, merging into newName if it already
+// exists. See MessageStore.RenameTag.
+func (s *MemoryStore) RenameTag(_ context.Context, oldName, newName string) error {
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" || newName == "" {
+		return ErrInvalidTag
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	oldMeta, ok := s.tagRegistry[oldName]
+	if !ok {
+		return ErrTagNotFound
+	}
+	_, merge := s.tagRegistry[newName]
+
+	for _, msg := range s.messages {
+		if !tagsContain(msg.Tags, oldName) {
+			continue
+		}
+		next := make([]string, 0, len(msg.Tags))
+		hasNew := false
+		for _, t := range msg.Tags {
+			if t == oldName {
+				continue
+			}
+			if t == newName {
+				hasNew = true
+			}
+			next = append(next, t)
+		}
+		if !hasNew {
+			next = append(next, newName)
+		}
+		msg.Tags = next
+	}
+
+	delete(s.tagRegistry, oldName)
+	if !merge {
+		s.tagRegistry[newName] = oldMeta
+	}
+	return nil
+}
+
+// RecolorTag updates name's persisted color. See MessageStore.RecolorTag.
+func (s *MemoryStore) RecolorTag(_ context.Context, name, color string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrInvalidTag
+	}
+	if !IsValidTagColor(color) {
+		return ErrInvalidTag
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	meta, ok := s.tagRegistry[name]
+	if !ok {
+		return ErrTagNotFound
+	}
+	meta.color = color
+	s.tagRegistry[name] = meta
+	return nil
+}
+
+// CreateTag inserts a new tag with no messages attached. See
+// MessageStore.CreateTag.
+func (s *MemoryStore) CreateTag(_ context.Context, name, color string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrInvalidTag
+	}
+	if !IsValidTagColor(color) {
+		return ErrInvalidTag
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.tagRegistry[name]; ok {
+		return ErrTagExists
+	}
+	s.tagRegistry[name] = tagMeta{color: color, createdAt: time.Now()}
+	return nil
+}
+
+// DeleteTag removes name from every message's tag set and deletes its
+// registry entry. See MessageStore.DeleteTag.
+func (s *MemoryStore) DeleteTag(_ context.Context, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrInvalidTag
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.tagRegistry[name]; !ok {
+		return ErrTagNotFound
+	}
+	for _, msg := range s.messages {
+		if !tagsContain(msg.Tags, name) {
+			continue
+		}
+		next := make([]string, 0, len(msg.Tags))
+		for _, t := range msg.Tags {
+			if t != name {
+				next = append(next, t)
+			}
+		}
+		msg.Tags = next
+	}
+	delete(s.tagRegistry, name)
+	return nil
+}
+
+// DeleteTagWithMessages deletes every message carrying name, then its
+// registry entry. See MessageStore.DeleteTagWithMessages.
+func (s *MemoryStore) DeleteTagWithMessages(ctx context.Context, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrInvalidTag
+	}
+
+	s.mu.Lock()
+	if _, ok := s.tagRegistry[name]; !ok {
+		s.mu.Unlock()
+		return ErrTagNotFound
+	}
+	var ids []string
+	for _, msg := range s.messages {
+		if tagsContain(msg.Tags, name) {
+			ids = append(ids, msg.ID)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, id := range ids {
+		if err := s.Delete(ctx, id); err != nil && err != ErrNotFound {
+			return err
+		}
+	}
+
+	s.mu.Lock()
+	delete(s.tagRegistry, name)
+	s.mu.Unlock()
+	return nil
 }
 
 // Ping always succeeds for the in-memory store.
@@ -344,6 +557,7 @@ func (s *MemoryStore) AddTag(_ context.Context, id, tag string) error {
 	copy(next, msg.Tags)
 	next = append(next, tag)
 	msg.Tags = next
+	s.ensureTagRegistered(tag)
 	return nil
 }
 

@@ -253,17 +253,17 @@ describe('fetchSidebarData', () => {
       oldest_received_at: null,
       newest_received_at: null,
     })
-    vi.mocked(apiClient.getTags).mockResolvedValue([{ tag: 'smoke', count: 3 }])
+    vi.mocked(apiClient.listTags).mockResolvedValue([{ name: 'smoke', color: 'indigo', count: 3, last_used: null }])
 
     await useMessageStore.getState().fetchSidebarData()
 
     expect(useMessageStore.getState().sidebarStats?.total_messages).toBe(5)
-    expect(useMessageStore.getState().sidebarTags).toEqual([{ tag: 'smoke', count: 3 }])
+    expect(useMessageStore.getState().sidebarTags).toEqual([{ name: 'smoke', color: 'indigo', count: 3, last_used: null }])
   })
 
   it('leaves stats/tags unset (non-fatal) when the requests fail', async () => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
-    vi.mocked(apiClient.getTags).mockRejectedValue(new Error('offline'))
+    vi.mocked(apiClient.listTags).mockRejectedValue(new Error('offline'))
 
     await useMessageStore.getState().fetchSidebarData()
 
@@ -283,7 +283,7 @@ describe('sidebar refresh side effects (M7.0)', () => {
       oldest_received_at: null,
       newest_received_at: null,
     })
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
 
     useMessageStore.getState().applyMessageCreated(summary('new'))
 
@@ -300,7 +300,7 @@ describe('sidebar refresh side effects (M7.0)', () => {
       oldest_received_at: null,
       newest_received_at: null,
     })
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
     useMessageStore.setState({ messages: [summary('a')], total: 1 })
 
     useMessageStore.getState().applyMessageDeleted('a')
@@ -318,7 +318,7 @@ describe('sidebar refresh side effects (M7.0)', () => {
       oldest_received_at: null,
       newest_received_at: null,
     })
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
 
     useMessageStore.getState().applyMessagesCleared()
 
@@ -336,7 +336,7 @@ describe('sidebar refresh side effects (M7.0)', () => {
       oldest_received_at: null,
       newest_received_at: null,
     })
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
 
     await useMessageStore.getState().clearAll()
 
@@ -355,7 +355,7 @@ describe('sidebar refresh side effects (M7.0)', () => {
       oldest_received_at: null,
       newest_received_at: null,
     })
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
 
     await useMessageStore.getState().deleteMessageOptimistic('a')
 
@@ -374,7 +374,7 @@ describe('sidebar refresh side effects (M7.0)', () => {
       oldest_received_at: null,
       newest_received_at: null,
     })
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
 
     await useMessageStore.getState().markRead('a')
 

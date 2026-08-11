@@ -6,7 +6,7 @@ import type {
   MessageDetail,
   MessageSummary,
   Stats,
-  TagCount,
+  TagStats,
   Version,
 } from './apiTypes'
 
@@ -79,8 +79,28 @@ export function getStats(): Promise<Stats> {
   return fetchJson<Stats>('/api/v1/stats')
 }
 
-export function getTags(): Promise<TagCount[]> {
-  return fetchJson<TagCount[]>('/api/v1/tags')
+export function listTags(): Promise<TagStats[]> {
+  return fetchJson<TagStats[]>('/api/v1/tags')
+}
+
+export function createTag(name: string, color: string): Promise<TagStats> {
+  return fetchJson<TagStats>('/api/v1/tags', { method: 'POST', body: { name, color } })
+}
+
+export function renameTag(name: string, newName: string): Promise<TagStats> {
+  return fetchJson<TagStats>(`/api/v1/tags/${encodeURIComponent(name)}`, { method: 'PATCH', body: { name: newName } })
+}
+
+export function recolorTag(name: string, color: string): Promise<TagStats> {
+  return fetchJson<TagStats>(`/api/v1/tags/${encodeURIComponent(name)}`, { method: 'PATCH', body: { color } })
+}
+
+export function deleteTag(name: string): Promise<void> {
+  return fetchJson<void>(`/api/v1/tags/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+export function deleteTagWithMessages(name: string): Promise<void> {
+  return fetchJson<void>(`/api/v1/tags/${encodeURIComponent(name)}/messages`, { method: 'DELETE' })
 }
 
 export function getVersion(): Promise<Version> {

@@ -60,9 +60,11 @@ export interface Stats {
   parse_warning_count: number
 }
 
-export interface TagCount {
-  tag: string
+export interface TagStats {
+  name: string
+  color: string
   count: number
+  last_used: string | null
 }
 
 export interface ConfigSource {

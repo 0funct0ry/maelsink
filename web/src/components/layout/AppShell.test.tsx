@@ -30,7 +30,7 @@ function renderShell(initialEntries: string[] = ['/']) {
 describe('AppShell', () => {
   beforeEach(() => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
-    vi.mocked(apiClient.getTags).mockRejectedValue(new Error('offline'))
+    vi.mocked(apiClient.listTags).mockRejectedValue(new Error('offline'))
     vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
     useUIStore.setState({ modal: null, wsStatus: 'connecting' })
     useMessageStore.setState({ messages: [], total: 0 })
@@ -230,6 +230,74 @@ describe('AppShell', () => {
 
     expect(useMessageStore.getState().messages).toHaveLength(0)
     expect(useMessageStore.getState().total).toBe(0)
+  })
+
+  it('refetches sidebar tags when a tag.renamed frame arrives', () => {
+    useMessageStore.setState({ sidebarTags: [{ name: 'old', color: 'indigo', count: 2, last_used: null }] })
+    let handleFrame: ((frame: wsClient.WsFrame) => void) | undefined
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      handleFrame = opts.onEvent
+      return { close: vi.fn() }
+    })
+    vi.mocked(apiClient.listTags).mockResolvedValue([{ name: 'new', color: 'indigo', count: 2, last_used: null }])
+
+    renderShell()
+    act(() => {
+      handleFrame?.({ type: 'tag.renamed', payload: { name: 'old', new_name: 'new', merged: false } })
+    })
+
+    // The old name is dropped optimistically; fetchSidebarData (async, not
+    // awaited here) reconciles the final list including the new name.
+    expect(useMessageStore.getState().sidebarTags.map((t) => t.name)).toEqual([])
+  })
+
+  it('patches a tag color in place when a tag.recolored frame arrives', () => {
+    useMessageStore.setState({ sidebarTags: [{ name: 'x', color: 'indigo', count: 1, last_used: null }] })
+    let handleFrame: ((frame: wsClient.WsFrame) => void) | undefined
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      handleFrame = opts.onEvent
+      return { close: vi.fn() }
+    })
+
+    renderShell()
+    act(() => {
+      handleFrame?.({ type: 'tag.recolored', payload: { name: 'x', color: 'amber' } })
+    })
+
+    expect(useMessageStore.getState().sidebarTags[0].color).toBe('amber')
+  })
+
+  it('triggers a sidebar refetch when a tag.created frame arrives', () => {
+    useMessageStore.setState({ sidebarTags: [] })
+    let handleFrame: ((frame: wsClient.WsFrame) => void) | undefined
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      handleFrame = opts.onEvent
+      return { close: vi.fn() }
+    })
+    vi.mocked(apiClient.listTags).mockResolvedValue([{ name: 'fresh', color: 'cyan', count: 0, last_used: null }])
+
+    renderShell()
+    act(() => {
+      handleFrame?.({ type: 'tag.created', payload: { name: 'fresh', color: 'cyan' } })
+    })
+
+    expect(apiClient.listTags).toHaveBeenCalled()
+  })
+
+  it('removes a tag from the sidebar list when a tag.deleted frame arrives', () => {
+    useMessageStore.setState({ sidebarTags: [{ name: 'gone', color: 'indigo', count: 1, last_used: null }] })
+    let handleFrame: ((frame: wsClient.WsFrame) => void) | undefined
+    vi.mocked(wsClient.connectWs).mockImplementation((opts) => {
+      handleFrame = opts.onEvent
+      return { close: vi.fn() }
+    })
+
+    renderShell()
+    act(() => {
+      handleFrame?.({ type: 'tag.deleted', payload: { name: 'gone' } })
+    })
+
+    expect(useMessageStore.getState().sidebarTags.map((t) => t.name)).toEqual([])
   })
 
   it('updates useUIStore.wsStatus on connection status changes', () => {

@@ -27,6 +27,28 @@ var ErrInvalidQuery = errors.New("store: invalid search query")
 // or whitespace-only after trimming.
 var ErrInvalidTag = errors.New("store: invalid tag")
 
+// ErrTagNotFound is returned by RenameTag/RecolorTag/DeleteTag/
+// DeleteTagWithMessages when no tag exists with the given name.
+var ErrTagNotFound = errors.New("store: tag not found")
+
+// ErrTagExists is returned by CreateTag when a tag with the given name
+// already exists.
+var ErrTagExists = errors.New("store: tag already exists")
+
+// TagColors is the fixed set of persisted color tokens a tag may have.
+// CreateTag/RecolorTag reject any other value with ErrInvalidTag.
+var TagColors = []string{"indigo", "emerald", "amber", "rose", "cyan", "fuchsia", "lime", "orange"}
+
+// IsValidTagColor reports whether color is one of TagColors.
+func IsValidTagColor(color string) bool {
+	for _, c := range TagColors {
+		if c == color {
+			return true
+		}
+	}
+	return false
+}
+
 // IDLength is the length, in hex characters, of a full message ID produced
 // by NewID. Get and Delete treat any shorter string as a prefix to resolve
 // against stored IDs (docker-CLI-style short references), and any string of
@@ -90,11 +112,16 @@ type Stats struct {
 	ParseWarningCount int
 }
 
-// TagCount is one row of GET /api/v1/tags: a distinct tag value currently in
-// use and how many messages carry it.
-type TagCount struct {
-	Tag   string
-	Count int
+// TagStats is one row of GET /api/v1/tags: a persisted tag's name and color,
+// plus how many messages currently carry it and when it was last used. Count
+// is 0 and LastUsed is nil for a tag with no messages (a tag created via
+// CreateTag with none attached yet, or one every message has been untagged
+// from).
+type TagStats struct {
+	Name     string
+	Color    string
+	Count    int
+	LastUsed *time.Time
 }
 
 // MessageStore is the storage-agnostic interface every backend (in-memory
@@ -130,9 +157,36 @@ type MessageStore interface {
 	RemoveTag(ctx context.Context, id, tag string) error
 	// Stats returns a snapshot summary of the store's current contents.
 	Stats(ctx context.Context) (Stats, error)
-	// Tags returns every distinct tag currently in use with its message
-	// count, for GET /api/v1/tags.
-	Tags(ctx context.Context) ([]TagCount, error)
+	// ListTagsWithStats returns every persisted tag (including ones with no
+	// messages attached) with its color, message count, and last-used time,
+	// for GET /api/v1/tags. Ordered by Count descending, then LastUsed
+	// descending, then Name ascending.
+	ListTagsWithStats(ctx context.Context) ([]TagStats, error)
+	// RenameTag renames oldName (trimmed) to newName (trimmed) across every
+	// message carrying it and the tags table itself. Returns ErrInvalidTag
+	// if either is empty/whitespace-only, ErrTagNotFound if oldName doesn't
+	// exist. If newName already exists, the two tags are merged instead of
+	// erroring: every message carrying oldName gains newName (deduped),
+	// oldName's tags row is deleted, and newName's existing row (color,
+	// created_at) is left untouched.
+	RenameTag(ctx context.Context, oldName, newName string) error
+	// RecolorTag updates name's persisted color. Returns ErrInvalidTag if
+	// name is empty/whitespace-only or color is not one of TagColors, and
+	// ErrTagNotFound if name doesn't exist.
+	RecolorTag(ctx context.Context, name, color string) error
+	// CreateTag inserts a new tag with no messages attached yet. Returns
+	// ErrInvalidTag if name is empty/whitespace-only or color is not one of
+	// TagColors, and ErrTagExists if name already exists.
+	CreateTag(ctx context.Context, name, color string) error
+	// DeleteTag removes name from every message's tag set (untags, does not
+	// delete messages) and deletes its tags row. Returns ErrInvalidTag if
+	// name is empty/whitespace-only, ErrTagNotFound if name doesn't exist.
+	DeleteTag(ctx context.Context, name string) error
+	// DeleteTagWithMessages deletes every message carrying name (via the
+	// same path as Delete, so attachments are cleaned up identically) and
+	// then deletes its tags row. Returns ErrInvalidTag if name is
+	// empty/whitespace-only, ErrTagNotFound if name doesn't exist.
+	DeleteTagWithMessages(ctx context.Context, name string) error
 	// Ping verifies the underlying storage is reachable, for health checks.
 	Ping(ctx context.Context) error
 }

@@ -50,7 +50,7 @@ describe('Sidebar', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', makeMemoryStorage())
     useMessageStore.setState({ total: 5, query: {}, setQuery: vi.fn(), sidebarStats: null, sidebarTags: [] })
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -126,7 +126,7 @@ describe('Sidebar', () => {
 
   it('navigates back to the Inbox when a tag is clicked from Message Detail', async () => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
-    vi.mocked(apiClient.getTags).mockResolvedValue([{ tag: 'smoke', count: 4 }])
+    vi.mocked(apiClient.listTags).mockResolvedValue([{ name: 'smoke', color: 'indigo', count: 4, last_used: null }])
     useMessageStore.setState({ setQuery: vi.fn() })
     renderSidebarAt('/messages/abc123')
     await screen.findByText('smoke')
@@ -171,7 +171,7 @@ describe('Sidebar', () => {
 
   it('renders tags from getTags and filters by tag on click', async () => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
-    vi.mocked(apiClient.getTags).mockResolvedValue([{ tag: 'smoke', count: 4 }])
+    vi.mocked(apiClient.listTags).mockResolvedValue([{ name: 'smoke', color: 'indigo', count: 4, last_used: null }])
     const setQuery = vi.fn()
     useMessageStore.setState({ setQuery })
     renderSidebar()
@@ -182,9 +182,9 @@ describe('Sidebar', () => {
 
   it('supports selecting multiple tags and toggling AND/OR mode', async () => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
-    vi.mocked(apiClient.getTags).mockResolvedValue([
-      { tag: 'smoke', count: 4 },
-      { tag: 'release', count: 2 },
+    vi.mocked(apiClient.listTags).mockResolvedValue([
+      { name: 'smoke', color: 'indigo', count: 4, last_used: null },
+      { name: 'release', color: 'emerald', count: 2, last_used: null },
     ])
     const setQuery = vi.fn()
     useMessageStore.setState({ setQuery, query: { tag: ['smoke'] } })
@@ -205,9 +205,9 @@ describe('Sidebar', () => {
 
   it('does not render a Tags section when there are no tags', async () => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
-    vi.mocked(apiClient.getTags).mockResolvedValue([])
+    vi.mocked(apiClient.listTags).mockResolvedValue([])
     renderSidebar()
-    await waitFor(() => expect(apiClient.getTags).toHaveBeenCalled())
+    await waitFor(() => expect(apiClient.listTags).toHaveBeenCalled())
     expect(screen.queryByText('Tags')).not.toBeInTheDocument()
   })
 
@@ -269,6 +269,45 @@ describe('Sidebar', () => {
     })
 
     await waitFor(() => expect(screen.getByText('4.0 KB')).toBeInTheDocument())
+  })
+
+  it('shows only the top 5 tags by count with no "More…" link at exactly 5 tags', async () => {
+    vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
+    vi.mocked(apiClient.listTags).mockResolvedValue(
+      Array.from({ length: 5 }, (_, i) => ({
+        name: `tag${i}`,
+        color: 'indigo',
+        count: 5 - i,
+        last_used: null,
+      })),
+    )
+    renderSidebar()
+    await waitFor(() => expect(screen.getByText('tag0')).toBeInTheDocument())
+    for (let i = 0; i < 5; i++) {
+      expect(screen.getByText(`tag${i}`)).toBeInTheDocument()
+    }
+    expect(screen.queryByText('More…')).not.toBeInTheDocument()
+  })
+
+  it('shows only the top 5 tags by count with a "More…" link to /tags at 6+ tags', async () => {
+    vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
+    vi.mocked(apiClient.listTags).mockResolvedValue(
+      Array.from({ length: 6 }, (_, i) => ({
+        name: `tag${i}`,
+        color: 'indigo',
+        count: 6 - i,
+        last_used: null,
+      })),
+    )
+    renderSidebar()
+    await waitFor(() => expect(screen.getByText('tag0')).toBeInTheDocument())
+    for (let i = 0; i < 5; i++) {
+      expect(screen.getByText(`tag${i}`)).toBeInTheDocument()
+    }
+    expect(screen.queryByText('tag5')).not.toBeInTheDocument()
+    const moreLink = screen.getByText('More…')
+    expect(moreLink).toBeInTheDocument()
+    expect(moreLink.closest('a')).toHaveAttribute('href', '/tags')
   })
 
   it('deletes a saved search', () => {

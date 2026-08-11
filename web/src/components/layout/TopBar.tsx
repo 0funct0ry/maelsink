@@ -1,4 +1,4 @@
-import { Mail, Settings, Trash2 } from 'lucide-react'
+import { Mail, Settings, Tag, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getInfo } from '../../lib/uiApiClient'
@@ -10,10 +10,12 @@ import ReconnectBadge from '../inbox/ReconnectBadge'
 
 // 56px top bar per STYLE_GUIDE.md §1.4 / MOCKUP.html's .topbar: brand mark +
 // wordmark, a live SMTP connection pill, a global search box, and
-// settings/clear-all shortcuts — all always-visible chrome, not per-screen
-// content. Clear-all lives here (not just in the Sidebar) so it's reachable
-// from every screen, including Message Detail where the Sidebar's own
-// bottom-pinned button isn't visible below the fold on short viewports.
+// settings/tags/clear-all shortcuts — all always-visible chrome, not
+// per-screen content. Clear-all lives here (not just in the Sidebar) so it's
+// reachable from every screen, including Message Detail where the Sidebar's
+// own bottom-pinned button isn't visible below the fold on short viewports.
+// The tags shortcut (M8.5) similarly guarantees a path to /tags even when
+// the Sidebar has ≤5 tags and its own "More…" link isn't shown.
 export default function TopBar() {
   const navigate = useNavigate()
   const openConfirm = useUIStore((state) => state.openConfirm)
@@ -78,6 +80,11 @@ export default function TopBar() {
           aria-label="Clear all messages"
           variant="danger"
           onClick={handleClearAll}
+        />
+        <IconButton
+          icon={<Tag className="h-[17px] w-[17px]" aria-hidden="true" />}
+          aria-label="Manage tags"
+          onClick={() => navigate('/tags')}
         />
         <IconButton
           icon={<Settings className="h-[17px] w-[17px]" aria-hidden="true" />}
