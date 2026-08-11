@@ -159,14 +159,17 @@ func TestSession_EmitsMessageCreatedEvent(t *testing.T) {
 	c.send(".")
 	c.expectCode(codeOK)
 
+	// Every appended transcript line also publishes a session.line event
+	// (M8.4a), interleaved with message.created — filter for the one this
+	// test cares about instead of assuming it's the very next event.
 	var ev events.Event
-	select {
-	case ev = <-sub:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for message.created event")
-	}
-	if ev.Type != events.TypeMessageCreated {
-		t.Fatalf("got event type %q, want %q", ev.Type, events.TypeMessageCreated)
+	deadline := time.After(time.Second)
+	for ev.Type != events.TypeMessageCreated {
+		select {
+		case ev = <-sub:
+		case <-deadline:
+			t.Fatal("timed out waiting for message.created event")
+		}
 	}
 	summary, ok := ev.Payload.(store.MessageSummary)
 	if !ok {

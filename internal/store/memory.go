@@ -18,6 +18,9 @@ type MemoryStore struct {
 	messages    []*Message
 	byID        map[string]int // id -> index into messages
 	tagRegistry map[string]tagMeta
+
+	sessions []*Session
+	sessByID map[string]int // id -> index into sessions
 }
 
 // tagMeta holds a persisted tag's color/created_at, independent of whether
@@ -33,6 +36,7 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		byID:        make(map[string]int),
 		tagRegistry: make(map[string]tagMeta),
+		sessByID:    make(map[string]int),
 	}
 }
 
@@ -515,7 +519,20 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	for i := idx; i < len(s.messages); i++ {
 		s.byID[s.messages[i].ID] = i
 	}
+	s.clearSessionMessageID(full)
 	return nil
+}
+
+// clearSessionMessageID nils out MessageID on any session pointing at
+// messageID (M8.4), so a deleted message never leaves a dangling
+// cross-link — the session record + transcript are independently
+// retained.
+func (s *MemoryStore) clearSessionMessageID(messageID string) {
+	for _, sess := range s.sessions {
+		if sess.MessageID != nil && *sess.MessageID == messageID {
+			sess.MessageID = nil
+		}
+	}
 }
 
 // MarkRead sets the read flag of the message with the given ID or
@@ -596,6 +613,9 @@ func (s *MemoryStore) Clear(_ context.Context) error {
 
 	s.messages = nil
 	s.byID = make(map[string]int)
+	for _, sess := range s.sessions {
+		sess.MessageID = nil
+	}
 	return nil
 }
 
@@ -610,4 +630,158 @@ func NewID() string {
 		panic("store: failed to generate message id: " + err.Error())
 	}
 	return hex.EncodeToString(b)
+}
+
+// CreateSession persists a finished session. See MessageStore.CreateSession.
+func (s *MemoryStore) CreateSession(_ context.Context, sess *Session) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if sess.ID == "" {
+		sess.ID = NewID()
+	}
+
+	copy := *sess
+	if idx, ok := s.sessByID[sess.ID]; ok {
+		s.sessions[idx] = &copy
+		return nil
+	}
+	s.sessByID[sess.ID] = len(s.sessions)
+	s.sessions = append(s.sessions, &copy)
+	return nil
+}
+
+// AppendSessionLine persists a single transcript line for an
+// already-created session. See MessageStore.AppendSessionLine.
+func (s *MemoryStore) AppendSessionLine(_ context.Context, sessionID string, line TranscriptLine) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx, ok := s.sessByID[sessionID]
+	if !ok {
+		return ErrNotFound
+	}
+	s.sessions[idx].Transcript = append(s.sessions[idx].Transcript, line)
+	return nil
+}
+
+// GetSession returns the session with the given ID or unambiguous ID
+// prefix, or ErrNotFound/ErrAmbiguousID.
+func (s *MemoryStore) GetSession(_ context.Context, id string) (*Session, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	full, err := resolveID(s.sessByID, id)
+	if err != nil {
+		return nil, err
+	}
+	copy := *s.sessions[s.sessByID[full]]
+	return &copy, nil
+}
+
+// ListSessions returns sessions matching filter (newest-started first by
+// default), paginated, plus the total count of matches ignoring pagination.
+func (s *MemoryStore) ListSessions(_ context.Context, filter SessionListFilter) ([]*SessionSummary, int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var matched []*Session
+	for _, sess := range s.sessions {
+		if sessionMatchesFilter(sess, filter) {
+			matched = append(matched, sess)
+		}
+	}
+
+	ordered := make([]*Session, len(matched))
+	for i, sess := range matched {
+		ordered[len(matched)-1-i] = sess
+	}
+	if filter.Sort == SortStartedAtAsc {
+		ordered = matched
+	}
+
+	total := len(ordered)
+
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= total {
+		return []*SessionSummary{}, total, nil
+	}
+	ordered = ordered[offset:]
+
+	if filter.Limit > 0 && filter.Limit < len(ordered) {
+		ordered = ordered[:filter.Limit]
+	}
+
+	out := make([]*SessionSummary, len(ordered))
+	for i, sess := range ordered {
+		summary := NewSessionSummary(sess)
+		out[i] = &summary
+	}
+	return out, total, nil
+}
+
+// DeleteSession removes the session with the given full ID or unambiguous
+// ID prefix, or ErrNotFound/ErrAmbiguousID. Any message cross-linking to it
+// has its SessionID cleared first.
+func (s *MemoryStore) DeleteSession(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	full, err := resolveID(s.sessByID, id)
+	if err != nil {
+		return err
+	}
+	idx := s.sessByID[full]
+
+	s.clearMessageSessionID(full)
+	s.sessions = append(s.sessions[:idx], s.sessions[idx+1:]...)
+	delete(s.sessByID, full)
+	for i := idx; i < len(s.sessions); i++ {
+		s.sessByID[s.sessions[i].ID] = i
+	}
+	return nil
+}
+
+// ClearSessions removes every stored session. Every message's SessionID
+// cross-link is cleared first.
+func (s *MemoryStore) ClearSessions(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, msg := range s.messages {
+		msg.SessionID = ""
+	}
+	s.sessions = nil
+	s.sessByID = make(map[string]int)
+	return nil
+}
+
+// clearMessageSessionID blanks SessionID on any message pointing at
+// sessionID, mirroring clearSessionMessageID's symmetric fix on the other
+// side of the cross-link.
+func (s *MemoryStore) clearMessageSessionID(sessionID string) {
+	for _, msg := range s.messages {
+		if msg.SessionID == sessionID {
+			msg.SessionID = ""
+		}
+	}
+}
+
+func sessionMatchesFilter(sess *Session, filter SessionListFilter) bool {
+	if filter.Status != "" && sess.Status != filter.Status {
+		return false
+	}
+	if filter.ClientIP != "" && sess.ClientIP != filter.ClientIP {
+		return false
+	}
+	if !filter.Since.IsZero() && sess.StartedAt.Before(filter.Since) {
+		return false
+	}
+	if !filter.Until.IsZero() && sess.StartedAt.After(filter.Until) {
+		return false
+	}
+	return true
 }

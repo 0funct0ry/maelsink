@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import ToastContainer from '../common/ToastContainer'
 import ConfirmDialog from '../common/ConfirmDialog'
 import { useMessageStore } from '../../stores/useMessageStore'
+import { useSessionStore } from '../../stores/useSessionStore'
 import { useUIStore } from '../../stores/useUIStore'
 import { connectWs, type WsFrame } from '../../lib/wsClient'
 import type { MessageSummary } from '../../lib/apiTypes'
@@ -44,6 +45,8 @@ export default function AppShell({ children }: AppShellProps) {
       applyTagCreated,
       applyTagDeleted,
     } = useMessageStore.getState()
+    const { applySessionStarted, applySessionCompleted, applySessionLine, applySessionDeleted, applySessionsCleared } =
+      useSessionStore.getState()
     const { setWsStatus } = useUIStore.getState()
 
     const handleFrame = (frame: WsFrame) => {
@@ -71,6 +74,21 @@ export default function AppShell({ children }: AppShellProps) {
           break
         case 'tag.deleted':
           applyTagDeleted(frame.payload as { name: string })
+          break
+        case 'session.started':
+          applySessionStarted(frame.payload as { id: string; client_ip: string; started_at: string })
+          break
+        case 'session.completed':
+          applySessionCompleted(frame.payload as { id: string; status: string; message_id: string | null })
+          break
+        case 'session.line':
+          applySessionLine(frame.payload as { session_id: string; direction: 'C' | 'S'; line: string; position: number })
+          break
+        case 'session.deleted':
+          applySessionDeleted((frame.payload as { id: string }).id)
+          break
+        case 'sessions.cleared':
+          applySessionsCleared()
           break
         default:
           // 'hello' / 'server.shutdown' are status-only, handled via

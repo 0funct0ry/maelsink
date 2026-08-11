@@ -181,11 +181,12 @@ func (s *Store) Save(ctx context.Context, msg *store.Message) error {
 	_, err = tx.ExecContext(ctx, `INSERT INTO messages (
 		id, message_id, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, subject,
 		text_body, html_body, raw_source, size_bytes, raw_size_bytes,
-		has_attachments, parse_warning, parse_error, received_at, client_ip, client_helo, read, tags
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		has_attachments, parse_warning, parse_error, received_at, client_ip, client_helo, read, tags, session_id
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		msg.ID, headerValue(msg.Headers, "Message-Id"), fromAddr, nullableString(fromName), toJSON, ccJSON, bccJSON,
 		msg.Subject, msg.TextBody, msg.HTMLBody, msg.RawSource, msg.Size, int64(len(msg.RawSource)),
 		hasAttachments, msg.ParseWarning, msg.ParseError, msg.ReceivedAt.Format(timeLayout), "", "", msg.Read, tagsJSONStr,
+		nullableString(msg.SessionID),
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: inserting message: %w", err)
@@ -351,7 +352,7 @@ func (s *Store) Get(ctx context.Context, id string) (*store.Message, error) {
 
 	row := s.db.QueryRowContext(ctx, `SELECT
 		id, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, subject, text_body, html_body,
-		raw_source, size_bytes, parse_warning, parse_error, received_at, read, tags
+		raw_source, size_bytes, parse_warning, parse_error, received_at, read, tags, session_id
 	FROM messages WHERE id = ?`, full)
 
 	msg, err := scanMessage(row)
@@ -382,10 +383,11 @@ func scanMessage(row scannable) (*store.Message, error) {
 		size                                                               int64
 		parseWarning, read                                                 bool
 		parseError, receivedAt, tagsJSONStr                                string
+		sessionID                                                          sql.NullString
 	)
 
 	if err := row.Scan(&id, &fromAddr, &fromName, &toJSON, &ccJSON, &bccJSON, &subject, &textBody, &htmlBody,
-		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &tagsJSONStr); err != nil {
+		&rawSource, &size, &parseWarning, &parseError, &receivedAt, &read, &tagsJSONStr, &sessionID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, store.ErrNotFound
 		}
@@ -397,6 +399,7 @@ func scanMessage(row scannable) (*store.Message, error) {
 		return nil, err
 	}
 	msg.Read = read
+	msg.SessionID = sessionID.String
 	tags, err := parseTagsJSON(tagsJSONStr)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: decoding tags: %w", err)
@@ -738,7 +741,22 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	res, err := s.db.ExecContext(ctx, `DELETE FROM messages WHERE id = ?`, full)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	// A session's message_id (M8.4) is a foreign key into messages; clear
+	// it first so deleting the message doesn't violate that FK. The
+	// session record + transcript are independently retained (they don't
+	// cascade with the message they produced), so this just drops the
+	// cross-link rather than the session itself.
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET message_id = NULL WHERE message_id = ?`, full); err != nil {
+		return fmt.Errorf("sqlite: clearing session message_id: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE id = ?`, full)
 	if err != nil {
 		return fmt.Errorf("sqlite: deleting message: %w", err)
 	}
@@ -748,6 +766,10 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	}
 	if n == 0 {
 		return store.ErrNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: commit: %w", err)
 	}
 
 	for _, p := range diskPaths {
@@ -868,8 +890,25 @@ func (s *Store) Clear(ctx context.Context) error {
 		return err
 	}
 
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM messages`); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	// See Delete's identical comment: sessions.message_id (M8.4) is a
+	// foreign key into messages, so it must be cleared before the messages
+	// themselves are deleted. Sessions/transcripts are retained.
+	if _, err := tx.ExecContext(ctx, `UPDATE sessions SET message_id = NULL WHERE message_id IS NOT NULL`); err != nil {
+		return fmt.Errorf("sqlite: clearing session message_ids: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM messages`); err != nil {
 		return fmt.Errorf("sqlite: clearing messages: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: commit: %w", err)
 	}
 
 	for _, p := range diskPaths {
@@ -1249,4 +1288,364 @@ func (s *Store) DeleteTagWithMessages(ctx context.Context, name string) error {
 // Ping verifies the underlying database connection is reachable.
 func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
+}
+
+// resolveSessionID resolves id to a full stored session ID, following the
+// exact same exact-match-then-prefix-scan contract as resolveID (see its
+// doc comment) against the sessions table.
+func (s *Store) resolveSessionID(ctx context.Context, id string) (string, error) {
+	if len(id) >= store.IDLength {
+		var full string
+		err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions WHERE id = ?`, id).Scan(&full)
+		if err == sql.ErrNoRows {
+			return "", store.ErrNotFound
+		}
+		if err != nil {
+			return "", fmt.Errorf("sqlite: resolving session id: %w", err)
+		}
+		return full, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM sessions WHERE id LIKE ? || '%' LIMIT 2`, id)
+	if err != nil {
+		return "", fmt.Errorf("sqlite: resolving session id prefix: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []string
+	for rows.Next() {
+		var full string
+		if err := rows.Scan(&full); err != nil {
+			return "", fmt.Errorf("sqlite: scanning session id prefix match: %w", err)
+		}
+		matches = append(matches, full)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+
+	switch len(matches) {
+	case 0:
+		return "", store.ErrNotFound
+	case 1:
+		return matches[0], nil
+	default:
+		return "", store.ErrAmbiguousID
+	}
+}
+
+// CreateSession persists a finished session (header row + transcript rows)
+// in a single transaction. See store.MessageStore.CreateSession.
+func (s *Store) CreateSession(ctx context.Context, sess *store.Session) error {
+	if sess.ID == "" {
+		sess.ID = store.NewID()
+	}
+
+	var endedAt any
+	if sess.EndedAt != nil {
+		endedAt = sess.EndedAt.Format(timeLayout)
+	}
+	var messageID any
+	if sess.MessageID != nil {
+		messageID = *sess.MessageID
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	// handleConn calls CreateSession twice per connection: once up front
+	// (a minimal row, so a message saved mid-session has a valid
+	// session_id foreign key target) and once more with the finished
+	// record. An UPSERT (rather than the message table's delete-then-
+	// reinsert pattern) is required here because, by the second call, a
+	// message may already reference this session's id — deleting the row
+	// first would violate that FK.
+	_, err = tx.ExecContext(ctx, `INSERT INTO sessions (
+		id, client_ip, client_helo, started_at, ended_at, status, message_id
+	) VALUES (?,?,?,?,?,?,?)
+	ON CONFLICT(id) DO UPDATE SET
+		client_ip = excluded.client_ip, client_helo = excluded.client_helo,
+		started_at = excluded.started_at, ended_at = excluded.ended_at,
+		status = excluded.status, message_id = excluded.message_id`,
+		sess.ID, nullableString(sess.ClientIP), nullableString(sess.ClientHELO),
+		sess.StartedAt.Format(timeLayout), endedAt, sess.Status, messageID,
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite: upserting session: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM session_lines WHERE session_id = ?`, sess.ID); err != nil {
+		return fmt.Errorf("sqlite: clearing previous session lines: %w", err)
+	}
+
+	for _, line := range sess.Transcript {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO session_lines (session_id, direction, line, position) VALUES (?,?,?,?)`,
+			sess.ID, string(line.Direction), line.Line, line.Position,
+		); err != nil {
+			return fmt.Errorf("sqlite: inserting session line: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: commit: %w", err)
+	}
+	return nil
+}
+
+// AppendSessionLine persists a single transcript line for an
+// already-created session (M8.4a) — a single-row insert, cheap enough to
+// call on every wire line so a still-open session's transcript is visible
+// via GetSession, not just after CreateSession's final write at connection
+// close. Requires the session's row to already exist (handleConn always
+// creates it before the read loop starts, precisely for this).
+func (s *Store) AppendSessionLine(ctx context.Context, sessionID string, line store.TranscriptLine) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO session_lines (session_id, direction, line, position) VALUES (?,?,?,?)`,
+		sessionID, string(line.Direction), line.Line, line.Position,
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite: appending session line: %w", err)
+	}
+	return nil
+}
+
+// GetSession returns the session with the given ID or unambiguous ID
+// prefix, including its ordered transcript, or
+// store.ErrNotFound/store.ErrAmbiguousID.
+func (s *Store) GetSession(ctx context.Context, id string) (*store.Session, error) {
+	full, err := s.resolveSessionID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		clientIP, clientHELO sql.NullString
+		startedAt            string
+		endedAt              sql.NullString
+		status               string
+		messageID            sql.NullString
+	)
+	row := s.db.QueryRowContext(ctx, `SELECT client_ip, client_helo, started_at, ended_at, status, message_id
+		FROM sessions WHERE id = ?`, full)
+	if err := row.Scan(&clientIP, &clientHELO, &startedAt, &endedAt, &status, &messageID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, store.ErrNotFound
+		}
+		return nil, fmt.Errorf("sqlite: scanning session: %w", err)
+	}
+
+	sess, err := sessionFromScannedFields(full, clientIP, clientHELO, startedAt, endedAt, status, messageID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `SELECT direction, line, position FROM session_lines
+		WHERE session_id = ? ORDER BY position ASC`, full)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: loading session lines: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var direction, line string
+		var position int
+		if err := rows.Scan(&direction, &line, &position); err != nil {
+			return nil, fmt.Errorf("sqlite: scanning session line: %w", err)
+		}
+		sess.Transcript = append(sess.Transcript, store.TranscriptLine{
+			Direction: direction[0],
+			Line:      line,
+			Position:  position,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return sess, nil
+}
+
+func sessionFromScannedFields(id string, clientIP, clientHELO sql.NullString, startedAt string, endedAt sql.NullString, status string, messageID sql.NullString) (*store.Session, error) {
+	st, err := time.Parse(timeLayout, startedAt)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: parsing started_at: %w", err)
+	}
+	sess := &store.Session{
+		ID:         id,
+		ClientIP:   clientIP.String,
+		ClientHELO: clientHELO.String,
+		StartedAt:  st,
+		Status:     status,
+	}
+	if endedAt.Valid {
+		et, err := time.Parse(timeLayout, endedAt.String)
+		if err != nil {
+			return nil, fmt.Errorf("sqlite: parsing ended_at: %w", err)
+		}
+		sess.EndedAt = &et
+	}
+	if messageID.Valid {
+		mid := messageID.String
+		sess.MessageID = &mid
+	}
+	return sess, nil
+}
+
+// DeleteSession removes the session (and, via ON DELETE CASCADE, its
+// transcript) with the given full ID or unambiguous ID prefix, or
+// store.ErrNotFound/store.ErrAmbiguousID.
+func (s *Store) DeleteSession(ctx context.Context, id string) error {
+	full, err := s.resolveSessionID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	// messages.session_id is a foreign key into sessions; clear it first
+	// so deleting the session doesn't violate that FK (mirrors Delete's
+	// identical fix for the reverse direction). The message itself is
+	// untouched — only the cross-link is dropped.
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET session_id = NULL WHERE session_id = ?`, full); err != nil {
+		return fmt.Errorf("sqlite: clearing message session_id: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, full)
+	if err != nil {
+		return fmt.Errorf("sqlite: deleting session: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("sqlite: deleting session: %w", err)
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: commit: %w", err)
+	}
+	return nil
+}
+
+// ClearSessions removes every stored session (and, via ON DELETE CASCADE,
+// every session's transcript). Every message's session_id cross-link is
+// cleared first; the messages themselves are untouched.
+func (s *Store) ClearSessions(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("sqlite: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET session_id = NULL WHERE session_id IS NOT NULL`); err != nil {
+		return fmt.Errorf("sqlite: clearing message session_ids: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions`); err != nil {
+		return fmt.Errorf("sqlite: clearing sessions: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("sqlite: commit: %w", err)
+	}
+	return nil
+}
+
+// ListSessions returns session summaries matching filter (newest-started
+// first by default), paginated, plus the total count of matches ignoring
+// pagination.
+func (s *Store) ListSessions(ctx context.Context, filter store.SessionListFilter) ([]*store.SessionSummary, int, error) {
+	var (
+		where []string
+		args  []any
+	)
+
+	if filter.Status != "" {
+		where = append(where, `status = ?`)
+		args = append(args, filter.Status)
+	}
+	if filter.ClientIP != "" {
+		where = append(where, `client_ip = ?`)
+		args = append(args, filter.ClientIP)
+	}
+	if !filter.Since.IsZero() {
+		where = append(where, `started_at >= ?`)
+		args = append(args, filter.Since.UTC().Format(timeLayout))
+	}
+	if !filter.Until.IsZero() {
+		where = append(where, `started_at <= ?`)
+		args = append(args, filter.Until.UTC().Format(timeLayout))
+	}
+
+	whereClause := ""
+	if len(where) > 0 {
+		whereClause = ` WHERE ` + strings.Join(where, " AND ")
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions`+whereClause, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("sqlite: counting sessions: %w", err)
+	}
+
+	order := `started_at DESC`
+	if filter.Sort == store.SortStartedAtAsc {
+		order = `started_at ASC`
+	}
+
+	query := `SELECT id, client_ip, client_helo, started_at, ended_at, status, message_id
+		FROM sessions` + whereClause + ` ORDER BY ` + order
+
+	listArgs := append([]any{}, args...)
+	if filter.Limit > 0 {
+		query += ` LIMIT ?`
+		listArgs = append(listArgs, filter.Limit)
+		if filter.Offset > 0 {
+			query += ` OFFSET ?`
+			listArgs = append(listArgs, filter.Offset)
+		}
+	} else if filter.Offset > 0 {
+		query += ` LIMIT -1 OFFSET ?`
+		listArgs = append(listArgs, filter.Offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, listArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("sqlite: listing sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*store.SessionSummary
+	for rows.Next() {
+		var (
+			id, status           string
+			clientIP, clientHELO sql.NullString
+			startedAt            string
+			endedAt, messageID   sql.NullString
+		)
+		if err := rows.Scan(&id, &clientIP, &clientHELO, &startedAt, &endedAt, &status, &messageID); err != nil {
+			return nil, 0, fmt.Errorf("sqlite: scanning session: %w", err)
+		}
+		sess, err := sessionFromScannedFields(id, clientIP, clientHELO, startedAt, endedAt, status, messageID)
+		if err != nil {
+			return nil, 0, err
+		}
+		summary := store.NewSessionSummary(sess)
+		out = append(out, &summary)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if out == nil {
+		out = []*store.SessionSummary{}
+	}
+
+	return out, total, nil
 }

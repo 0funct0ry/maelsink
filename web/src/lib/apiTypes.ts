@@ -41,6 +41,10 @@ export interface MessageDetail extends MessageSummary {
   html_body: string
   attachments: AttachmentInfo[]
   raw_size_bytes: number
+  /** The SMTP session that produced this message (M8.4), for the Message
+   * Detail -> Session Detail cross-link. Absent for messages saved outside
+   * a tracked SMTP session. */
+  session_id?: string
 }
 
 export interface ListResponse {
@@ -117,4 +121,45 @@ export interface ListMessagesParams {
   read?: boolean
   has_attachments?: boolean
   parse_warning?: boolean
+}
+
+// SMTP session logging (M8.4). Mirrors internal/api/handlers.go's
+// sessionSummaryJSON/sessionDetailJSON.
+export interface SessionSummary {
+  id: string
+  client_ip: string
+  client_helo: string
+  started_at: string
+  ended_at: string | null
+  // 'completed' | 'rejected' | 'aborted' | 'timeout' once finished; '' means
+  // still in progress (a session.started row not yet completed).
+  status: string
+  message_id: string | null
+}
+
+export interface TranscriptLine {
+  direction: 'C' | 'S'
+  line: string
+  position: number
+}
+
+export interface SessionDetail extends SessionSummary {
+  transcript: TranscriptLine[]
+}
+
+export interface ListSessionsParams {
+  status?: string
+  client_ip?: string
+  limit?: number
+  offset?: number
+  since?: string
+  until?: string
+  sort?: 'started_at_desc' | 'started_at_asc'
+}
+
+export interface ListSessionsResponse {
+  sessions: SessionSummary[]
+  total: number
+  limit: number
+  offset: number
 }

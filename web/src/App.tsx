@@ -4,6 +4,8 @@ import InboxScreen from './components/inbox/InboxScreen'
 import MessageDetailScreen from './components/message/MessageDetailScreen'
 import SettingsScreen from './components/settings/SettingsScreen'
 import TagManagementScreen from './components/tags/TagManagementScreen'
+import SessionsScreen from './components/sessions/SessionsScreen'
+import SessionDetailScreen from './components/sessions/SessionDetailScreen'
 import ApiKeyModal from './components/common/ApiKeyModal'
 
 // Routing/providers only — no feature markup here (STYLE_GUIDE.md §2.3).
@@ -17,6 +19,8 @@ export default function App() {
         <Route path="/messages/:id" element={<MessageDetailScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="/tags" element={<TagManagementScreen />} />
+        <Route path="/sessions" element={<SessionsScreen />} />
+        <Route path="/sessions/:id" element={<SessionDetailScreen />} />
       </Routes>
       <ApiKeyModal />
     </AppShell>

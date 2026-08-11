@@ -164,7 +164,36 @@ func (s *Server) handleConn(conn net.Conn) {
 	}()
 
 	sess := newSession(s, conn)
+
+	// Persist a minimal row up front, before the read loop starts: DATA may
+	// save a message referencing this session's ID via its session_id
+	// foreign key (SQLite enforces that at insert time), so the row must
+	// exist before any message possibly can. handleConn's final
+	// CreateSession call below overwrites it with the finished record
+	// (transcript, status, message link) once run() returns.
+	if err := s.store.CreateSession(context.Background(), &store.Session{
+		ID: sess.ID, ClientIP: sess.ClientIP, ClientHELO: sess.ClientHELO, StartedAt: sess.StartedAt,
+	}); err != nil {
+		s.logger.Error("smtp: failed to save session", "err", err)
+	}
+	s.bus.Publish(events.SessionStarted(sess.ID, sess.ClientIP, sess.StartedAt.UTC().Format(time.RFC3339)))
+
 	sess.run()
+
+	sessRecord := &store.Session{
+		ID:         sess.ID,
+		ClientIP:   sess.ClientIP,
+		ClientHELO: sess.ClientHELO,
+		StartedAt:  sess.StartedAt,
+		EndedAt:    sess.EndedAt,
+		Status:     sess.Status,
+		MessageID:  sess.MessageID,
+		Transcript: sess.transcript,
+	}
+	if err := s.store.CreateSession(context.Background(), sessRecord); err != nil {
+		s.logger.Error("smtp: failed to save session", "err", err)
+	}
+	s.bus.Publish(events.SessionCompleted(sess.ID, sess.Status, sess.MessageID))
 }
 
 // deadlineReader enforces a read deadline before every Read call, so a

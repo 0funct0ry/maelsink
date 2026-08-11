@@ -58,6 +58,10 @@ type messageDetail struct {
 	HTMLBody     string              `json:"html_body"`
 	Attachments  []attachmentSummary `json:"attachments"`
 	RawSizeBytes int64               `json:"raw_size_bytes"`
+	// SessionID links to the SMTP session that produced this message
+	// (M8.4), for the Message Detail -> Session Detail cross-link. Omitted
+	// for messages saved outside a tracked SMTP session.
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // toSummary builds the summary JSON shape for msg.
@@ -91,6 +95,7 @@ func toDetail(msg *store.Message) messageDetail {
 		HTMLBody:       msg.HTMLBody,
 		Attachments:    attachments,
 		RawSizeBytes:   int64(len(msg.RawSource)),
+		SessionID:      msg.SessionID,
 	}
 }
 
@@ -622,4 +627,200 @@ func (h *handlers) health(c *gin.Context) {
 
 func (h *handlers) version(c *gin.Context) {
 	c.JSON(http.StatusOK, version.Get())
+}
+
+// sessionSummaryJSON is the Session (summary) shape from SPEC.md §5.1/§5.5
+// (M8.4) — no transcript, used by both GET /api/v1/sessions and the
+// session.started/session.completed WS event payloads.
+type sessionSummaryJSON struct {
+	ID         string  `json:"id"`
+	ClientIP   string  `json:"client_ip"`
+	ClientHELO string  `json:"client_helo"`
+	StartedAt  string  `json:"started_at"`
+	EndedAt    *string `json:"ended_at"`
+	Status     string  `json:"status"`
+	MessageID  *string `json:"message_id"`
+}
+
+// transcriptLineJSON is a single entry in sessionDetail.Transcript.
+type transcriptLineJSON struct {
+	Direction string `json:"direction"`
+	Line      string `json:"line"`
+	Position  int    `json:"position"`
+}
+
+type sessionDetailJSON struct {
+	sessionSummaryJSON
+	Transcript []transcriptLineJSON `json:"transcript"`
+}
+
+func toSessionSummary(sess *store.SessionSummary) sessionSummaryJSON {
+	var endedAt *string
+	if sess.EndedAt != nil {
+		s := sess.EndedAt.UTC().Format(time.RFC3339)
+		endedAt = &s
+	}
+	return sessionSummaryJSON{
+		ID:         sess.ID,
+		ClientIP:   sess.ClientIP,
+		ClientHELO: sess.ClientHELO,
+		StartedAt:  sess.StartedAt.UTC().Format(time.RFC3339),
+		EndedAt:    endedAt,
+		Status:     sess.Status,
+		MessageID:  sess.MessageID,
+	}
+}
+
+func toSessionDetail(sess *store.Session) sessionDetailJSON {
+	summary := toSessionSummary(&store.SessionSummary{
+		ID: sess.ID, ClientIP: sess.ClientIP, ClientHELO: sess.ClientHELO,
+		StartedAt: sess.StartedAt, EndedAt: sess.EndedAt, Status: sess.Status, MessageID: sess.MessageID,
+	})
+	lines := make([]transcriptLineJSON, len(sess.Transcript))
+	for i, l := range sess.Transcript {
+		lines[i] = transcriptLineJSON{Direction: string(l.Direction), Line: l.Line, Position: l.Position}
+	}
+	return sessionDetailJSON{sessionSummaryJSON: summary, Transcript: lines}
+}
+
+// listSessionsResponse wraps the summary array with pagination metadata,
+// mirroring listResponse.
+type listSessionsResponse struct {
+	Sessions []sessionSummaryJSON `json:"sessions"`
+	Total    int                  `json:"total"`
+	Limit    int                  `json:"limit"`
+	Offset   int                  `json:"offset"`
+}
+
+func parseSessionListFilter(c *gin.Context) (store.SessionListFilter, error) {
+	filter := store.SessionListFilter{
+		Status:   c.Query("status"),
+		ClientIP: c.Query("client_ip"),
+		Sort:     c.DefaultQuery("sort", store.SortStartedAtDesc),
+	}
+	if filter.Sort != store.SortStartedAtDesc && filter.Sort != store.SortStartedAtAsc {
+		return filter, errors.New("sort must be one of started_at_desc, started_at_asc")
+	}
+
+	filter.Limit = defaultLimit
+	if v := c.Query("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return filter, errors.New("limit must be a non-negative integer")
+		}
+		filter.Limit = n
+	}
+	if filter.Limit > maxLimit {
+		filter.Limit = maxLimit
+	}
+
+	if v := c.Query("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return filter, errors.New("offset must be a non-negative integer")
+		}
+		filter.Offset = n
+	}
+
+	if v := c.Query("since"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return filter, errors.New("since must be an RFC3339 timestamp")
+		}
+		filter.Since = t
+	}
+	if v := c.Query("until"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return filter, errors.New("until must be an RFC3339 timestamp")
+		}
+		filter.Until = t
+	}
+
+	return filter, nil
+}
+
+func (h *handlers) listSessions(c *gin.Context) {
+	filter, err := parseSessionListFilter(c)
+	if err != nil {
+		respondValidation(c, err.Error())
+		return
+	}
+
+	sessions, total, err := h.store.ListSessions(c.Request.Context(), filter)
+	if err != nil {
+		respondInternal(c, err.Error())
+		return
+	}
+
+	summaries := make([]sessionSummaryJSON, len(sessions))
+	for i, sess := range sessions {
+		summaries[i] = toSessionSummary(sess)
+	}
+
+	c.JSON(http.StatusOK, listSessionsResponse{Sessions: summaries, Total: total, Limit: filter.Limit, Offset: filter.Offset})
+}
+
+func (h *handlers) getSession(c *gin.Context) {
+	id := c.Param("id")
+	sess, err := h.store.GetSession(c.Request.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			respondSessionNotFound(c, id)
+		case errors.Is(err, store.ErrAmbiguousID):
+			respondSessionAmbiguousID(c, id)
+		default:
+			respondInternal(c, err.Error())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, toSessionDetail(sess))
+}
+
+func (h *handlers) deleteSession(c *gin.Context) {
+	id := c.Param("id")
+
+	// id may be an unambiguous prefix; resolve it to the full ID before
+	// publishing session.deleted, so WS clients matching on payload.id
+	// always see the canonical ID (mirrors deleteMessage).
+	sess, err := h.store.GetSession(c.Request.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			respondSessionNotFound(c, id)
+		case errors.Is(err, store.ErrAmbiguousID):
+			respondSessionAmbiguousID(c, id)
+		default:
+			respondInternal(c, err.Error())
+		}
+		return
+	}
+
+	if err := h.store.DeleteSession(c.Request.Context(), id); err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			respondSessionNotFound(c, id)
+		case errors.Is(err, store.ErrAmbiguousID):
+			respondSessionAmbiguousID(c, id)
+		default:
+			respondInternal(c, err.Error())
+		}
+		return
+	}
+	h.bus.Publish(events.SessionDeleted(sess.ID))
+	c.Status(http.StatusNoContent)
+}
+
+func (h *handlers) clearSessions(c *gin.Context) {
+	if c.Query("confirm") != "true" {
+		respondError(c, http.StatusBadRequest, "confirmation_required", "bulk delete requires ?confirm=true")
+		return
+	}
+	if err := h.store.ClearSessions(c.Request.Context()); err != nil {
+		respondInternal(c, err.Error())
+		return
+	}
+	h.bus.Publish(events.SessionsCleared())
+	c.Status(http.StatusNoContent)
 }

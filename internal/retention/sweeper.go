@@ -123,5 +123,51 @@ func (sw *Sweeper) sweepOnce(ctx context.Context) error {
 		sw.logger.Info("retention sweep deleted message", "msg_id", m.ID)
 	}
 
+	return sw.sweepSessionsOnce(ctx)
+}
+
+// sweepSessionsOnce enforces the same MaxMessages/MaxAgeHours limits (M8.4:
+// no separate session retention config) against stored sessions, oldest
+// started_at first. No event is published — sessions have no
+// session.deleted event/UI surface, unlike messages.
+func (sw *Sweeper) sweepSessionsOnce(ctx context.Context) error {
+	all, _, err := sw.store.ListSessions(ctx, store.SessionListFilter{})
+	if err != nil {
+		return err
+	}
+
+	oldest := make([]*store.SessionSummary, len(all))
+	for i, sess := range all {
+		oldest[len(all)-1-i] = sess
+	}
+
+	toDelete := map[string]struct{}{}
+
+	if sw.cfg.MaxAgeHours > 0 {
+		cutoff := sw.clock.Now().Add(-time.Duration(sw.cfg.MaxAgeHours) * time.Hour)
+		for _, sess := range oldest {
+			if sess.StartedAt.Before(cutoff) {
+				toDelete[sess.ID] = struct{}{}
+			}
+		}
+	}
+
+	if sw.cfg.MaxMessages > 0 && len(oldest) > sw.cfg.MaxMessages {
+		excess := len(oldest) - sw.cfg.MaxMessages
+		for _, sess := range oldest[:excess] {
+			toDelete[sess.ID] = struct{}{}
+		}
+	}
+
+	for _, sess := range oldest {
+		if _, ok := toDelete[sess.ID]; !ok {
+			continue
+		}
+		if err := sw.store.DeleteSession(ctx, sess.ID); err != nil && err != store.ErrNotFound {
+			return err
+		}
+		sw.logger.Info("retention sweep deleted session", "session_id", sess.ID)
+	}
+
 	return nil
 }

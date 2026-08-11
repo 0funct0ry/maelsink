@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, Tags, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, ListTree, Tags, Trash2 } from 'lucide-react'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useUIStore } from '../../stores/useUIStore'
 import { exportMessage } from '../../lib/apiClient'
@@ -185,6 +185,16 @@ export default function MessageDetailScreen() {
             <Tags className="h-3.5 w-3.5" aria-hidden="true" />
             Edit tags
           </button>
+          {message.session_id && (
+            <button
+              type="button"
+              onClick={() => navigate(`/sessions/${message.session_id}`)}
+              className="flex items-center gap-1.5 rounded-sm border border-border-soft bg-bg px-[9px] py-[5px] text-[12px] font-medium text-text-secondary transition-colors hover:border-border hover:bg-surface hover:text-text-primary"
+            >
+              <ListTree className="h-3.5 w-3.5" aria-hidden="true" />
+              View session
+            </button>
+          )}
         </div>
       </div>
 

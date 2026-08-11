@@ -3,8 +3,11 @@ import { fetchBlob, fetchJson, fetchText } from './fetchJson'
 import type {
   ListMessagesParams,
   ListResponse,
+  ListSessionsParams,
+  ListSessionsResponse,
   MessageDetail,
   MessageSummary,
+  SessionDetail,
   Stats,
   TagStats,
   Version,
@@ -105,4 +108,20 @@ export function deleteTagWithMessages(name: string): Promise<void> {
 
 export function getVersion(): Promise<Version> {
   return fetchJson<Version>('/api/v1/version')
+}
+
+export function listSessions(params: ListSessionsParams = {}): Promise<ListSessionsResponse> {
+  return fetchJson<ListSessionsResponse>('/api/v1/sessions', { query: { ...params } })
+}
+
+export function getSession(id: string): Promise<SessionDetail> {
+  return fetchJson<SessionDetail>(`/api/v1/sessions/${id}`)
+}
+
+export function deleteSession(id: string): Promise<void> {
+  return fetchJson<void>(`/api/v1/sessions/${id}`, { method: 'DELETE' })
+}
+
+export function clearSessions(): Promise<void> {
+  return fetchJson<void>('/api/v1/sessions', { method: 'DELETE', query: { confirm: 'true' } })
 }

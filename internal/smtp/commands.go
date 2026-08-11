@@ -47,6 +47,7 @@ func (sess *session) dispatch(verb, arg string) (quit bool) {
 
 func handleHELO(sess *session, arg string) bool {
 	sess.heloDomain = arg
+	sess.ClientHELO = arg
 	sess.state = stateHelo
 	sess.resetTransaction()
 	sess.reply(codeOK, fmt.Sprintf(msgHeloFmt, sess.srv.cfg.Domain, arg))
@@ -55,6 +56,7 @@ func handleHELO(sess *session, arg string) bool {
 
 func handleEHLO(sess *session, arg string) bool {
 	sess.heloDomain = arg
+	sess.ClientHELO = arg
 	sess.state = stateHelo
 	sess.resetTransaction()
 
@@ -146,11 +148,13 @@ func handleDATA(sess *session, _ string) bool {
 	dr := sess.tp.DotReader()
 	limited := io.LimitReader(dr, sess.srv.cfg.MaxMessageSize+1)
 	raw, err := io.ReadAll(limited)
+	oversized := int64(len(raw)) > sess.srv.cfg.MaxMessageSize
+	sess.appendDataLines(raw, err == nil && !oversized)
 	if err != nil {
 		sess.reply(codeLocalError, msgLocalError)
 		return true
 	}
-	if int64(len(raw)) > sess.srv.cfg.MaxMessageSize {
+	if oversized {
 		// Simplification for a local dev tool: rather than draining and
 		// resyncing an oversized dot-terminated payload, close the
 		// connection after rejecting it.
@@ -163,6 +167,7 @@ func handleDATA(sess *session, _ string) bool {
 	msg.EnvelopeFrom = sess.envFrom
 	msg.EnvelopeTo = sess.envTo
 	msg.Bcc = deriveBcc(msg.To, msg.Cc, sess.envTo)
+	msg.SessionID = sess.ID
 
 	ctx := context.Background()
 	if err := sess.srv.store.Save(ctx, msg); err != nil {
@@ -177,6 +182,7 @@ func handleDATA(sess *session, _ string) bool {
 	// realtime message.created event carries an accurate attachment count
 	// instead of the zero value, matching what a page refresh would show.
 	msg.AttachmentCount = len(msg.Attachments) + len(msg.InlineImages)
+	sess.MessageID = &msg.ID
 	sess.srv.bus.Publish(events.MessageCreated(store.NewMessageSummary(msg)))
 
 	sess.srv.logger.Info("smtp: message accepted",

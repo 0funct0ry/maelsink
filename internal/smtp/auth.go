@@ -43,6 +43,13 @@ func handleAUTH(sess *session, arg string) bool {
 		sess.reply(codeSyntaxError, msgAuthUnsupportedMech)
 		return false
 	}
+
+	// Mark the exchange in progress so readLine redacts any continuation
+	// line fn reads on our behalf (these bypass run()'s main loop
+	// entirely), and always clear it once the exchange concludes —
+	// success, failure, or a read error that ends the connection.
+	sess.authMechanism = mechanism
+	defer func() { sess.authMechanism = "" }()
 	return fn(sess, initial)
 }
 
@@ -52,7 +59,7 @@ func handleAuthPlain(sess *session, initial string) bool {
 	blob := initial
 	if blob == "" {
 		sess.reply(codeAuthContinue, "")
-		line, err := sess.tp.ReadLine()
+		line, err := sess.readLine()
 		if err != nil {
 			return true
 		}
@@ -109,7 +116,7 @@ func (sess *session) readAuthPrompt(prompt, initial string) (value string, ok bo
 	blob := initial
 	if blob == "" {
 		sess.reply(codeAuthContinue, base64.StdEncoding.EncodeToString([]byte(prompt)))
-		line, err := sess.tp.ReadLine()
+		line, err := sess.readLine()
 		if err != nil {
 			return "", false
 		}

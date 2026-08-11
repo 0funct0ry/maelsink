@@ -121,6 +121,68 @@ func TestSweepOnce_UnlimitedWhenZero(t *testing.T) {
 	}
 }
 
+func seedSessions(t *testing.T, s store.MessageStore, ages []time.Duration, now time.Time) []string {
+	t.Helper()
+	var ids []string
+	for _, age := range ages {
+		sess := &store.Session{StartedAt: now.Add(-age), Status: "completed"}
+		if err := s.CreateSession(context.Background(), sess); err != nil {
+			t.Fatalf("seeding session: %v", err)
+		}
+		ids = append(ids, sess.ID)
+	}
+	return ids
+}
+
+// TestSweepOnce_SessionsMaxAgeHours verifies the sweeper also enforces
+// MaxAgeHours against stored sessions (M8.4), reusing the same config as
+// messages rather than a separate session retention setting.
+func TestSweepOnce_SessionsMaxAgeHours(t *testing.T) {
+	s := store.NewMemoryStore()
+	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+	ids := seedSessions(t, s, []time.Duration{10 * time.Hour, 5 * time.Hour, 1 * time.Hour}, now)
+
+	sw := New(s, events.NewBus(), Config{MaxAgeHours: 6}, fakeClock{now: now}, nil)
+	if err := sw.sweepOnce(context.Background()); err != nil {
+		t.Fatalf("sweepOnce: %v", err)
+	}
+
+	if _, err := s.GetSession(context.Background(), ids[0]); err != store.ErrNotFound {
+		t.Fatalf("expected oldest (10h) session deleted, got %v", err)
+	}
+	if _, err := s.GetSession(context.Background(), ids[1]); err != nil {
+		t.Fatalf("expected 5h session to survive: %v", err)
+	}
+	if _, err := s.GetSession(context.Background(), ids[2]); err != nil {
+		t.Fatalf("expected 1h session to survive: %v", err)
+	}
+}
+
+// TestSweepOnce_SessionsMaxMessages verifies the sweeper enforces
+// MaxMessages against sessions too (oldest-first), independent of how many
+// messages are currently stored.
+func TestSweepOnce_SessionsMaxMessages(t *testing.T) {
+	s := store.NewMemoryStore()
+	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+	ids := seedSessions(t, s, []time.Duration{3 * time.Hour, 2 * time.Hour, 1 * time.Hour}, now)
+
+	sw := New(s, events.NewBus(), Config{MaxMessages: 2}, fakeClock{now: now}, nil)
+	if err := sw.sweepOnce(context.Background()); err != nil {
+		t.Fatalf("sweepOnce: %v", err)
+	}
+
+	if _, err := s.GetSession(context.Background(), ids[0]); err != store.ErrNotFound {
+		t.Fatalf("expected oldest session deleted, got %v", err)
+	}
+	_, total, err := s.ListSessions(context.Background(), store.SessionListFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("total sessions = %d, want 2", total)
+	}
+}
+
 func TestRun_StopsOnContextCancel(t *testing.T) {
 	s := store.NewMemoryStore()
 	sw := New(s, events.NewBus(), Config{Interval: time.Millisecond}, RealClock{}, nil)

@@ -26,6 +26,14 @@ func respondAmbiguousID(c *gin.Context, id string) {
 	respondError(c, 400, "ambiguous_id", "id prefix "+id+" matches more than one message")
 }
 
+func respondSessionNotFound(c *gin.Context, id string) {
+	respondError(c, 404, "session_not_found", "no session with id "+id)
+}
+
+func respondSessionAmbiguousID(c *gin.Context, id string) {
+	respondError(c, 400, "ambiguous_id", "id prefix "+id+" matches more than one session")
+}
+
 func respondValidation(c *gin.Context, message string) {
 	respondError(c, 400, "validation_error", message)
 }

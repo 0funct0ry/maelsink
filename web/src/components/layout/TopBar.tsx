@@ -1,4 +1,4 @@
-import { Mail, Settings, Tag, Trash2 } from 'lucide-react'
+import { List, Mail, Settings, Tag, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getInfo } from '../../lib/uiApiClient'
@@ -80,6 +80,11 @@ export default function TopBar() {
           aria-label="Clear all messages"
           variant="danger"
           onClick={handleClearAll}
+        />
+        <IconButton
+          icon={<List className="h-[17px] w-[17px]" aria-hidden="true" />}
+          aria-label="View SMTP sessions"
+          onClick={() => navigate('/sessions')}
         />
         <IconButton
           icon={<Tag className="h-[17px] w-[17px]" aria-hidden="true" />}

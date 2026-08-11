@@ -18,6 +18,11 @@ const (
 	TypeTagRecolored       Type = "tag.recolored"
 	TypeTagCreated         Type = "tag.created"
 	TypeTagDeleted         Type = "tag.deleted"
+	TypeSessionStarted     Type = "session.started"
+	TypeSessionCompleted   Type = "session.completed"
+	TypeSessionLine        Type = "session.line"
+	TypeSessionDeleted     Type = "session.deleted"
+	TypeSessionsCleared    Type = "sessions.cleared"
 )
 
 // Event is the bus-internal envelope. Payload is whatever the caller wants
@@ -118,4 +123,64 @@ func TagCreated(name, color string) Event {
 // per removed message).
 func TagDeleted(name string) Event {
 	return Event{Type: TypeTagDeleted, Payload: tagDeletedPayload{Name: name}}
+}
+
+// sessionStartedPayload is the {"id", "client_ip", "started_at"} shape
+// (SPEC.md §5.5) for session.started.
+type sessionStartedPayload struct {
+	ID        string `json:"id"`
+	ClientIP  string `json:"client_ip"`
+	StartedAt string `json:"started_at"`
+}
+
+// sessionCompletedPayload is the {"id", "status", "message_id"} shape
+// (SPEC.md §5.5) for session.completed. MessageID serializes as JSON null
+// (not an omitted key) when no message was stored, so clients can always
+// rely on the key being present.
+type sessionCompletedPayload struct {
+	ID        string  `json:"id"`
+	Status    string  `json:"status"`
+	MessageID *string `json:"message_id"`
+}
+
+// SessionStarted builds a session.started event, fired immediately after an
+// SMTP connection is accepted (M8.4), before its read loop starts.
+func SessionStarted(id, clientIP, startedAt string) Event {
+	return Event{Type: TypeSessionStarted, Payload: sessionStartedPayload{ID: id, ClientIP: clientIP, StartedAt: startedAt}}
+}
+
+// SessionCompleted builds a session.completed event, fired once a session's
+// connection closes and its transcript has been persisted (M8.4).
+func SessionCompleted(id, status string, messageID *string) Event {
+	return Event{Type: TypeSessionCompleted, Payload: sessionCompletedPayload{ID: id, Status: status, MessageID: messageID}}
+}
+
+// sessionLinePayload is the {"session_id", "direction", "line", "position"}
+// shape for session.line (M8.4a), fired for every transcript line the
+// instant it's captured, so a session's transcript can be live-tailed
+// before the connection closes.
+type sessionLinePayload struct {
+	SessionID string `json:"session_id"`
+	Direction string `json:"direction"`
+	Line      string `json:"line"`
+	Position  int    `json:"position"`
+}
+
+// SessionLine builds a session.line event for one transcript entry.
+// direction is 'C' or 'S', matching store.TranscriptLine.Direction.
+func SessionLine(sessionID string, direction byte, line string, position int) Event {
+	return Event{Type: TypeSessionLine, Payload: sessionLinePayload{
+		SessionID: sessionID, Direction: string(direction), Line: line, Position: position,
+	}}
+}
+
+// SessionDeleted builds a session.deleted event for the given (full)
+// session ID.
+func SessionDeleted(id string) Event {
+	return Event{Type: TypeSessionDeleted, Payload: deletedPayload{ID: id}}
+}
+
+// SessionsCleared builds a sessions.cleared event with an empty payload.
+func SessionsCleared() Event {
+	return Event{Type: TypeSessionsCleared, Payload: struct{}{}}
 }

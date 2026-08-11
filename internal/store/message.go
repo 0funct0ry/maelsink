@@ -98,4 +98,9 @@ type Message struct {
 	// Apps under test set X-Tag to group related test emails without
 	// relying on subject-line pattern matching (see MOCKUP.html).
 	Tags []string
+
+	// SessionID is the SMTP session that produced this message (M8.4),
+	// for the Message Detail -> Session Detail cross-link. Empty for
+	// messages saved outside a tracked SMTP session (e.g. tests).
+	SessionID string
 }

@@ -189,4 +189,31 @@ type MessageStore interface {
 	DeleteTagWithMessages(ctx context.Context, name string) error
 	// Ping verifies the underlying storage is reachable, for health checks.
 	Ping(ctx context.Context) error
+
+	// CreateSession persists a finished session (header row + its
+	// transcript, written once at connection close), per M8.4.
+	CreateSession(ctx context.Context, sess *Session) error
+	// AppendSessionLine persists a single transcript line for an
+	// already-created (possibly still in-progress) session, per M8.4a —
+	// so a session's transcript is visible via GetSession/the API before
+	// the connection closes, not just after CreateSession's final write.
+	AppendSessionLine(ctx context.Context, sessionID string, line TranscriptLine) error
+	// GetSession accepts either a full session ID or an unambiguous prefix
+	// of one (per IDLength/Get), returning the full record including its
+	// transcript. Errors follow Get's ErrNotFound/ErrAmbiguousID contract.
+	GetSession(ctx context.Context, id string) (*Session, error)
+	// ListSessions returns the page of session summaries selected by
+	// filter (newest-started first by default) and the total number of
+	// sessions matching (ignoring pagination).
+	ListSessions(ctx context.Context, filter SessionListFilter) ([]*SessionSummary, int, error)
+	// DeleteSession accepts a full session ID or unambiguous prefix (per
+	// Get) and removes the session (and its transcript). Any message
+	// cross-linking to it via SessionID has that link cleared, not the
+	// message itself. Used by the retention sweeper and by
+	// DELETE /api/v1/sessions/{id}.
+	DeleteSession(ctx context.Context, id string) error
+	// ClearSessions removes every stored session (and every session's
+	// transcript). Every message's SessionID cross-link is cleared, not
+	// the messages themselves. Used by DELETE /api/v1/sessions.
+	ClearSessions(ctx context.Context) error
 }
