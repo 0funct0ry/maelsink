@@ -269,9 +269,17 @@ func evalInner(ctx context.Context, s *Session, reg *Registry, rawLine string) e
 		return err
 	}
 
-	templated, err := ExpandTemplate(s.Tmpl, s.TemplateData(), expanded, s.Cfg.TemplateEnabled)
-	if err != nil {
-		return err
+	// alias/abbr definitions must keep any {{...}} template placeholders in
+	// their stored value literal, so the placeholder is re-rendered fresh on
+	// every later invocation of the alias/abbr rather than being baked into
+	// a single rendered value at definition time (SPEC.md §7.5.4).
+	definingFirst, _ := splitFirstWord(strings.TrimLeft(expanded, " \t"))
+	templated := expanded
+	if definingFirst != "alias" && definingFirst != "abbr" {
+		templated, err = ExpandTemplate(s.Tmpl, s.TemplateData(), expanded, s.Cfg.TemplateEnabled)
+		if err != nil {
+			return err
+		}
 	}
 
 	tokens, err := Tokenize(templated)
