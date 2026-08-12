@@ -13,10 +13,16 @@ interface MessageRowActionsProps {
   onPreview: () => void
 }
 
-interface MenuPosition {
-  top: number
-  right: number
-}
+// Anchored from the top (opens downward, the common case) or from the
+// bottom (opens upward, for triggers near the bottom of the viewport) —
+// never both, so the menu always grows away from the nearest edge instead
+// of getting clipped.
+type MenuPosition = { right: number } & ({ top: number; bottom?: undefined } | { bottom: number; top?: undefined })
+
+// Rough height of the 5-item menu (padding + 5 * ~36px row) — good enough
+// for an open/upward-vs-downward decision without needing to measure the
+// real (not-yet-mounted) menu element first.
+const ESTIMATED_MENU_HEIGHT = 200
 
 // Per-row action menu (SPEC.md §8.1 requires per-row delete; the mockup has
 // no equivalent, so this is a deliberate addition beyond it) replacing the
@@ -58,7 +64,11 @@ export default function MessageRowActions({ message, onPreview }: MessageRowActi
   function handleToggle() {
     if (!open && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
-      setPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+      const right = window.innerWidth - rect.right
+      const fitsBelow = rect.bottom + 4 + ESTIMATED_MENU_HEIGHT <= window.innerHeight
+      setPosition(
+        fitsBelow ? { top: rect.bottom + 4, right } : { bottom: window.innerHeight - rect.top + 4, right },
+      )
     }
     setOpen((v) => !v)
   }
@@ -132,7 +142,11 @@ export default function MessageRowActions({ message, onPreview }: MessageRowActi
             ref={menuRef}
             role="menu"
             onClick={(e) => e.stopPropagation()}
-            style={{ top: position.top, right: position.right }}
+            style={
+              position.top !== undefined
+                ? { top: position.top, right: position.right }
+                : { bottom: position.bottom, right: position.right }
+            }
             className="fixed z-50 w-44 rounded-md border border-border bg-bg py-1 shadow-lg"
           >
             <button

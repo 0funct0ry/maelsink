@@ -83,4 +83,25 @@ describe('MessageRowActions', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByText('Preview')).not.toBeInTheDocument()
   })
+
+  it('opens upward instead of downward when the trigger is near the bottom of the viewport', () => {
+    render(<MessageRowActions message={makeMessage()} onPreview={vi.fn()} />)
+    const trigger = screen.getByLabelText('Message actions')
+    // handleToggle reads the rect off triggerRef (the wrapping <span>), not
+    // the button itself — simulate a trigger sitting near the bottom of a
+    // short viewport, where the menu wouldn't fit if it opened downward.
+    // Two levels up: the button's direct parent is IconButton's own
+    // tooltip-wrapper span, and its parent is MessageRowActions' own
+    // triggerRef span that handleToggle actually measures.
+    const triggerSpan = trigger.parentElement?.parentElement as HTMLElement
+    triggerSpan.getBoundingClientRect = () =>
+      ({ bottom: 580, top: 550, right: 400, left: 370, width: 30, height: 30 }) as DOMRect
+    Object.defineProperty(window, 'innerHeight', { value: 600, configurable: true })
+
+    fireEvent.click(trigger)
+
+    const menu = screen.getByRole('menu')
+    expect(menu.style.bottom).not.toBe('')
+    expect(menu.style.top).toBe('')
+  })
 })

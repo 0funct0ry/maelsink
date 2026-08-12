@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, MailX, Palette, Pencil, Trash2, X } from 'lucide-react'
 import { paletteByToken } from '../../lib/tagColor'
 import { useUIStore } from '../../stores/useUIStore'
 import ColorSwatchPicker from './ColorSwatchPicker'
 import type { TagStats } from '../../lib/apiTypes'
+
+// Anchored from the top (opens downward) or bottom (opens upward, for rows
+// near the bottom of the viewport) — never both.
+type PickerPosition = { right: number } & ({ top: number; bottom?: undefined } | { bottom: number; top?: undefined })
+
+// Rough height of the swatch grid (2 rows of 24px swatches + padding) —
+// good enough for an open/upward-vs-downward decision.
+const ESTIMATED_PICKER_HEIGHT = 90
 
 interface TagRowProps {
   tag: TagStats
@@ -28,20 +37,46 @@ export default function TagRow({ tag, existingNames, onRename, onRecolor, onDele
   const [editing, setEditing] = useState(false)
   const [nameValue, setNameValue] = useState(tag.name)
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
+  const [pickerPosition, setPickerPosition] = useState<PickerPosition | null>(null)
   const colorPickerRef = useRef<HTMLDivElement>(null)
+  const colorTriggerRef = useRef<HTMLButtonElement>(null)
 
   const color = paletteByToken(tag.color)
 
   useEffect(() => {
     if (!colorPickerOpen) return
     function handlePointerDown(event: PointerEvent) {
-      if (colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
-        setColorPickerOpen(false)
-      }
+      const target = event.target as Node
+      if (colorPickerRef.current?.contains(target) || colorTriggerRef.current?.contains(target)) return
+      setColorPickerOpen(false)
+    }
+    function handleReposition() {
+      setColorPickerOpen(false)
     }
     document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
+    // Position is computed once at open time (below); if the table (or the
+    // page) scrolls or resizes while open, close rather than show a
+    // stale/misaligned picker.
+    window.addEventListener('scroll', handleReposition, true)
+    window.addEventListener('resize', handleReposition)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('scroll', handleReposition, true)
+      window.removeEventListener('resize', handleReposition)
+    }
   }, [colorPickerOpen])
+
+  function toggleColorPicker() {
+    if (!colorPickerOpen && colorTriggerRef.current) {
+      const rect = colorTriggerRef.current.getBoundingClientRect()
+      const right = window.innerWidth - rect.right
+      const fitsBelow = rect.bottom + 4 + ESTIMATED_PICKER_HEIGHT <= window.innerHeight
+      setPickerPosition(
+        fitsBelow ? { top: rect.bottom + 4, right } : { bottom: window.innerHeight - rect.top + 4, right },
+      )
+    }
+    setColorPickerOpen((v) => !v)
+  }
 
   function startEdit() {
     setNameValue(tag.name)
@@ -136,27 +171,39 @@ export default function TagRow({ tag, existingNames, onRename, onRecolor, onDele
       <td className="px-3 py-2 text-sm text-text-secondary">{formatLastUsed(tag.last_used)}</td>
       <td className="px-3 py-2">
         <div className="flex items-center justify-end gap-2">
-          <div className="relative" ref={colorPickerRef}>
+          <div className="relative">
             <button
+              ref={colorTriggerRef}
               type="button"
               aria-label={`Recolor tag ${tag.name}`}
               title="Recolor tag"
-              onClick={() => setColorPickerOpen((v) => !v)}
+              onClick={toggleColorPicker}
               className="text-text-tertiary hover:text-text-primary"
             >
               <Palette className="h-4 w-4" aria-hidden="true" />
             </button>
-            {colorPickerOpen && (
-              <div className="absolute right-0 top-full z-10 mt-1 rounded-md border border-border bg-surface p-2 shadow-md">
-                <ColorSwatchPicker
-                  value={tag.color}
-                  onChange={(color) => {
-                    onRecolor(tag.name, color)
-                    setColorPickerOpen(false)
-                  }}
-                />
-              </div>
-            )}
+            {colorPickerOpen &&
+              pickerPosition &&
+              createPortal(
+                <div
+                  ref={colorPickerRef}
+                  style={
+                    pickerPosition.top !== undefined
+                      ? { top: pickerPosition.top, right: pickerPosition.right }
+                      : { bottom: pickerPosition.bottom, right: pickerPosition.right }
+                  }
+                  className="fixed z-50 rounded-md border border-border bg-surface p-2 shadow-md"
+                >
+                  <ColorSwatchPicker
+                    value={tag.color}
+                    onChange={(color) => {
+                      onRecolor(tag.name, color)
+                      setColorPickerOpen(false)
+                    }}
+                  />
+                </div>,
+                document.body,
+              )}
           </div>
           <button
             type="button"

@@ -130,6 +130,20 @@ describe('TagManagementScreen', () => {
     expect(screen.getAllByRole('group', { name: 'Tag color' })).toHaveLength(1)
   })
 
+  it('opens the color picker upward instead of downward when the trigger is near the bottom of the viewport', () => {
+    renderScreen()
+    const trigger = screen.getByLabelText('Recolor tag smoke')
+    trigger.getBoundingClientRect = () =>
+      ({ bottom: 580, top: 560, right: 400, left: 380, width: 20, height: 20 }) as DOMRect
+    Object.defineProperty(window, 'innerHeight', { value: 600, configurable: true })
+
+    fireEvent.click(trigger)
+
+    const picker = screen.getAllByRole('group', { name: 'Tag color' })[1].closest('div[style]') as HTMLElement
+    expect(picker.style.bottom).not.toBe('')
+    expect(picker.style.top).toBe('')
+  })
+
   it('removes a tag (untag-only) after confirming', async () => {
     vi.mocked(apiClient.deleteTag).mockResolvedValue(undefined)
     renderScreen()

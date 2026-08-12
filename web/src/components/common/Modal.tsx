@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 interface ModalProps {
   open: boolean
@@ -45,7 +46,15 @@ export default function Modal({
 
   const isDrawer = variant === 'drawer'
 
-  return (
+  // Portaled to document.body rather than rendered inline wherever the
+  // caller happens to sit in the tree: a `fixed` element is only fixed to
+  // the viewport if every ancestor lacks a transform/filter/etc that would
+  // make it a containing block instead — e.g. MessageRow's `animate-row-in`
+  // (a transform-based animation) does exactly that, which shrank this
+  // backdrop down to that row's box instead of the full screen. Portaling
+  // sidesteps the whole class of bug regardless of what future ancestor
+  // might introduce a containing block.
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex bg-text-primary/40 ${isDrawer ? 'items-stretch justify-start' : 'items-center justify-center'}`}
       onClick={() => {
@@ -64,6 +73,7 @@ export default function Modal({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

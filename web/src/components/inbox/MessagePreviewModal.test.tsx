@@ -49,8 +49,10 @@ describe('MessagePreviewModal', () => {
 
   it('shows a loading state while fetching', () => {
     vi.mocked(apiClient.getMessage).mockReturnValue(new Promise(() => {}))
-    const { container } = renderModal('m1')
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
+    renderModal('m1')
+    // Modal portals to document.body, so query the document rather than
+    // the local render container.
+    expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
   })
 
   it('renders the message once loaded', async () => {
