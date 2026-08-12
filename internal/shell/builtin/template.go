@@ -35,9 +35,10 @@ func (b Template) Run(ctx context.Context, s *shell.Session, args []string) erro
 	}
 
 	if funcs, _ := fs.GetBool("funcs"); funcs {
-		names := make([]string, 0)
-		for name := range s.Tmpl.FuncMap() {
-			names = append(names, name)
+		reg := s.Tmpl.Registry()
+		names := make([]string, 0, len(reg))
+		for _, d := range reg {
+			names = append(names, d.Name)
 		}
 		sort.Strings(names)
 		for _, n := range names {

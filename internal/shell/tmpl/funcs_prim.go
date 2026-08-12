@@ -1,25 +1,32 @@
 package tmpl
 
 import (
-	"fmt"
 	"math"
-	"text/template"
+	"strings"
 )
 
 const defaultRandCharset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-// primFuncMap returns primitive randomness template functions, all driven
-// by the Engine's seeded math/rand.Rand.
-func (e *Engine) primFuncMap() template.FuncMap {
-	return template.FuncMap{
-		"randInt":    e.randInt,
-		"randFloat":  e.randFloat,
-		"randBool":   e.randBool,
-		"randString": e.randString,
-		"randBytes":  e.randBytes,
-		"pick":       e.pick,
-		"shuffle":    e.shuffle,
-		"weighted":   e.weighted,
+// primDocs documents the primitive randomness template functions, all
+// driven by the Engine's seeded math/rand.Rand.
+func (e *Engine) primDocs() []FuncDoc {
+	return []FuncDoc{
+		{Name: "randInt", Category: CategoryGenerate, Args: "min, max int", Returns: "int",
+			Description: "Random int in [min,max].", Fn: e.randInt},
+		{Name: "randFloat", Category: CategoryGenerate, Args: "min, max float64 [, decimals int]", Returns: "float64",
+			Description: "Random float64 in [min,max], optionally rounded to `decimals` places.", Fn: e.randFloat},
+		{Name: "randBool", Category: CategoryGenerate, Returns: "bool",
+			Description: "Random true/false.", Fn: e.randBool},
+		{Name: "randString", Category: CategoryGenerate, Args: "n int [, charset string]", Returns: "string",
+			Description: "Random string of length n from charset (default alphanumeric).", Fn: e.randString},
+		{Name: "randBytes", Category: CategoryGenerate, Args: "n int", Returns: "[]byte",
+			Description: "n random bytes.", Fn: e.randBytes},
+		{Name: "pick", Category: CategoryGenerate, Args: "a, b, c, ...", Returns: "any",
+			Description: "One of its comma-separated arguments, chosen at random.", Fn: e.pick},
+		{Name: "oneOf", Category: CategoryGenerate, Args: `a, b, c, ... | "a,b,c"`, Returns: "any",
+			Description: `One of its arguments, chosen at random. Accepts either several comma-separated arguments ({{ oneOf "a" "b" "c" }}) or a single string split on "," ({{ oneOf "a,b,c" }}).`, Fn: e.oneOf},
+		{Name: "shuffle", Category: CategoryGenerate, Args: "list", Returns: "list",
+			Description: "Returns list with its elements in random order.", Fn: e.shuffle},
 	}
 }
 
@@ -85,6 +92,20 @@ func (e *Engine) pick(list ...any) any {
 	return list[e.rnd.Intn(len(list))]
 }
 
+// oneOf returns one pseudo-randomly chosen element from list, except when
+// called with exactly one string argument containing a comma — then that
+// string is split on "," and one part is chosen instead, so
+// {{ oneOf "a,b,c" }} works without needing per-value quoting.
+func (e *Engine) oneOf(list ...any) any {
+	if len(list) == 1 {
+		if s, ok := list[0].(string); ok && strings.Contains(s, ",") {
+			parts := strings.Split(s, ",")
+			return parts[e.rnd.Intn(len(parts))]
+		}
+	}
+	return e.pick(list...)
+}
+
 // shuffle returns a pseudo-randomly shuffled copy of list.
 func (e *Engine) shuffle(list []any) []any {
 	out := make([]any, len(list))
@@ -93,58 +114,4 @@ func (e *Engine) shuffle(list []any) []any {
 		out[i], out[j] = out[j], out[i]
 	})
 	return out
-}
-
-// weighted picks a key from dict pseudo-randomly, weighted by each value
-// interpreted as a number.
-func (e *Engine) weighted(dict map[string]any) (any, error) {
-	if len(dict) == 0 {
-		return nil, nil
-	}
-
-	keys := make([]string, 0, len(dict))
-	weights := make([]float64, 0, len(dict))
-	var total float64
-
-	for k, v := range dict {
-		w, err := toFloat(v)
-		if err != nil {
-			return nil, fmt.Errorf("tmpl: weighted: %w", err)
-		}
-		if w < 0 {
-			w = 0
-		}
-		keys = append(keys, k)
-		weights = append(weights, w)
-		total += w
-	}
-
-	if total <= 0 {
-		return keys[e.rnd.Intn(len(keys))], nil
-	}
-
-	r := e.rnd.Float64() * total
-	var cum float64
-	for i, w := range weights {
-		cum += w
-		if r <= cum {
-			return keys[i], nil
-		}
-	}
-	return keys[len(keys)-1], nil
-}
-
-func toFloat(v any) (float64, error) {
-	switch n := v.(type) {
-	case int:
-		return float64(n), nil
-	case int64:
-		return float64(n), nil
-	case float64:
-		return n, nil
-	case float32:
-		return float64(n), nil
-	default:
-		return 0, fmt.Errorf("unsupported weight type %T", v)
-	}
 }

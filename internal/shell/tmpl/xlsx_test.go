@@ -13,9 +13,9 @@ func TestFakeXLSX(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakeXLSX(7, 3)
+	path, err := e.fXLSX(7, 3)
 	if err != nil {
-		t.Fatalf("fakeXLSX: %v", err)
+		t.Fatalf("fXLSX: %v", err)
 	}
 
 	f, err := excelize.OpenFile(path)

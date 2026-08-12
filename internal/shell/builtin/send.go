@@ -155,7 +155,7 @@ func (b Send) Run(ctx context.Context, s *shell.Session, args []string) error {
 			// From/To headers, exactly like --eml does, with --from/--to
 			// flags (if given) overriding. Re-derived per message in bulk
 			// sends, so a template whose From/To vary per render (e.g.
-			// via {{ fakeEmail }}) produces a correctly-matching envelope
+			// via {{ fEmail }}) produces a correctly-matching envelope
 			// for each one, not a single envelope reused for all of them.
 			from, to, err := envelopeFromMessage(fs, []byte(rendered), "--template")
 			if err != nil {

@@ -98,7 +98,7 @@ func TestRandMsgScenarioInvoice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRandomSpec: %v", err)
 	}
-	if spec.Subject != "Invoice from {{ fakeCompany }}" && !strings.Contains(spec.Subject, "Invoice from") {
+	if spec.Subject != "Invoice from {{ fCompany }}" && !strings.Contains(spec.Subject, "Invoice from") {
 		t.Fatalf("expected invoice subject, got %q", spec.Subject)
 	}
 }

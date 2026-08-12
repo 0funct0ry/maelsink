@@ -32,6 +32,11 @@ type Engine struct {
 	tempDir string
 	unsafe  bool
 
+	// registry is this Engine's FuncDoc registry (registry.go), built once
+	// in New() since most Fn values are bound methods on this specific
+	// seeded Engine.
+	registry []FuncDoc
+
 	// mu guards every use of rnd (directly, or indirectly via faker/entropy,
 	// both of which wrap the same *mrand.Rand). math/rand.Rand is not safe
 	// for concurrent use, but builtins like "send"/"randmsg"/"deluge" render
@@ -82,14 +87,16 @@ func New(seed int64, unsafeFuncs bool) (*Engine, error) {
 		return nil, fmt.Errorf("tmpl: creating temp dir: %w", err)
 	}
 
-	return &Engine{
+	e := &Engine{
 		seed:    seed,
 		rnd:     rnd,
 		entropy: reader,
 		faker:   faker,
 		tempDir: tempDir,
 		unsafe:  unsafeFuncs,
-	}, nil
+	}
+	e.registry = e.buildRegistry()
+	return e, nil
 }
 
 // TempDir returns the session-unique directory used for generated files.
@@ -127,43 +134,6 @@ func (e *Engine) ExpFloat64() float64 {
 	return e.rnd.ExpFloat64()
 }
 
-// FuncMap returns the merged text/template.FuncMap for this Engine: sprig's
-// functions (minus env/expandenv/getHostByName unless unsafe) plus every fake
-// data, id, primitive, domain, binary, mime, and filesystem helper function.
-func (e *Engine) FuncMap() template.FuncMap {
-	fm := e.sprigFuncMap()
-
-	for name, fn := range e.fakeFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range e.idFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range e.primFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range e.domainFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range e.binaryFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range e.docFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range e.mimeFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range e.fsFuncMap() {
-		fm[name] = fn
-	}
-	for name, fn := range ansiFuncMap() {
-		fm[name] = fn
-	}
-
-	return fm
-}
-
 // Render parses text as a text/template using this Engine's FuncMap and
 // executes it against data, returning the rendered output.
 func (e *Engine) Render(text string, data any) (string, error) {
@@ -173,12 +143,13 @@ func (e *Engine) Render(text string, data any) (string, error) {
 	// always are — internal/shell.Session.TemplateData) render as that
 	// map's zero value (empty string) instead of an invalid reflect.Value.
 	// Without this, bare {{ .undefined }} happens to print harmlessly as
-	// "<no value>", but passing it into ANY function — {{ ansiRed .undefined
-	// }}, {{ upper .undefined }}, anything — fails with "invalid value;
+	// "<no value>", but passing it into ANY function — {{ upper .undefined
+	// }}, anything — fails with "invalid value;
 	// expected string", since there is no valid conversion from an invalid
 	// reflect.Value to a function parameter type. SPEC.md §7.5.6 documents
 	// undefined variables as rendering empty; this option is what actually
 	// makes that true in every context, not just bare printing.
+	text = expandBareRegex(text)
 	tpl, err := template.New("tmpl").Option("missingkey=zero").Funcs(e.FuncMap()).Parse(text)
 	if err != nil {
 		return "", fmt.Errorf("tmpl: parse: %w", err)

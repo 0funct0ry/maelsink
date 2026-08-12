@@ -109,7 +109,7 @@ func NewSession(cfg config.Shell, client *cliclient.Client, smtpAddr string, smt
 	// text/template returns an invalid reflect.Value for a missing map
 	// key, which prints fine bare ({{ .connected }}) but errors ("invalid
 	// value; expected string") the moment it's passed into any function
-	// expecting a string — e.g. a user prompt like {{ ansiCyan .connected
+	// expecting a string — e.g. a user prompt like {{ cyan }}{{ .connected
 	// }}. It's "" (empty) when false and "true" when true — NOT the
 	// literal string "false" — because Go template truthiness treats any
 	// NON-EMPTY string as true, including the string "false" itself; the

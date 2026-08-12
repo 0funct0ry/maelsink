@@ -14,9 +14,9 @@ func TestFakeDOCX(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakeDOCX(4)
+	path, err := e.fDOCX(4)
 	if err != nil {
-		t.Fatalf("fakeDOCX: %v", err)
+		t.Fatalf("fDOCX: %v", err)
 	}
 
 	zr, err := zip.OpenReader(path)

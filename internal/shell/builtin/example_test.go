@@ -63,7 +63,7 @@ func TestExample_EveryCannedTemplateRendersUnderEveryFormat(t *testing.T) {
 	// Go-template text and (b) actually renders end to end through the
 	// real engine, for both --format eml and --format json — catching
 	// mistakes like dot-chaining a field off a function call
-	// ("fakeOrder.id", which text/template rejects) before a user hits
+	// ("fOrder.id", which text/template rejects) before a user hits
 	// them.
 	for i := range exampleTemplates {
 		for _, format := range []string{"eml", "json"} {

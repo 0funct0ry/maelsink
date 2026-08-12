@@ -71,13 +71,13 @@ func (b WeirdMsg) Run(ctx context.Context, s *shell.Session, args []string) erro
 
 	to, _ := fs.GetString("to")
 	if to == "" {
-		if to, err = s.Tmpl.Render("{{ fakeEmail }}", data); err != nil {
+		if to, err = s.Tmpl.Render("{{ fEmail }}", data); err != nil {
 			return err
 		}
 	}
 	from, _ := fs.GetString("from")
 	if from == "" {
-		if from, err = s.Tmpl.Render("{{ fakeEmail }}", data); err != nil {
+		if from, err = s.Tmpl.Render("{{ fEmail }}", data); err != nil {
 			return err
 		}
 	}
@@ -96,7 +96,7 @@ func (b WeirdMsg) Run(ctx context.Context, s *shell.Session, args []string) erro
 		// Envelope MAIL FROM deliberately differs from the message's own
 		// From: header baked into raw by buildWeird — that mismatch is the
 		// whole point of --kind spoof (SPEC.md §7.6.4).
-		if envFrom, err = s.Tmpl.Render("{{ fakeEmail }}", data); err != nil {
+		if envFrom, err = s.Tmpl.Render("{{ fEmail }}", data); err != nil {
 			return err
 		}
 	}
@@ -133,7 +133,7 @@ func weirdBounce(s *shell.Session, data map[string]any, from, to string) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	diag, err := s.Tmpl.Render("{{ fakeDomain }}", data)
+	diag, err := s.Tmpl.Render("{{ fDomain }}", data)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func weirdBounce(s *shell.Session, data map[string]any, from, to string) ([]byte
 // SMTP-transaction-valid blob of bytes — never broken enough to fail DATA
 // itself, per SPEC.md §7.6.4.
 func weirdMalformed(s *shell.Session, data map[string]any, from, to string) ([]byte, error) {
-	text, err := s.Tmpl.Render("{{ fakeParagraph }}", data)
+	text, err := s.Tmpl.Render("{{ fParagraph }}", data)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func weirdMalformed(s *shell.Session, data map[string]any, from, to string) ([]b
 }
 
 func weirdHuge(s *shell.Session, data map[string]any, from, to, size string) ([]byte, error) {
-	bodyPath, err := s.Tmpl.Render(fmt.Sprintf("{{ fakeBinary %q }}", size), data)
+	bodyPath, err := s.Tmpl.Render(fmt.Sprintf("{{ fBinary %q }}", size), data)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func weirdUnicode(s *shell.Session, data map[string]any, from, to string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	text, err := s.Tmpl.Render("こんにちは {{ fakeName }} — 你好 — مرحبا — שלום 🎉", data)
+	text, err := s.Tmpl.Render("こんにちは {{ fName }} — 你好 — مرحبا — שלום 🎉", data)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func weirdSpoof(s *shell.Session, data map[string]any, from, to string) ([]byte,
 }
 
 func weirdInvite(s *shell.Session, data map[string]any, from, to string) ([]byte, error) {
-	subject, err := s.Tmpl.Render("Meeting invite: {{ fakeSentence }}", data)
+	subject, err := s.Tmpl.Render("Meeting invite: {{ fSentence }}", data)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func sendWeirdThread(ctx context.Context, s *shell.Session, addr string, auth *c
 	for k, v := range s.TemplateData() {
 		data[k] = v
 	}
-	subject, err := s.Tmpl.Render("{{ fakeSubject }}", data)
+	subject, err := s.Tmpl.Render("{{ fSubject }}", data)
 	if err != nil {
 		return err
 	}
@@ -270,7 +270,7 @@ func sendWeirdThread(ctx context.Context, s *shell.Session, addr string, auth *c
 		if i > 0 {
 			subj = "Re: " + subject
 		}
-		text, err := s.Tmpl.Render("{{ fakeParagraph }}", data)
+		text, err := s.Tmpl.Render("{{ fParagraph }}", data)
 		if err != nil {
 			return err
 		}

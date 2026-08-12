@@ -32,7 +32,7 @@ func TestPrompt_SetsTemplate(t *testing.T) {
 	// construction — never an absent/invalid map key, and never the
 	// literal string "false" (which Go template truthiness would treat as
 	// TRUE, since any non-empty string is truthy) — so referencing it
-	// directly, including passed into a function like ansiCyan, never
+	// directly, including passed into a function like upper, never
 	// errors even before RefreshConnected has run.
 	if !strings.Contains(out.String(), "preview:   >") {
 		t.Errorf("out = %q", out.String())

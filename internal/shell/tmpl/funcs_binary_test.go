@@ -17,9 +17,9 @@ func TestFakePNG(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakePNG(32, 24)
+	path, err := e.fPNG(32, 24)
 	if err != nil {
-		t.Fatalf("fakePNG: %v", err)
+		t.Fatalf("fPNG: %v", err)
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -44,9 +44,9 @@ func TestFakeJPEG(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakeJPEG(40, 20)
+	path, err := e.fJPEG(40, 20)
 	if err != nil {
-		t.Fatalf("fakeJPEG: %v", err)
+		t.Fatalf("fJPEG: %v", err)
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -71,9 +71,9 @@ func TestFakeGIF(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakeGIF(16, 16)
+	path, err := e.fGIF(16, 16)
 	if err != nil {
-		t.Fatalf("fakeGIF: %v", err)
+		t.Fatalf("fGIF: %v", err)
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -98,9 +98,9 @@ func TestFakeCSV(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakeCSV(6, 3)
+	path, err := e.fCSV(6, 3)
 	if err != nil {
-		t.Fatalf("fakeCSV: %v", err)
+		t.Fatalf("fCSV: %v", err)
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -130,9 +130,9 @@ func TestFakeZIP(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakeZIP()
+	path, err := e.fZIP()
 	if err != nil {
-		t.Fatalf("fakeZIP: %v", err)
+		t.Fatalf("fZIP: %v", err)
 	}
 
 	zr, err := zip.OpenReader(path)
@@ -153,9 +153,9 @@ func TestFakeBinary(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakeBinary("2KB")
+	path, err := e.fBinary("2KB")
 	if err != nil {
-		t.Fatalf("fakeBinary: %v", err)
+		t.Fatalf("fBinary: %v", err)
 	}
 
 	info, err := os.Stat(path)

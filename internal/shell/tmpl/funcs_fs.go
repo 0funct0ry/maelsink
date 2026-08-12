@@ -1,21 +1,23 @@
 package tmpl
 
 import (
-	"encoding/base64"
 	"os"
 	"path/filepath"
-	"text/template"
 )
 
-// fsFuncMap returns straightforward filesystem helper template functions.
-func (e *Engine) fsFuncMap() template.FuncMap {
-	return template.FuncMap{
-		"readFile":    readFile,
-		"readFileB64": readFileB64,
-		"glob":        glob,
-		"basename":    filepath.Base,
-		"dirname":     filepath.Dir,
-		"ext":         filepath.Ext,
+// filesDocs documents straightforward filesystem helper template functions.
+func (e *Engine) filesDocs() []FuncDoc {
+	return []FuncDoc{
+		{Name: "readFile", Category: CategoryFiles, Args: "path", Returns: "string",
+			Description: "Returns the file's contents as a string.", Fn: readFile},
+		{Name: "glob", Category: CategoryFiles, Args: "pattern", Returns: "[]string",
+			Description: "Returns matching file paths.", Fn: glob},
+		{Name: "basename", Category: CategoryFiles, Args: "path", Returns: "string",
+			Description: "Returns the final path element.", Fn: filepath.Base},
+		{Name: "dirname", Category: CategoryFiles, Args: "path", Returns: "string",
+			Description: "Returns all but the final path element.", Fn: filepath.Dir},
+		{Name: "ext", Category: CategoryFiles, Args: "path", Returns: "string",
+			Description: "Returns the file extension, including the leading dot.", Fn: filepath.Ext},
 	}
 }
 
@@ -26,15 +28,6 @@ func readFile(path string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
-}
-
-// readFileB64 returns the base64-encoded contents of path.
-func readFileB64(path string) (string, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(b), nil
 }
 
 // glob returns filesystem paths matching pattern.

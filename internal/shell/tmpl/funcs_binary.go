@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"text/template"
 )
 
 // attachDelim is the delimiter joined paths from attach() are split on by
@@ -23,18 +22,22 @@ import (
 // real filesystem path.
 const attachDelim = "::"
 
-// binaryFuncMap returns template functions that generate binary/structured
+// binaryDocs documents template functions that generate binary/structured
 // files on disk under the Engine's temp dir and return their paths.
-func (e *Engine) binaryFuncMap() template.FuncMap {
-	return template.FuncMap{
-		"fakePNG":    e.fakePNG,
-		"fakeJPEG":   e.fakeJPEG,
-		"fakeGIF":    e.fakeGIF,
-		"fakeCSV":    e.fakeCSV,
-		"fakeZIP":    e.fakeZIP,
-		"fakeBinary": e.fakeBinary,
-		"fileOf":     e.fileOf,
-		"attach":     e.attach,
+func (e *Engine) binaryDocs() []FuncDoc {
+	return []FuncDoc{
+		{Name: "fPNG", Category: CategoryGenerate, Args: "[w] [h]", Returns: "string",
+			Description: "Generates a PNG image (default 64x64) and returns its path.", Fn: e.fPNG},
+		{Name: "fJPEG", Category: CategoryGenerate, Args: "[w] [h]", Returns: "string",
+			Description: "Generates a JPEG image (default 64x64) and returns its path.", Fn: e.fJPEG},
+		{Name: "fGIF", Category: CategoryGenerate, Args: "[w] [h]", Returns: "string",
+			Description: "Generates a GIF image (default 64x64) and returns its path.", Fn: e.fGIF},
+		{Name: "fCSV", Category: CategoryGenerate, Args: "[rows] [cols]", Returns: "string",
+			Description: "Generates a CSV file (default 10x5) and returns its path.", Fn: e.fCSV},
+		{Name: "fZIP", Category: CategoryGenerate, Args: "[files...]", Returns: "string",
+			Description: "Bundles the given paths (or one generated file) into a .zip and returns its path.", Fn: e.fZIP},
+		{Name: "fBinary", Category: CategoryGenerate, Args: "size", Returns: "string",
+			Description: `Writes size (e.g. "2MB", "512KB", or a plain byte count) of pseudo-random bytes and returns the path.`, Fn: e.fBinary},
 	}
 }
 
@@ -64,46 +67,46 @@ func (e *Engine) fakeImage(w, h int) *image.RGBA {
 	return img
 }
 
-// fakePNG writes a w x h (default 64x64) PNG of pseudo-random pixels to
+// fPNG writes a w x h (default 64x64) PNG of pseudo-random pixels to
 // tempDir and returns its path.
-func (e *Engine) fakePNG(wh ...int) (string, error) {
+func (e *Engine) fPNG(wh ...int) (string, error) {
 	w, h := dims(wh)
 	path := e.tempFilePath(".png")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("tmpl: fakePNG: %w", err)
+		return "", fmt.Errorf("tmpl: fPNG: %w", err)
 	}
 	defer f.Close()
 	if err := png.Encode(f, e.fakeImage(w, h)); err != nil {
-		return "", fmt.Errorf("tmpl: fakePNG: %w", err)
+		return "", fmt.Errorf("tmpl: fPNG: %w", err)
 	}
 	return path, nil
 }
 
-// fakeJPEG writes a w x h (default 64x64) JPEG of pseudo-random pixels to
+// fJPEG writes a w x h (default 64x64) JPEG of pseudo-random pixels to
 // tempDir and returns its path.
-func (e *Engine) fakeJPEG(wh ...int) (string, error) {
+func (e *Engine) fJPEG(wh ...int) (string, error) {
 	w, h := dims(wh)
 	path := e.tempFilePath(".jpg")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("tmpl: fakeJPEG: %w", err)
+		return "", fmt.Errorf("tmpl: fJPEG: %w", err)
 	}
 	defer f.Close()
 	if err := jpeg.Encode(f, e.fakeImage(w, h), &jpeg.Options{Quality: 80}); err != nil {
-		return "", fmt.Errorf("tmpl: fakeJPEG: %w", err)
+		return "", fmt.Errorf("tmpl: fJPEG: %w", err)
 	}
 	return path, nil
 }
 
-// fakeGIF writes a w x h (default 64x64) GIF of pseudo-random pixels to
+// fGIF writes a w x h (default 64x64) GIF of pseudo-random pixels to
 // tempDir and returns its path.
-func (e *Engine) fakeGIF(wh ...int) (string, error) {
+func (e *Engine) fGIF(wh ...int) (string, error) {
 	w, h := dims(wh)
 	path := e.tempFilePath(".gif")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("tmpl: fakeGIF: %w", err)
+		return "", fmt.Errorf("tmpl: fGIF: %w", err)
 	}
 	defer f.Close()
 
@@ -116,7 +119,7 @@ func (e *Engine) fakeGIF(wh ...int) (string, error) {
 	}
 
 	if err := gif.Encode(f, palettedImg, nil); err != nil {
-		return "", fmt.Errorf("tmpl: fakeGIF: %w", err)
+		return "", fmt.Errorf("tmpl: fGIF: %w", err)
 	}
 	return path, nil
 }
@@ -130,9 +133,9 @@ func palette256() color.Palette {
 	return pal
 }
 
-// fakeCSV writes a CSV of rows x cols (default 10x5) of fake cell values to
+// fCSV writes a CSV of rows x cols (default 10x5) of fake cell values to
 // tempDir and returns its path.
-func (e *Engine) fakeCSV(rowsCols ...int) (string, error) {
+func (e *Engine) fCSV(rowsCols ...int) (string, error) {
 	rows, cols := 10, 5
 	if len(rowsCols) > 0 && rowsCols[0] > 0 {
 		rows = rowsCols[0]
@@ -144,7 +147,7 @@ func (e *Engine) fakeCSV(rowsCols ...int) (string, error) {
 	path := e.tempFilePath(".csv")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("tmpl: fakeCSV: %w", err)
+		return "", fmt.Errorf("tmpl: fCSV: %w", err)
 	}
 	defer f.Close()
 
@@ -154,7 +157,7 @@ func (e *Engine) fakeCSV(rowsCols ...int) (string, error) {
 		header[c] = fmt.Sprintf("col_%d", c+1)
 	}
 	if err := w.Write(header); err != nil {
-		return "", fmt.Errorf("tmpl: fakeCSV: %w", err)
+		return "", fmt.Errorf("tmpl: fCSV: %w", err)
 	}
 	for r := 0; r < rows; r++ {
 		row := make([]string, cols)
@@ -162,23 +165,23 @@ func (e *Engine) fakeCSV(rowsCols ...int) (string, error) {
 			row[c] = e.randString(8)
 		}
 		if err := w.Write(row); err != nil {
-			return "", fmt.Errorf("tmpl: fakeCSV: %w", err)
+			return "", fmt.Errorf("tmpl: fCSV: %w", err)
 		}
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
-		return "", fmt.Errorf("tmpl: fakeCSV: %w", err)
+		return "", fmt.Errorf("tmpl: fCSV: %w", err)
 	}
 	return path, nil
 }
 
-// fakeZIP bundles the given existing file paths (or, if none given, one
+// fZIP bundles the given existing file paths (or, if none given, one
 // small generated text file) into a .zip in tempDir and returns its path.
-func (e *Engine) fakeZIP(files ...string) (string, error) {
+func (e *Engine) fZIP(files ...string) (string, error) {
 	if len(files) == 0 {
 		txtPath := e.tempFilePath(".txt")
 		if err := os.WriteFile(txtPath, []byte(e.faker.Paragraph(2, 4, 8, " ")), 0o600); err != nil {
-			return "", fmt.Errorf("tmpl: fakeZIP: %w", err)
+			return "", fmt.Errorf("tmpl: fZIP: %w", err)
 		}
 		files = []string{txtPath}
 	}
@@ -186,7 +189,7 @@ func (e *Engine) fakeZIP(files ...string) (string, error) {
 	zipPath := e.tempFilePath(".zip")
 	zf, err := os.OpenFile(zipPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("tmpl: fakeZIP: %w", err)
+		return "", fmt.Errorf("tmpl: fZIP: %w", err)
 	}
 	defer zf.Close()
 
@@ -194,11 +197,11 @@ func (e *Engine) fakeZIP(files ...string) (string, error) {
 	for _, path := range files {
 		if err := addFileToZip(zw, path); err != nil {
 			zw.Close()
-			return "", fmt.Errorf("tmpl: fakeZIP: %w", err)
+			return "", fmt.Errorf("tmpl: fZIP: %w", err)
 		}
 	}
 	if err := zw.Close(); err != nil {
-		return "", fmt.Errorf("tmpl: fakeZIP: %w", err)
+		return "", fmt.Errorf("tmpl: fZIP: %w", err)
 	}
 	return zipPath, nil
 }
@@ -243,17 +246,17 @@ func parseSize(size string) (int64, error) {
 	return int64(val * mult), nil
 }
 
-// fakeBinary writes size (e.g. "2MB", "512KB", or a plain byte count) of
+// fBinary writes size (e.g. "2MB", "512KB", or a plain byte count) of
 // pseudo-random bytes to tempDir and returns its path.
-func (e *Engine) fakeBinary(size string) (string, error) {
+func (e *Engine) fBinary(size string) (string, error) {
 	n, err := parseSize(size)
 	if err != nil {
-		return "", fmt.Errorf("tmpl: fakeBinary: %w", err)
+		return "", fmt.Errorf("tmpl: fBinary: %w", err)
 	}
 	path := e.tempFilePath(".bin")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("tmpl: fakeBinary: %w", err)
+		return "", fmt.Errorf("tmpl: fBinary: %w", err)
 	}
 	defer f.Close()
 
@@ -270,7 +273,7 @@ func (e *Engine) fakeBinary(size string) (string, error) {
 		}
 		nw, err := f.Write(buf[:toWrite])
 		if err != nil {
-			return "", fmt.Errorf("tmpl: fakeBinary: %w", err)
+			return "", fmt.Errorf("tmpl: fBinary: %w", err)
 		}
 		written += int64(nw)
 	}

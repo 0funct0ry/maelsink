@@ -69,7 +69,7 @@ func (b Blast) Run(ctx context.Context, s *shell.Session, args []string) error {
 	// single --to, since blast's whole point is the recipient list shape.
 	spec.To, spec.Cc, spec.Bcc = nil, nil, nil
 	for i := 0; i < n; i++ {
-		rcpt, err := s.Tmpl.Render("{{ fakeEmail }}", data)
+		rcpt, err := s.Tmpl.Render("{{ fEmail }}", data)
 		if err != nil {
 			return err
 		}

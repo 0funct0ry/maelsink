@@ -3,7 +3,6 @@ package tmpl
 import (
 	"encoding/hex"
 	"fmt"
-	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,17 +13,24 @@ const nanoidAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123
 
 const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-// idFuncMap returns template functions that generate various styles of
-// unique identifiers, all sourced from the Engine's seeded entropy.
-func (e *Engine) idFuncMap() template.FuncMap {
-	return template.FuncMap{
-		"uuid":      e.uuidv4,
-		"uuidv7":    e.uuidv7,
-		"ulid":      e.ulid,
-		"nanoid":    e.nanoid,
-		"objectid":  e.objectid,
-		"ksuid":     e.ksuid,
-		"messageID": e.messageID,
+// idDocs documents the identifier-generating template functions, all
+// sourced from the Engine's seeded entropy.
+func (e *Engine) idDocs() []FuncDoc {
+	return []FuncDoc{
+		{Name: "uuid", Category: CategoryIdentifiers, Returns: "string",
+			Description: "Random UUIDv4, seeded from the session's PRNG.", Fn: e.uuidv4},
+		{Name: "uuidv7", Category: CategoryIdentifiers, Returns: "string",
+			Description: "Time-ordered UUIDv7. NOT reproducible under a fixed --seed: its rand_a field derives from a package-level wall-clock counter, not the seeded entropy source.", Fn: e.uuidv7},
+		{Name: "ulid", Category: CategoryIdentifiers, Returns: "string",
+			Description: "Lexicographically-sortable ULID. NOT reproducible under a fixed --seed: its 48-bit timestamp component is real wall-clock time by design.", Fn: e.ulid},
+		{Name: "nanoid", Category: CategoryIdentifiers, Args: "[size]", Returns: "string",
+			Description: "URL-safe random ID, default length 21.", Fn: e.nanoid},
+		{Name: "objectid", Category: CategoryIdentifiers, Returns: "string",
+			Description: "24-hex-char MongoDB-style ObjectID (4-byte timestamp + 5 random + 3-byte counter).", Fn: e.objectid},
+		{Name: "ksuid", Category: CategoryIdentifiers, Returns: "string",
+			Description: "27-char base62 K-Sortable ID (4-byte timestamp + 16 random bytes).", Fn: e.ksuid},
+		{Name: "messageID", Category: CategoryIdentifiers, Args: "[domain]", Returns: "string",
+			Description: `RFC 5322 email Message-Id value, e.g. <hex@domain>. domain defaults to "maelsink.local".`, Fn: e.messageID},
 	}
 }
 

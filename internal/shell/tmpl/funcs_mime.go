@@ -4,16 +4,25 @@ import (
 	"mime"
 	"mime/quotedprintable"
 	"strings"
-	"text/template"
 	"time"
 )
 
-// mimeFuncMap returns email/MIME encoding helper template functions.
-func (e *Engine) mimeFuncMap() template.FuncMap {
-	return template.FuncMap{
-		"quotedPrintable": quotedPrintableEncode,
-		"mimeWord":        mimeWordEncode,
-		"rfc2822Date":     rfc2822Date,
+// emailDocs documents email-composition-focused template functions: MIME
+// encoding helpers, attachment chaining, and fake email addresses.
+func (e *Engine) emailDocs() []FuncDoc {
+	return []FuncDoc{
+		{Name: "quotedPrintable", Category: CategoryEmail, Args: "s", Returns: "string",
+			Description: "Quoted-printable encodes s (RFC 2045).", Fn: quotedPrintableEncode},
+		{Name: "mimeWord", Category: CategoryEmail, Args: "s", Returns: "string",
+			Description: "RFC 2047 encoded-word (UTF-8 Q-encoding) for non-ASCII email header values.", Fn: mimeWordEncode},
+		{Name: "rfc2822Date", Category: CategoryEmail, Args: "[time]", Returns: "string",
+			Description: "Formats the given time (default now) as RFC 1123Z, for email Date headers.", Fn: rfc2822Date},
+		{Name: "fEmail", Category: CategoryEmail, Args: "[domain]", Returns: "string",
+			Description: "Random email address, optionally on the given domain.", Fn: e.fEmail},
+		{Name: "fileOf", Category: CategoryEmail, Args: "path", Returns: "string",
+			Description: "Validates path exists and returns it unchanged (passthrough for chaining into an email's attachments).", Fn: e.fileOf},
+		{Name: "attach", Category: CategoryEmail, Args: "path...", Returns: "string",
+			Description: `Joins multiple file paths with "::" for send --attach's email-attachment chaining convention.`, Fn: e.attach},
 	}
 }
 

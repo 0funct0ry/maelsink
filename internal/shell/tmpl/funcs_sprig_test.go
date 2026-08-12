@@ -2,6 +2,8 @@ package tmpl
 
 import "testing"
 
+var unsafeSprigFuncs = []string{"env", "expandenv", "getHostByName"}
+
 func TestSprigUnsafeFuncsExcludedByDefault(t *testing.T) {
 	e, err := New(1, false)
 	if err != nil {

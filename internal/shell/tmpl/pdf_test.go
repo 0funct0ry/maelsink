@@ -13,9 +13,9 @@ func TestFakePDF(t *testing.T) {
 	}
 	defer e.Close()
 
-	path, err := e.fakePDF(2)
+	path, err := e.fPDF(2)
 	if err != nil {
-		t.Fatalf("fakePDF: %v", err)
+		t.Fatalf("fPDF: %v", err)
 	}
 
 	data, err := os.ReadFile(path)

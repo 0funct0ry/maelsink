@@ -14,7 +14,7 @@ var ulidRe = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{26}$`)
 // bug: text/template's DEFAULT missing-map-key behavior ("missingkey=invalid")
 // makes a bare {{ .undefined }} print harmlessly as "<no value>", but
 // passing that same undefined value into ANY function — {{ upper
-// .undefined }}, {{ ansiRed .undefined }} — fails with "invalid value;
+// .undefined }}, {{ upper .undefined }} — fails with "invalid value;
 // expected string", since there's no valid conversion from an invalid
 // reflect.Value. Engine.Render sets Option("missingkey=zero") specifically
 // so undefined variables are uniformly "" (the zero value), matching
@@ -100,10 +100,10 @@ func TestULIDFormat(t *testing.T) {
 // identical seed, so ulid output is not byte-for-byte reproducible either.
 // It's covered separately below (format-only) in TestULIDFormat.
 const determinismTemplate = `
-{{fakeName}}|{{fakeEmail}}|{{fakeCompany}}|{{fakeSentence}}|
+{{fName}}|{{fEmail}}|{{fCompany}}|{{fSentence}}|
 {{uuid}}|{{nanoid}}|{{ksuid}}|{{objectid}}|
 {{randInt 1 1000000}}|{{randString 16}}|{{randFloat 0.0 1000.0 4}}|
-{{$card := fakeCreditCard}}{{$card.number}}|{{$card.type}}|
+{{$card := fCreditCard}}{{$card.number}}|{{$card.type}}|
 {{regex "[0-9]{5}"}}
 `
 

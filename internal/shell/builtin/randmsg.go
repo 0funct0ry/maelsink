@@ -40,7 +40,7 @@ func buildRandomSpec(fs *pflag.FlagSet, s *shell.Session, data map[string]any) (
 
 	to, _ := fs.GetString("to")
 	if to == "" {
-		to = "{{ fakeEmail }}"
+		to = "{{ fEmail }}"
 	}
 	if spec.To, err = renderAll(render, []string{to}); err != nil {
 		return spec, err
@@ -48,7 +48,7 @@ func buildRandomSpec(fs *pflag.FlagSet, s *shell.Session, data map[string]any) (
 
 	from, _ := fs.GetString("from")
 	if from == "" {
-		from = "{{ fakeEmail }}"
+		from = "{{ fEmail }}"
 	}
 	if spec.From, err = render(from); err != nil {
 		return spec, err
@@ -78,7 +78,7 @@ func buildRandomSpec(fs *pflag.FlagSet, s *shell.Session, data map[string]any) (
 		if haveScenario {
 			subject = scenario.Subject
 		} else {
-			subject = "{{ fakeSubject }}"
+			subject = "{{ fSubject }}"
 		}
 	}
 	if spec.Subject, err = render(subject); err != nil {
@@ -132,7 +132,7 @@ func renderRandomBody(fs *pflag.FlagSet, s *shell.Session, data map[string]any, 
 
 	var err error
 	if wantText {
-		src := "{{ fakeTextBody }}"
+		src := "{{ fTextBody }}"
 		if haveScenario && scenario.Text != "" {
 			src = scenario.Text
 		}
@@ -141,7 +141,7 @@ func renderRandomBody(fs *pflag.FlagSet, s *shell.Session, data map[string]any, 
 		}
 	}
 	if wantHTML {
-		src := "{{ fakeHTMLBody }}"
+		src := "{{ fHTMLBody }}"
 		if haveScenario && scenario.HTML != "" {
 			src = scenario.HTML
 		}
@@ -153,13 +153,13 @@ func renderRandomBody(fs *pflag.FlagSet, s *shell.Session, data map[string]any, 
 }
 
 // randomAttachments generates n files of the given size via the template
-// engine's fakeBinary function (through Render, since Engine's
+// engine's fBinary function (through Render, since Engine's
 // file-generating methods are private to the tmpl package) and returns them
 // as AttachmentSpecs.
 func randomAttachments(s *shell.Session, data map[string]any, n int, size string) ([]cliclient.AttachmentSpec, error) {
 	specs := make([]cliclient.AttachmentSpec, 0, n)
 	for i := 0; i < n; i++ {
-		path, err := s.Tmpl.Render(fmt.Sprintf("{{ fakeBinary %q }}", size), data)
+		path, err := s.Tmpl.Render(fmt.Sprintf("{{ fBinary %q }}", size), data)
 		if err != nil {
 			return nil, fmt.Errorf("randmsg: generating attachment: %w", err)
 		}

@@ -17,8 +17,8 @@ import (
 // against the session's variables and the full tmpl.Engine FuncMap on the
 // WHOLE LINE before tokenization, so by the time Echo.Run sees its args
 // they are already rendered, exactly like every other builtin's arguments
-// (e.g. `send --subject "{{ fakeSubject }}"`). `echo {{ .connected }} {{
-// fakeEmail }}` therefore "just works" with no special-casing here.
+// (e.g. `send --subject "{{ fSubject }}"`). `echo {{ .connected }} {{
+// fEmail }}` therefore "just works" with no special-casing here.
 type Echo struct{}
 
 func (Echo) Name() string      { return "echo" }
