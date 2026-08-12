@@ -113,3 +113,40 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: theme('colors.text-tertiary');
 }
+
+/* Row entrance: fades/slides in on mount only — since MessageList keys
+   rows by message.id, React reuses existing DOM nodes across re-renders,
+   so this replays only for genuinely new rows (initial load's stagger, or
+   a single new message arriving via WS), never on every store update. */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-row-in {
+  animation: row-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Considered-dark-mode accent glow: applied to a small set of "live/active"
+   elements (the SMTP connection pill, the active sidebar nav item) so dark
+   mode reads as an intentional theme rather than just inverted lightness.
+   Light mode gets no glow — mirrors the light-palette-is-the-default
+   structure used for the color tokens above. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .glow-accent {
+    box-shadow:
+      0 0 0 1px rgba(168, 155, 255, 0.25),
+      0 0 20px rgba(168, 155, 255, 0.18);
+  }
+}
+:root[data-theme='dark'] .glow-accent {
+  box-shadow:
+    0 0 0 1px rgba(168, 155, 255, 0.25),
+    0 0 20px rgba(168, 155, 255, 0.18);
+}

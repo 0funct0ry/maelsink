@@ -11,6 +11,11 @@ interface IconButtonProps {
   onClick?: () => void
   variant?: IconButtonVariant
   size?: IconButtonSize
+  /** Set false to skip the hover tooltip — for high-density contexts like a
+   * per-row action menu trigger, where every row showing a tooltip on
+   * hover is noise rather than help. Defaults to true (M8.7's TopBar
+   * icon buttons still want it). */
+  showTooltip?: boolean
 }
 
 const variantClasses: Record<IconButtonVariant, string> = {
@@ -29,6 +34,7 @@ export default function IconButton({
   onClick,
   variant = 'default',
   size = 'md',
+  showTooltip = true,
 }: IconButtonProps) {
   return (
     <span className="group relative inline-flex">
@@ -42,12 +48,14 @@ export default function IconButton({
       </button>
       {/* Visible hover tooltip, not just the aria-label screen readers get
           (M8.7) — CSS-only via group-hover so no extra state/listeners. */}
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-1/2 top-full z-10 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-text-primary px-2 py-1 text-xs text-bg opacity-0 shadow-md transition-opacity delay-300 group-hover:opacity-100"
-      >
-        {ariaLabel}
-      </span>
+      {showTooltip && (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute left-1/2 top-full z-10 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-text-primary px-2 py-1 text-xs text-bg opacity-0 shadow-md transition-opacity delay-300 group-hover:opacity-100"
+        >
+          {ariaLabel}
+        </span>
+      )}
     </span>
   )
 }

@@ -5,7 +5,13 @@ import { useMessageStore } from '../../stores/useMessageStore'
 import { formatBytes } from '../../lib/format'
 import { paletteByToken } from '../../lib/tagColor'
 import { deleteSavedSearch, listSavedSearches, saveSearch, type SavedSearch } from '../../lib/savedSearches'
+import { getInfo } from '../../lib/uiApiClient'
 import type { ListMessagesParams } from '../../lib/apiTypes'
+
+// Fallback shown until getInfo() resolves, or if it fails — matches the
+// server's own default storage.path basename, so it's usually right even
+// before the real value loads.
+const DEFAULT_DB_FILENAME = 'maelsink.db'
 
 type MailboxFilter = 'all' | 'unread' | 'attachments' | 'warnings'
 
@@ -43,6 +49,7 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
   const fetchSidebarData = useMessageStore((state) => state.fetchSidebarData)
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [newSearchName, setNewSearchName] = useState('')
+  const [dbFilename, setDbFilename] = useState(DEFAULT_DB_FILENAME)
 
   // Sidebar counts/tags live in useMessageStore (M7.0) so they stay in sync
   // with realtime message.created/deleted/messages.cleared events and with
@@ -55,6 +62,20 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
 
   useEffect(() => {
     setSavedSearches(listSavedSearches())
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getInfo()
+      .then((info) => {
+        if (!cancelled && info.db_filename) setDbFilename(info.db_filename)
+      })
+      .catch(() => {
+        // Non-fatal: keeps the DEFAULT_DB_FILENAME fallback.
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const active = activeMailboxFilter(query)
@@ -116,7 +137,9 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
 
   const navItemClass = (isActiveItem: boolean) =>
     `flex w-full items-center justify-between gap-2.5 rounded-sm px-2 py-[7px] text-left text-[13.5px] font-medium transition-colors ${
-      isActiveItem ? 'bg-accent-soft text-accent' : 'text-text-secondary hover:bg-surface hover:text-text-primary'
+      isActiveItem
+        ? 'glow-accent bg-accent-soft text-accent'
+        : 'text-text-secondary hover:bg-surface hover:text-text-primary'
     }`
 
   const countBadgeClass = (isActiveItem: boolean) =>
@@ -304,7 +327,7 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
       )}
 
       {stats && (
-        <div className="flex flex-col gap-2 rounded-md border border-border-soft bg-surface p-3">
+        <div className="mt-auto flex flex-col gap-2 rounded-md border border-border-soft bg-surface p-3">
           <div className="flex items-baseline justify-between">
             <span className="text-[11.5px] text-text-tertiary">Storage used</span>
             <span className="font-mono text-xs font-medium text-text-primary">
@@ -317,7 +340,7 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
             <div className="h-full w-[12%] rounded-[3px] bg-accent" />
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-[11.5px] text-text-tertiary">maelsink.db</span>
+            <span className="text-[11.5px] text-text-tertiary">{dbFilename}</span>
             <span className="font-mono text-xs font-medium text-text-primary">{stats.total_messages} msgs</span>
           </div>
         </div>

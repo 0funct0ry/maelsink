@@ -34,6 +34,7 @@ describe('TopBar', () => {
     vi.mocked(uiApiClient.getInfo).mockResolvedValue({
       smtp: { host: '127.0.0.1', port: 1025 },
       auth_enabled: false,
+      db_filename: 'maelsink.db',
     })
     renderTopBar()
     await waitFor(() => expect(screen.getByText(/smtp:\/\/127\.0\.0\.1:1025/)).toBeInTheDocument())

@@ -19,7 +19,7 @@ func newRouter(cfg Config) *gin.Engine {
 }
 
 func TestInfo_ReturnsSMTPInfo(t *testing.T) {
-	engine := newRouter(Config{SMTPHost: "0.0.0.0", SMTPPort: 2525})
+	engine := newRouter(Config{SMTPHost: "127.0.0.1", SMTPPort: 2525})
 
 	req := httptest.NewRequest("GET", "/ui-api/v1/info", nil)
 	rec := httptest.NewRecorder()
@@ -28,9 +28,79 @@ func TestInfo_ReturnsSMTPInfo(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("GET /ui-api/v1/info = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	if got := rec.Body.String(); got != `{"smtp":{"host":"0.0.0.0","port":2525},"auth_enabled":false}` {
+	if got := rec.Body.String(); got != `{"smtp":{"host":"127.0.0.1","port":2525},"auth_enabled":false,"db_filename":""}` {
 		t.Fatalf("unexpected body: %s", got)
 	}
+}
+
+// TestInfo_ResolvesWildcardSMTPHost covers the abstraction-leakage-adjacent
+// fix: a wildcard bind address (set via MAELSINK_SMTP_HOST=0.0.0.0 in
+// Docker, per M9.0) must never be echoed back verbatim — it isn't
+// something a client can dial. Resolve it to the request's own Host
+// header instead.
+func TestInfo_ResolvesWildcardSMTPHost(t *testing.T) {
+	cases := []struct {
+		name           string
+		configuredHost string
+		requestHost    string
+		want           string
+	}{
+		{"wildcard resolves to request host", "0.0.0.0", "maelsink.example.com:8080", "maelsink.example.com"},
+		{"wildcard IPv6 resolves to request host", "::", "maelsink.example.com:8080", "maelsink.example.com"},
+		{"wildcard with no port on request host falls back to raw value", "0.0.0.0", "maelsink.example.com", "maelsink.example.com"},
+		{"concrete host is echoed unchanged regardless of request host", "127.0.0.1", "unrelated.example.com:9090", "127.0.0.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := newRouter(Config{SMTPHost: tc.configuredHost, SMTPPort: 1025})
+
+			req := httptest.NewRequest("GET", "/ui-api/v1/info", nil)
+			req.Host = tc.requestHost
+			rec := httptest.NewRecorder()
+			engine.ServeHTTP(rec, req)
+
+			if rec.Code != 200 {
+				t.Fatalf("GET /ui-api/v1/info = %d, want 200: %s", rec.Code, rec.Body.String())
+			}
+			wantSubstr := `"host":"` + tc.want + `"`
+			if got := rec.Body.String(); !strings.Contains(got, wantSubstr) {
+				t.Fatalf("body = %s, want it to contain %s", got, wantSubstr)
+			}
+		})
+	}
+}
+
+// TestInfo_ReturnsDBFilename covers the display-accuracy fix for the
+// Sidebar's storage widget: db_filename should mirror storage.path's
+// already-basename-reduced value from ConfigEntries (M8.7's redaction),
+// not a hardcoded literal.
+func TestInfo_ReturnsDBFilename(t *testing.T) {
+	t.Run("present in ConfigEntries", func(t *testing.T) {
+		entries := []config.Entry{
+			{Section: "storage", Key: "storage.path", Value: "custom-name.db"},
+		}
+		engine := newRouter(Config{ConfigEntries: entries})
+
+		req := httptest.NewRequest("GET", "/ui-api/v1/info", nil)
+		rec := httptest.NewRecorder()
+		engine.ServeHTTP(rec, req)
+
+		if got := rec.Body.String(); !strings.Contains(got, `"db_filename":"custom-name.db"`) {
+			t.Fatalf("body = %s, want db_filename custom-name.db", got)
+		}
+	})
+
+	t.Run("absent from ConfigEntries", func(t *testing.T) {
+		engine := newRouter(Config{ConfigEntries: nil})
+
+		req := httptest.NewRequest("GET", "/ui-api/v1/info", nil)
+		rec := httptest.NewRecorder()
+		engine.ServeHTTP(rec, req)
+
+		if got := rec.Body.String(); !strings.Contains(got, `"db_filename":""`) {
+			t.Fatalf("body = %s, want empty db_filename", got)
+		}
+	})
 }
 
 func TestInfo_RequiresAuthWhenEnabled(t *testing.T) {

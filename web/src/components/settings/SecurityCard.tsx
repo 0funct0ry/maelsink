@@ -12,10 +12,14 @@ export default function SecurityCard() {
   const openConfirm = useUIStore((state) => state.openConfirm)
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+    // Warning-tinted, unlike its sibling cards — this is the one card in
+    // the Settings grid whose only action is destructive, so it's the one
+    // that should visually stand out rather than blending into an
+    // identical neutral treatment.
+    <div className="rounded-lg border border-warning bg-warning-soft p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
-        <ShieldCheck className="h-4 w-4 text-text-tertiary" aria-hidden="true" />
-        <h2 className="text-sm font-semibold text-text-primary">Security</h2>
+        <ShieldCheck className="h-4 w-4 text-warning" aria-hidden="true" />
+        <h2 className="text-sm font-semibold text-warning">Security</h2>
       </div>
 
       <p className="text-sm text-text-secondary">

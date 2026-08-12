@@ -134,7 +134,10 @@ export default function MessageDetailScreen() {
         <h1 className="mb-3 text-[19px] font-semibold tracking-tight text-text-primary">
           {message.subject || '(no subject)'}
         </h1>
-        <div className="flex flex-col gap-1.5">
+        {/* Metadata consolidated into one compact card, rather than
+            loosely-stacked bare rows, so it reads as a single dense
+            block and the status line below sits right against it. */}
+        <div className="flex flex-col gap-1.5 rounded-md border border-border-soft bg-surface px-3 py-2.5">
           <div className="flex gap-2.5 text-[13px]">
             <span className="w-11 flex-none text-text-tertiary">From</span>
             <span className="break-all font-mono text-[12.6px] text-text-primary">
@@ -168,7 +171,7 @@ export default function MessageDetailScreen() {
             </span>
           </div>
         </div>
-        <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
+        <div className="mt-2 flex flex-wrap items-center gap-2.5">
           <StatusBadges message={message} />
           {message.tags.length > 0 && (
             <span className="flex flex-wrap items-center gap-1.5">
@@ -198,7 +201,7 @@ export default function MessageDetailScreen() {
         </div>
       </div>
 
-      <div className="px-6 py-5">
+      <div className="px-6 py-4">
         <MessageTabs message={message} />
       </div>
 

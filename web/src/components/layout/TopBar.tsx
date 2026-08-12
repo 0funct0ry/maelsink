@@ -88,7 +88,7 @@ export default function TopBar() {
         // brand mark, hamburger, this pill, and the search box all in one
         // 56px row without overflowing. The same info is always reachable
         // via Settings > Connection Info and the Inbox empty state.
-        <div className="hidden flex-none items-center gap-[7px] rounded-full border border-border-soft bg-surface py-[5px] pl-2 pr-2.5 font-mono text-xs text-text-secondary sm:flex">
+        <div className="glow-accent hidden flex-none items-center gap-[7px] rounded-full border border-border-soft bg-surface py-[5px] pl-2 pr-2.5 font-mono text-xs text-text-secondary sm:flex">
           <span className="relative flex h-[7px] w-[7px] flex-none">
             <span className="absolute inset-[-4px] animate-ping rounded-full border border-success opacity-60" />
             <span className="h-[7px] w-[7px] rounded-full bg-success" />

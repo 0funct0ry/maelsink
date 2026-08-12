@@ -7,6 +7,7 @@ package uiapi
 
 import (
 	"crypto/subtle"
+	"net"
 	"net/http"
 	"strings"
 
@@ -41,6 +42,44 @@ type smtpInfo struct {
 type infoResponse struct {
 	SMTP        smtpInfo `json:"smtp"`
 	AuthEnabled bool     `json:"auth_enabled"`
+	// DBFilename is the storage.path config value, already reduced to a
+	// basename by config.Dump (M8.7's abstraction-leakage hardening) —
+	// surfaced here so the Sidebar's storage widget can show which
+	// database a given maelsink instance is backed by, instead of a
+	// hardcoded "maelsink.db" label that's wrong whenever storage.path is
+	// overridden. Empty if no storage.path entry was found.
+	DBFilename string `json:"db_filename"`
+}
+
+// displaySMTPHost resolves a wildcard bind address ("0.0.0.0", "::", "")
+// to something a client can actually dial: the hostname the browser used
+// to reach this Web UI request, since that's usually reachable on the
+// SMTP port too (same container, same host, same port-forward). Any
+// concrete configured host is returned unchanged.
+func displaySMTPHost(configuredHost, requestHost string) string {
+	switch configuredHost {
+	case "0.0.0.0", "::", "":
+		if h, _, err := net.SplitHostPort(requestHost); err == nil {
+			return h
+		}
+		return requestHost
+	default:
+		return configuredHost
+	}
+}
+
+// dbFilename returns entries' storage.path value (already basename-only),
+// or "" if not present.
+func dbFilename(entries []config.Entry) string {
+	for _, e := range entries {
+		if e.Key == "storage.path" {
+			if s, ok := e.Value.(string); ok {
+				return s
+			}
+			break
+		}
+	}
+	return ""
 }
 
 // RegisterRoutes mounts /ui-api/v1 onto rg, gated by the same bearer-token
@@ -49,10 +88,12 @@ func RegisterRoutes(rg *gin.RouterGroup, cfg Config) {
 	v1 := rg.Group(cfg.BasePath + "/ui-api/v1")
 	v1.Use(authMiddleware(cfg.Auth))
 	{
+		dbFile := dbFilename(cfg.ConfigEntries)
 		v1.GET("/info", func(c *gin.Context) {
 			c.JSON(http.StatusOK, infoResponse{
-				SMTP:        smtpInfo{Host: cfg.SMTPHost, Port: cfg.SMTPPort},
+				SMTP:        smtpInfo{Host: displaySMTPHost(cfg.SMTPHost, c.Request.Host), Port: cfg.SMTPPort},
 				AuthEnabled: cfg.Auth.Enabled,
+				DBFilename:  dbFile,
 			})
 		})
 		v1.GET("/config", func(c *gin.Context) {

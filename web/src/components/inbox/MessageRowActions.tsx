@@ -118,7 +118,12 @@ export default function MessageRowActions({ message, onPreview }: MessageRowActi
 
   return (
     <span ref={triggerRef} onClick={(e) => e.stopPropagation()} className="inline-flex">
-      <IconButton icon={<MoreVertical className="h-4 w-4" />} aria-label="Message actions" onClick={handleToggle} />
+      <IconButton
+        icon={<MoreVertical className="h-4 w-4" />}
+        aria-label="Message actions"
+        onClick={handleToggle}
+        showTooltip={false}
+      />
 
       {open &&
         position &&

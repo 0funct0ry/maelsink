@@ -18,6 +18,7 @@ describe('EmptyState', () => {
     vi.mocked(uiApiClient.getInfo).mockResolvedValue({
       smtp: { host: '127.0.0.1', port: 1025 },
       auth_enabled: false,
+      db_filename: 'maelsink.db',
     })
     render(<EmptyState />)
     await waitFor(() => {

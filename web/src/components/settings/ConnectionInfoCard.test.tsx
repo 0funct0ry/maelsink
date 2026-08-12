@@ -15,6 +15,7 @@ describe('ConnectionInfoCard', () => {
     vi.mocked(getInfo).mockResolvedValue({
       smtp: { host: '127.0.0.1', port: 1025 },
       auth_enabled: true,
+      db_filename: 'maelsink.db',
     })
     render(<ConnectionInfoCard />)
     await waitFor(() => expect(screen.getByText('127.0.0.1:1025')).toBeInTheDocument())
@@ -25,6 +26,7 @@ describe('ConnectionInfoCard', () => {
     vi.mocked(getInfo).mockResolvedValue({
       smtp: { host: '0.0.0.0', port: 1025 },
       auth_enabled: false,
+      db_filename: 'maelsink.db',
     })
     render(<ConnectionInfoCard />)
     await waitFor(() => expect(screen.getByText('Disabled')).toBeInTheDocument())

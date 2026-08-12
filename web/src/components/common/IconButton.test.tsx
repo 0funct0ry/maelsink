@@ -33,4 +33,9 @@ describe('IconButton', () => {
     render(<IconButton icon={<Trash2 />} aria-label="Delete message" />)
     expect(screen.getByRole('tooltip')).toHaveTextContent('Delete message')
   })
+
+  it('omits the tooltip when showTooltip is false', () => {
+    render(<IconButton icon={<Trash2 />} aria-label="Delete message" showTooltip={false} />)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
 })

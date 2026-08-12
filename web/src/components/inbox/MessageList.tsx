@@ -38,10 +38,11 @@ export default function MessageList({ onOpenMessage, onPreviewMessage }: Message
 
   return (
     <div>
-      {messages.map((message) => (
+      {messages.map((message, index) => (
         <MessageRow
           key={message.id}
           message={message}
+          index={index}
           highlighted={highlightIds.has(message.id)}
           onOpen={() => onOpenMessage(message.id)}
           onPreview={() => onPreviewMessage(message.id)}

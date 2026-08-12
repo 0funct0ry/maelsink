@@ -103,6 +103,7 @@ export interface UiInfo {
     port: number
   }
   auth_enabled: boolean
+  db_filename: string
 }
 
 export interface ListMessagesParams {

@@ -3,8 +3,10 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { useMessageStore } from '../../stores/useMessageStore'
 import * as apiClient from '../../lib/apiClient'
+import * as uiApiClient from '../../lib/uiApiClient'
 
 vi.mock('../../lib/apiClient')
+vi.mock('../../lib/uiApiClient')
 
 // jsdom's localStorage is flaky under this test runner's sandboxing (see
 // useUIStore.test.ts), so stub it with a plain in-memory implementation —
@@ -51,6 +53,7 @@ describe('Sidebar', () => {
     vi.stubGlobal('localStorage', makeMemoryStorage())
     useMessageStore.setState({ total: 5, query: {}, setQuery: vi.fn(), sidebarStats: null, sidebarTags: [] })
     vi.mocked(apiClient.listTags).mockResolvedValue([])
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
   })
 
   afterEach(() => {
@@ -77,6 +80,41 @@ describe('Sidebar', () => {
     renderSidebar()
     await waitFor(() => expect(screen.getByText('Storage used')).toBeInTheDocument())
     expect(screen.getByText('2.0 KB')).toBeInTheDocument()
+  })
+
+  it('falls back to the default db filename when getInfo fails', async () => {
+    vi.mocked(apiClient.getStats).mockResolvedValue({
+      total_messages: 5,
+      total_size_bytes: 2048,
+      unread_count: 0,
+      attachment_count: 0,
+      parse_warning_count: 0,
+      oldest_received_at: null,
+      newest_received_at: null,
+    })
+    renderSidebar()
+    await waitFor(() => expect(screen.getByText('Storage used')).toBeInTheDocument())
+    expect(screen.getByText('maelsink.db')).toBeInTheDocument()
+  })
+
+  it('shows the real db filename from getInfo once it resolves', async () => {
+    vi.mocked(apiClient.getStats).mockResolvedValue({
+      total_messages: 5,
+      total_size_bytes: 2048,
+      unread_count: 0,
+      attachment_count: 0,
+      parse_warning_count: 0,
+      oldest_received_at: null,
+      newest_received_at: null,
+    })
+    vi.mocked(uiApiClient.getInfo).mockResolvedValue({
+      smtp: { host: '127.0.0.1', port: 1025 },
+      auth_enabled: false,
+      db_filename: 'custom-name.db',
+    })
+    renderSidebar()
+    await waitFor(() => expect(screen.getByText('custom-name.db')).toBeInTheDocument())
+    expect(screen.queryByText('maelsink.db')).not.toBeInTheDocument()
   })
 
   it('does not render the storage card when stats fail to load', async () => {

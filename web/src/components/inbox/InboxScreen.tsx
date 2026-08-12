@@ -24,7 +24,7 @@ export default function InboxScreen() {
   }, [fetchMessages])
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-surface">
       <div className="flex items-center justify-between border-b border-border-soft px-[22px] py-3">
         <div>
           <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-text-primary">Messages</h1>
@@ -68,7 +68,7 @@ export default function InboxScreen() {
             download
             title="Export all messages as .zip"
             onClick={() => useUIStore.getState().pushToast('info', 'Export started')}
-            className="flex h-8 w-8 items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-surface hover:text-text-primary"
+            className="flex h-8 w-8 items-center justify-center rounded-sm text-text-secondary transition-colors hover:bg-surface-2 hover:text-text-primary"
           >
             <Download className="h-[17px] w-[17px]" aria-hidden="true" />
           </a>
