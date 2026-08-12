@@ -31,9 +31,10 @@ type Health struct {
 // VersionInfo mirrors internal/api's /api/v1/version response shape
 // (internal/version.Info).
 type VersionInfo struct {
-	Version string `json:"version"`
-	Commit  string `json:"commit"`
-	Go      string `json:"go"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildDate string `json:"build_date"`
+	Go        string `json:"go"`
 }
 
 // listQuery builds the query params List() and BulkExport() share, from

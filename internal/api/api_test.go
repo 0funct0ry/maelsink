@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -1049,5 +1050,44 @@ func TestAPI_DeleteTagWithMessages(t *testing.T) {
 	rec, _ = doTagJSON(t, router, http.MethodDelete, "/api/v1/tags/doomed/messages", "")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("DELETE missing tag-with-messages = %d, want 404", rec.Code)
+	}
+}
+
+// statsErrStore wraps a real MessageStore but forces Stats to fail with a
+// distinctive underlying error, so tests can assert that error string never
+// reaches the client (M8.7 abstraction-leakage hardening).
+type statsErrStore struct {
+	store.MessageStore
+	err error
+}
+
+func (s statsErrStore) Stats(ctx context.Context) (store.Stats, error) {
+	return store.Stats{}, s.err
+}
+
+func TestAPI_InternalError_NeverLeaksRawErrorString(t *testing.T) {
+	s, _ := newTestStore(t)
+	underlying := errors.New("sqlite: disk I/O error opening /var/secret/mail.db")
+	failing := statsErrStore{MessageStore: s, err: underlying}
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+	router := New(failing, events.NewBus(), logger, Config{})
+
+	rec, body := doJSON(t, router, http.MethodGet, "/api/v1/stats", nil)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("GET /api/v1/stats = %d, want 500", rec.Code)
+	}
+	errObj, _ := body["error"].(map[string]any)
+	message, _ := errObj["message"].(string)
+	if message != "an internal error occurred" {
+		t.Fatalf("client-facing message = %q, want the generic message", message)
+	}
+	if strings.Contains(message, "disk I/O error") || strings.Contains(message, "/var/secret") {
+		t.Fatalf("client-facing message leaked internal detail: %q", message)
+	}
+
+	if !strings.Contains(logBuf.String(), "disk I/O error") {
+		t.Fatalf("expected server-side log to contain the real error, got: %s", logBuf.String())
 	}
 }

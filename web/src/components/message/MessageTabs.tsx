@@ -49,6 +49,10 @@ export default function MessageTabs({ message }: MessageTabsProps) {
       </div>
 
       <div className="pt-5">
+        {/* The preview pane below is intentionally a fixed white canvas,
+            not a theme token: it renders the email's own HTML, which
+            (like most email clients) assumes a white page background
+            regardless of app theme. */}
         {activeTab === 'Rendered HTML' && (
           <div className="overflow-hidden rounded-md border border-border-soft bg-white">
             <div className="flex items-center gap-1.5 border-b border-border-soft bg-surface px-3 py-[7px] font-mono text-[11px] text-text-tertiary">

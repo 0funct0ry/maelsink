@@ -1,6 +1,10 @@
 package api
 
-import "github.com/gin-gonic/gin"
+import (
+	"log/slog"
+
+	"github.com/gin-gonic/gin"
+)
 
 // errorEnvelope is the standard error shape from SPEC.md §5.3:
 //
@@ -40,6 +44,16 @@ func respondValidation(c *gin.Context, message string) {
 
 func respondInternal(c *gin.Context, message string) {
 	respondError(c, 500, "internal_error", message)
+}
+
+// respondInternalErr logs the real error server-side (never the client's
+// business) and responds with a generic, stable message — the raw
+// SQLite/driver/OS error string is an implementation detail that must never
+// reach the client, mirroring recoveryHandler's existing panic-handling
+// pattern (internal/api/middleware.go).
+func respondInternalErr(c *gin.Context, logger *slog.Logger, err error) {
+	logger.Error("internal error", "error", err, "path", c.Request.URL.Path)
+	respondInternal(c, "an internal error occurred")
 }
 
 func respondTagNotFound(c *gin.Context, name string) {

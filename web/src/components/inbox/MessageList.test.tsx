@@ -47,10 +47,17 @@ describe('MessageList', () => {
     expect(screen.getByText('boom')).toBeInTheDocument()
   })
 
-  it('shows the empty state when there are no messages', () => {
-    useMessageStore.setState({ listStatus: 'idle', messages: [], listError: null })
+  it('shows the first-run empty state when there are no messages and no active filter', () => {
+    useMessageStore.setState({ listStatus: 'idle', messages: [], listError: null, query: {} })
     render(<MessageList onOpenMessage={vi.fn()} onPreviewMessage={vi.fn()} />)
     expect(screen.getByText('No messages yet')).toBeInTheDocument()
+  })
+
+  it('shows the filtered empty state when a filter matches nothing', () => {
+    useMessageStore.setState({ listStatus: 'idle', messages: [], listError: null, query: { q: 'nonexistent' } })
+    render(<MessageList onOpenMessage={vi.fn()} onPreviewMessage={vi.fn()} />)
+    expect(screen.getByText('No matching messages')).toBeInTheDocument()
+    expect(screen.queryByText('No messages yet')).not.toBeInTheDocument()
   })
 
   it('renders a MessageRow per message and wires onOpenMessage', () => {

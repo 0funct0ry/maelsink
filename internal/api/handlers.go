@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,8 +27,9 @@ const (
 const invalidQueryMessage = "Invalid search query. Check your quotes, boolean operators (AND/OR/NOT), and column filters (e.g. subject:...)."
 
 type handlers struct {
-	store store.MessageStore
-	bus   *events.Bus
+	store  store.MessageStore
+	bus    *events.Bus
+	logger *slog.Logger
 }
 
 // messageSummary is the Message (summary) shape from SPEC.md §5.1. It also
@@ -203,7 +205,7 @@ func (h *handlers) listMessages(c *gin.Context) {
 			respondError(c, http.StatusBadRequest, "invalid_query", invalidQueryMessage)
 			return
 		}
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 
@@ -218,14 +220,14 @@ func (h *handlers) listMessages(c *gin.Context) {
 // handleStoreErr classifies an error from a by-id/by-prefix store lookup
 // into the matching error response: not found, an ambiguous short prefix
 // (SPEC.md §5.2's ID-prefix resolution), or a genuine internal error.
-func handleStoreErr(c *gin.Context, id string, err error) {
+func (h *handlers) handleStoreErr(c *gin.Context, id string, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		respondNotFound(c, id)
 	case errors.Is(err, store.ErrAmbiguousID):
 		respondAmbiguousID(c, id)
 	default:
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 	}
 }
 
@@ -233,7 +235,7 @@ func (h *handlers) getMessage(c *gin.Context) {
 	id := c.Param("id")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 	c.JSON(http.StatusOK, toDetail(msg))
@@ -262,7 +264,7 @@ func (h *handlers) markRead(c *gin.Context) {
 	}
 
 	if err := h.store.MarkRead(c.Request.Context(), id, read); err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -288,7 +290,7 @@ func (h *handlers) updateTags(c *gin.Context) {
 	// (and the published event) uses the full ID.
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 
@@ -298,7 +300,7 @@ func (h *handlers) updateTags(c *gin.Context) {
 				respondValidation(c, err.Error())
 				return
 			}
-			handleStoreErr(c, id, err)
+			h.handleStoreErr(c, id, err)
 			return
 		}
 	}
@@ -308,14 +310,14 @@ func (h *handlers) updateTags(c *gin.Context) {
 				respondValidation(c, err.Error())
 				return
 			}
-			handleStoreErr(c, id, err)
+			h.handleStoreErr(c, id, err)
 			return
 		}
 	}
 
 	updated, err := h.store.Get(c.Request.Context(), msg.ID)
 	if err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 	h.bus.Publish(events.MessageTagsUpdated(updated.ID, updated.Tags))
@@ -330,12 +332,12 @@ func (h *handlers) deleteMessage(c *gin.Context) {
 	// matching on payload.id always see the canonical ID.
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 
 	if err := h.store.Delete(c.Request.Context(), id); err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 	h.bus.Publish(events.MessageDeleted(msg.ID))
@@ -348,7 +350,7 @@ func (h *handlers) clearMessages(c *gin.Context) {
 		return
 	}
 	if err := h.store.Clear(c.Request.Context()); err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 	h.bus.Publish(events.MessagesCleared())
@@ -359,7 +361,7 @@ func (h *handlers) rawMessage(c *gin.Context) {
 	id := c.Param("id")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 	c.Data(http.StatusOK, "message/rfc822", msg.RawSource)
@@ -369,7 +371,7 @@ func (h *handlers) exportMessage(c *gin.Context) {
 	id := c.Param("id")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 	c.Header("Content-Disposition", `attachment; filename="`+msg.ID+`.eml"`)
@@ -380,7 +382,7 @@ func (h *handlers) getAttachment(c *gin.Context) {
 	id, attID := c.Param("id"), c.Param("attId")
 	msg, err := h.store.Get(c.Request.Context(), id)
 	if err != nil {
-		handleStoreErr(c, id, err)
+		h.handleStoreErr(c, id, err)
 		return
 	}
 
@@ -405,7 +407,7 @@ func (h *handlers) getAttachment(c *gin.Context) {
 func (h *handlers) stats(c *gin.Context) {
 	s, err := h.store.Stats(c.Request.Context())
 	if err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 
@@ -449,7 +451,7 @@ func toTagStatsJSON(t store.TagStats) tagStatsJSON {
 func (h *handlers) listTags(c *gin.Context) {
 	tags, err := h.store.ListTagsWithStats(c.Request.Context())
 	if err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 	out := make([]tagStatsJSON, len(tags))
@@ -461,7 +463,7 @@ func (h *handlers) listTags(c *gin.Context) {
 
 // handleTagStoreErr classifies an error from a tag mutation into the
 // matching error response.
-func handleTagStoreErr(c *gin.Context, name string, err error) {
+func (h *handlers) handleTagStoreErr(c *gin.Context, name string, err error) {
 	switch {
 	case errors.Is(err, store.ErrTagNotFound):
 		respondTagNotFound(c, name)
@@ -470,7 +472,7 @@ func handleTagStoreErr(c *gin.Context, name string, err error) {
 	case errors.Is(err, store.ErrInvalidTag):
 		respondValidation(c, err.Error())
 	default:
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 	}
 }
 
@@ -507,14 +509,14 @@ func (h *handlers) createTag(c *gin.Context) {
 	}
 
 	if err := h.store.CreateTag(c.Request.Context(), body.Name, body.Color); err != nil {
-		handleTagStoreErr(c, body.Name, err)
+		h.handleTagStoreErr(c, body.Name, err)
 		return
 	}
 	h.bus.Publish(events.TagCreated(body.Name, body.Color))
 
 	ts, err := h.findTagStats(c, strings.TrimSpace(body.Name))
 	if err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 	c.JSON(http.StatusCreated, toTagStatsJSON(*ts))
@@ -545,13 +547,13 @@ func (h *handlers) patchTag(c *gin.Context) {
 		newName := strings.TrimSpace(*body.Name)
 		existing, err := h.findTagStats(c, newName)
 		if err != nil {
-			respondInternal(c, err.Error())
+			respondInternalErr(c, h.logger, err)
 			return
 		}
 		merged := existing != nil
 
 		if err := h.store.RenameTag(c.Request.Context(), name, newName); err != nil {
-			handleTagStoreErr(c, name, err)
+			h.handleTagStoreErr(c, name, err)
 			return
 		}
 		h.bus.Publish(events.TagRenamed(name, newName, merged))
@@ -561,7 +563,7 @@ func (h *handlers) patchTag(c *gin.Context) {
 	if body.Color != nil && strings.TrimSpace(*body.Color) != "" {
 		color := strings.TrimSpace(*body.Color)
 		if err := h.store.RecolorTag(c.Request.Context(), effectiveName, color); err != nil {
-			handleTagStoreErr(c, effectiveName, err)
+			h.handleTagStoreErr(c, effectiveName, err)
 			return
 		}
 		h.bus.Publish(events.TagRecolored(effectiveName, color))
@@ -569,7 +571,7 @@ func (h *handlers) patchTag(c *gin.Context) {
 
 	ts, err := h.findTagStats(c, effectiveName)
 	if err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 	if ts == nil {
@@ -582,7 +584,7 @@ func (h *handlers) patchTag(c *gin.Context) {
 func (h *handlers) deleteTag(c *gin.Context) {
 	name := c.Param("name")
 	if err := h.store.DeleteTag(c.Request.Context(), name); err != nil {
-		handleTagStoreErr(c, name, err)
+		h.handleTagStoreErr(c, name, err)
 		return
 	}
 	h.bus.Publish(events.TagDeleted(name))
@@ -594,12 +596,12 @@ func (h *handlers) deleteTagWithMessages(c *gin.Context) {
 
 	msgs, _, err := h.store.List(c.Request.Context(), store.ListFilter{Tag: name})
 	if err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 
 	if err := h.store.DeleteTagWithMessages(c.Request.Context(), name); err != nil {
-		handleTagStoreErr(c, name, err)
+		h.handleTagStoreErr(c, name, err)
 		return
 	}
 
@@ -749,7 +751,7 @@ func (h *handlers) listSessions(c *gin.Context) {
 
 	sessions, total, err := h.store.ListSessions(c.Request.Context(), filter)
 	if err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 
@@ -771,7 +773,7 @@ func (h *handlers) getSession(c *gin.Context) {
 		case errors.Is(err, store.ErrAmbiguousID):
 			respondSessionAmbiguousID(c, id)
 		default:
-			respondInternal(c, err.Error())
+			respondInternalErr(c, h.logger, err)
 		}
 		return
 	}
@@ -792,7 +794,7 @@ func (h *handlers) deleteSession(c *gin.Context) {
 		case errors.Is(err, store.ErrAmbiguousID):
 			respondSessionAmbiguousID(c, id)
 		default:
-			respondInternal(c, err.Error())
+			respondInternalErr(c, h.logger, err)
 		}
 		return
 	}
@@ -804,7 +806,7 @@ func (h *handlers) deleteSession(c *gin.Context) {
 		case errors.Is(err, store.ErrAmbiguousID):
 			respondSessionAmbiguousID(c, id)
 		default:
-			respondInternal(c, err.Error())
+			respondInternalErr(c, h.logger, err)
 		}
 		return
 	}
@@ -818,7 +820,7 @@ func (h *handlers) clearSessions(c *gin.Context) {
 		return
 	}
 	if err := h.store.ClearSessions(c.Request.Context()); err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 	h.bus.Publish(events.SessionsCleared())

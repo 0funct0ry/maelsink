@@ -144,38 +144,40 @@ export default function TagManagementScreen() {
         {tags.length === 0 ? (
           <p className="text-sm text-text-secondary">No tags yet.</p>
         ) : (
-          <table className="w-full border-collapse rounded-md border border-border-soft text-left">
-            <thead className="bg-surface">
-              <tr>
-                <th className="w-6 px-3 py-2" />
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">Name</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                  <button type="button" onClick={() => toggleSort('count')} className="hover:text-text-primary">
-                    Count {sortIcon('count')}
-                  </button>
-                </th>
-                <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                  <button type="button" onClick={() => toggleSort('last_used')} className="hover:text-text-primary">
-                    Last used {sortIcon('last_used')}
-                  </button>
-                </th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((tag) => (
-                <TagRow
-                  key={tag.name}
-                  tag={tag}
-                  existingNames={existingNames}
-                  onRename={handleRename}
-                  onRecolor={handleRecolor}
-                  onDelete={handleDelete}
-                  onDeleteWithMessages={handleDeleteWithMessages}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className="scrollbar-thin overflow-x-auto">
+            <table className="w-full min-w-[520px] border-collapse rounded-md border border-border-soft text-left">
+              <thead className="bg-surface">
+                <tr>
+                  <th className="w-6 px-3 py-2" />
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">Name</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                    <button type="button" onClick={() => toggleSort('count')} className="hover:text-text-primary">
+                      Count {sortIcon('count')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                    <button type="button" onClick={() => toggleSort('last_used')} className="hover:text-text-primary">
+                      Last used {sortIcon('last_used')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((tag) => (
+                  <TagRow
+                    key={tag.name}
+                    tag={tag}
+                    existingNames={existingNames}
+                    onRename={handleRename}
+                    onRecolor={handleRecolor}
+                    onDelete={handleDelete}
+                    onDeleteWithMessages={handleDeleteWithMessages}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

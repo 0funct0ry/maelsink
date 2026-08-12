@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import type { WsStatus } from '../lib/wsClient'
 
 const STORAGE_KEY = 'maelsink_api_key'
+const THEME_STORAGE_KEY = 'maelsink_theme'
+
+export type Theme = 'light' | 'dark' | 'system'
 
 export type ToastVariant = 'info' | 'success' | 'danger'
 
@@ -26,6 +29,12 @@ function nextToastId(): string {
   return `toast-${toastCounter}`
 }
 
+// The API key is kept in localStorage rather than a server-side session
+// because maelsink has no backend session mechanism to put it behind — it's
+// a local dev tool per SPEC.md §12, not a hosted multi-user service. The
+// tradeoff: any script running on this origin (or with filesystem access to
+// the browser profile) can read it, so clearAuthToken below exists to let a
+// developer deliberately purge it when that risk matters to them.
 function readStoredToken(): string | null {
   try {
     return window.localStorage.getItem(STORAGE_KEY)
@@ -40,6 +49,45 @@ function writeStoredToken(token: string): void {
   } catch {
     // localStorage unavailable (private mode, disabled storage) — the
     // session still works, the key just won't survive a reload.
+  }
+}
+
+function removeStoredToken(): void {
+  try {
+    window.localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // localStorage unavailable — nothing to remove.
+  }
+}
+
+function readStoredTheme(): Theme {
+  try {
+    const v = window.localStorage.getItem(THEME_STORAGE_KEY)
+    if (v === 'light' || v === 'dark' || v === 'system') return v
+  } catch {
+    // localStorage unavailable — fall through to the default.
+  }
+  return 'system'
+}
+
+function writeStoredTheme(theme: Theme): void {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  } catch {
+    // localStorage unavailable — the choice just won't survive a reload.
+  }
+}
+
+// Applies theme to the document root as a data-theme attribute, which
+// src/index.css's [data-theme="dark"]/[data-theme="light"] blocks key off
+// of. 'system' removes the attribute entirely so the prefers-color-scheme
+// media query (also in index.css) takes over.
+function applyTheme(theme: Theme): void {
+  const root = window.document.documentElement
+  if (theme === 'system') {
+    root.removeAttribute('data-theme')
+  } else {
+    root.setAttribute('data-theme', theme)
   }
 }
 
@@ -64,6 +112,9 @@ interface UIState {
    * indicator regardless of which screen is currently active. */
   wsStatus: WsStatus
   setWsStatus: (status: WsStatus) => void
+
+  theme: Theme
+  setTheme: (theme: Theme) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -85,10 +136,24 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ authToken: token, authRequired: false, pendingRetry: null })
     retry?.()
   },
-  clearAuthToken: () => set({ authToken: null }),
+  clearAuthToken: () => {
+    removeStoredToken()
+    set({ authToken: null })
+  },
   setAuthRequired: (required, retry) =>
     set({ authRequired: required, pendingRetry: required ? retry ?? null : null }),
 
   wsStatus: 'connecting',
   setWsStatus: (status) => set({ wsStatus: status }),
+
+  theme: readStoredTheme(),
+  setTheme: (theme) => {
+    writeStoredTheme(theme)
+    applyTheme(theme)
+    set({ theme })
+  },
 }))
+
+// Apply whatever theme was already persisted as soon as the module loads,
+// so the very first paint uses it instead of a light-mode flash.
+applyTheme(useUIStore.getState().theme)

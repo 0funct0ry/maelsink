@@ -74,7 +74,7 @@ export default function SessionsScreen() {
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden">
         {listStatus === 'loading' && (
           <div className="flex flex-col gap-2 p-4">
             {[0, 1, 2, 3, 4].map((i) => (

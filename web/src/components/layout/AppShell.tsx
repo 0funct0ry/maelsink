@@ -4,6 +4,7 @@ import TopBar from './TopBar'
 import Sidebar from './Sidebar'
 import ToastContainer from '../common/ToastContainer'
 import ConfirmDialog from '../common/ConfirmDialog'
+import ShortcutsHelpModal from '../common/ShortcutsHelpModal'
 import { useMessageStore } from '../../stores/useMessageStore'
 import { useSessionStore } from '../../stores/useSessionStore'
 import { useUIStore } from '../../stores/useUIStore'
@@ -126,9 +127,10 @@ export default function AppShell({ children }: AppShellProps) {
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-bg">{children}</main>
+        <main className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden bg-bg">{children}</main>
       </div>
       <ToastContainer />
+      <ShortcutsHelpModal />
       <ConfirmDialog
         open={modal?.kind === 'confirm'}
         onClose={closeModal}

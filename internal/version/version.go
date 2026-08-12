@@ -11,17 +11,19 @@ var (
 )
 
 // Info is the JSON-serializable shape returned by `maelsink version --json`
-// and the future /api/v1/version endpoint.
+// and /api/v1/version.
 type Info struct {
-	Version string `json:"version"`
-	Commit  string `json:"commit"`
-	Go      string `json:"go"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildDate string `json:"build_date"`
+	Go        string `json:"go"`
 }
 
 func Get() Info {
 	return Info{
-		Version: Version,
-		Commit:  Commit,
-		Go:      runtime.Version(),
+		Version:   Version,
+		Commit:    Commit,
+		BuildDate: BuildDate,
+		Go:        runtime.Version(),
 	}
 }

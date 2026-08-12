@@ -8,9 +8,21 @@ interface ModalProps {
   /** When false, Escape and backdrop clicks do not close the modal — used
    * for mandatory gates like ApiKeyModal. Defaults to true. */
   dismissable?: boolean
+  /** 'dialog' (default): centered card. 'drawer': full-height panel sliding
+   * in from the left, for the mobile navigation drawer (M8.7) — reuses the
+   * same backdrop/Escape/focus-trap wiring below rather than a separate
+   * component. */
+  variant?: 'dialog' | 'drawer'
 }
 
-export default function Modal({ open, onClose, children, maxWidthClass = 'max-w-md', dismissable = true }: ModalProps) {
+export default function Modal({
+  open,
+  onClose,
+  children,
+  maxWidthClass = 'max-w-md',
+  dismissable = true,
+  variant = 'dialog',
+}: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -31,9 +43,11 @@ export default function Modal({ open, onClose, children, maxWidthClass = 'max-w-
 
   if (!open) return null
 
+  const isDrawer = variant === 'drawer'
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/40"
+      className={`fixed inset-0 z-50 flex bg-text-primary/40 ${isDrawer ? 'items-stretch justify-start' : 'items-center justify-center'}`}
       onClick={() => {
         if (dismissable) onClose()
       }}
@@ -41,7 +55,11 @@ export default function Modal({ open, onClose, children, maxWidthClass = 'max-w-
       <div
         ref={cardRef}
         tabIndex={-1}
-        className={`w-full ${maxWidthClass} rounded-lg bg-bg p-6 shadow-lg`}
+        className={
+          isDrawer
+            ? `scrollbar-thin h-full w-full ${maxWidthClass} overflow-y-auto overflow-x-hidden bg-bg shadow-lg`
+            : `w-full ${maxWidthClass} rounded-lg bg-bg p-6 shadow-lg`
+        }
         onClick={(event) => event.stopPropagation()}
       >
         {children}

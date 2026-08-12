@@ -31,11 +31,17 @@ describe('SettingsScreen', () => {
   })
 
   it('renders version info once loaded', async () => {
-    vi.mocked(getVersion).mockResolvedValue({ version: '1.2.3', commit: 'abc123', go: 'go1.26.4' })
+    vi.mocked(getVersion).mockResolvedValue({
+      version: '1.2.3',
+      commit: 'abc123',
+      build_date: '2026-08-12T00:00:00Z',
+      go: 'go1.26.4',
+    })
     render(<SettingsScreen />)
     await waitFor(() => expect(screen.getByText('1.2.3')).toBeInTheDocument())
     expect(screen.getByText('abc123')).toBeInTheDocument()
-    expect(screen.queryByText('go1.26.4')).not.toBeInTheDocument()
+    expect(screen.getByText('2026-08-12T00:00:00Z')).toBeInTheDocument()
+    expect(screen.getByText('go1.26.4')).toBeInTheDocument()
   })
 
   it('shows an inline version error without crashing the rest of the screen', async () => {

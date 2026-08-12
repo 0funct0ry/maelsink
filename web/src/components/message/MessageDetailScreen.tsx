@@ -98,7 +98,7 @@ export default function MessageDetailScreen() {
   const message = selected
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <div className="scrollbar-thin flex h-full flex-col overflow-y-auto overflow-x-hidden">
       <div className="flex flex-none items-center gap-3.5 border-b border-border-soft px-6 py-3.5">
         <button
           type="button"

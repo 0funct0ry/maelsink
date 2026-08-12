@@ -86,6 +86,7 @@ export interface ConfigEntry {
 export interface Version {
   version: string
   commit: string
+  build_date: string
   go: string
 }
 

@@ -39,6 +39,7 @@ export default function ApiKeyModal() {
         <input
           id="api-key-input"
           type="password"
+          autoComplete="off"
           value={value}
           onChange={(event) => setValue(event.target.value)}
           className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"

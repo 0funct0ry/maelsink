@@ -1,5 +1,7 @@
 import { useMessageStore } from '../../stores/useMessageStore'
+import { hasActiveFilter } from '../../lib/queryFilters'
 import EmptyState from './EmptyState'
+import FilteredEmptyState from './FilteredEmptyState'
 import MessageRow from './MessageRow'
 
 interface MessageListProps {
@@ -12,6 +14,7 @@ export default function MessageList({ onOpenMessage, onPreviewMessage }: Message
   const listStatus = useMessageStore((state) => state.listStatus)
   const listError = useMessageStore((state) => state.listError)
   const highlightIds = useMessageStore((state) => state.highlightIds)
+  const query = useMessageStore((state) => state.query)
 
   if (listStatus === 'loading') {
     return (
@@ -30,7 +33,7 @@ export default function MessageList({ onOpenMessage, onPreviewMessage }: Message
   }
 
   if (messages.length === 0) {
-    return <EmptyState />
+    return hasActiveFilter(query) ? <FilteredEmptyState /> : <EmptyState />
   }
 
   return (

@@ -52,7 +52,7 @@ export default function MessagePreviewModal({ messageId, onClose }: MessagePrevi
         </div>
       )}
       {message && (
-        <div className="max-h-[80vh] overflow-y-auto">
+        <div className="scrollbar-thin max-h-[80vh] overflow-y-auto overflow-x-hidden">
           <h2 className="mb-1 text-[17px] font-semibold text-text-primary">{message.subject || '(no subject)'}</h2>
           <p className="mb-4 truncate font-mono text-[12px] text-text-tertiary">
             {message.from} &rarr; {message.to.join(', ')}

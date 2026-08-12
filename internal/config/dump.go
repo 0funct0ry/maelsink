@@ -1,5 +1,7 @@
 package config
 
+import "path/filepath"
+
 // Entry is one row of the Settings screen's full config dump: a single
 // non-secret key, its resolved value, and the Source that produced it.
 type Entry struct {
@@ -41,12 +43,16 @@ func Dump(cfg Config, prov Provenance) []Entry {
 	add("api", "api.auth.enabled", cfg.API.Auth.Enabled)
 
 	add("storage", "storage.driver", cfg.Storage.Driver)
-	add("storage", "storage.path", cfg.Storage.Path)
+	// storage.path/disk_path are reduced to their basename — the Settings
+	// screen's value is showing *that* a path is configured, not the
+	// server's directory layout or OS username (M8.7 abstraction-leakage
+	// hardening).
+	add("storage", "storage.path", basename(cfg.Storage.Path))
 	add("storage", "storage.retention.max_messages", cfg.Storage.Retention.MaxMessages)
 	add("storage", "storage.retention.max_age_hours", cfg.Storage.Retention.MaxAgeHours)
 	add("storage", "storage.retention.sweep_interval_minutes", cfg.Storage.Retention.SweepIntervalMinutes)
 	add("storage", "storage.attachments.store_on_disk", cfg.Storage.Attachments.StoreOnDisk)
-	add("storage", "storage.attachments.disk_path", cfg.Storage.Attachments.DiskPath)
+	add("storage", "storage.attachments.disk_path", basename(cfg.Storage.Attachments.DiskPath))
 
 	add("logging", "logging.level", cfg.Logging.Level)
 	add("logging", "logging.format", cfg.Logging.Format)
@@ -55,4 +61,14 @@ func Dump(cfg Config, prov Provenance) []Entry {
 	add("server", "server.shutdown_timeout_seconds", cfg.Server.ShutdownTimeoutSeconds)
 
 	return entries
+}
+
+// basename reduces a filesystem path to its final element, leaving an empty
+// path empty rather than collapsing it to filepath.Base's "." for the empty
+// string.
+func basename(path string) string {
+	if path == "" {
+		return ""
+	}
+	return filepath.Base(path)
 }

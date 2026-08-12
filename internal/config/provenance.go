@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -65,6 +66,14 @@ var keyToFlag = map[string]string{
 	"server.shutdown_timeout_seconds":          "server-shutdown-timeout-seconds",
 }
 
+// isPathKey reports whether key's resolved value is a filesystem path, so
+// its provenance origin (e.g. a --flag=value string) is reduced to a
+// basename the same way Dump reduces the value itself (M8.7
+// abstraction-leakage hardening).
+func isPathKey(key string) bool {
+	return key == "storage.path" || key == "storage.attachments.disk_path"
+}
+
 // ProvenanceKeys returns every key ResolveProvenance/Dump know about, sorted
 // for determinism.
 func ProvenanceKeys() []string {
@@ -85,7 +94,10 @@ func ProvenanceKeys() []string {
 //   - env: the matching MAELSINK_<KEY> env var is set in os.Environ().
 //     Origin is the env var name.
 //   - file: v.InConfig(key) — viper's own "was this key present in the
-//     loaded config file" check. Origin is the resolved config file path.
+//     loaded config file" check. Origin is the resolved config file's
+//     basename only (M8.7 abstraction-leakage hardening) — the Settings
+//     screen's value is showing *which* config file set this key, not the
+//     server's directory layout or OS username.
 //   - default: none of the above matched.
 func ResolveProvenance(v *viper.Viper, flagSet *pflag.FlagSet, envKeys []string) Provenance {
 	prov := make(Provenance, len(envKeys))
@@ -95,7 +107,11 @@ func ResolveProvenance(v *viper.Viper, flagSet *pflag.FlagSet, envKeys []string)
 		if flagSet != nil {
 			if flagName, ok := keyToFlag[key]; ok {
 				if f := flagSet.Lookup(flagName); f != nil && f.Changed {
-					prov[key] = Source{Layer: "flag", Origin: "--" + flagName + "=" + f.Value.String()}
+					value := f.Value.String()
+					if isPathKey(key) {
+						value = filepath.Base(value)
+					}
+					prov[key] = Source{Layer: "flag", Origin: "--" + flagName + "=" + value}
 					continue
 				}
 			}
@@ -108,7 +124,7 @@ func ResolveProvenance(v *viper.Viper, flagSet *pflag.FlagSet, envKeys []string)
 		}
 
 		if v != nil && v.InConfig(key) {
-			prov[key] = Source{Layer: "file", Origin: v.ConfigFileUsed()}
+			prov[key] = Source{Layer: "file", Origin: filepath.Base(v.ConfigFileUsed())}
 			continue
 		}
 

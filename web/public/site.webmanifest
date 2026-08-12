@@ -1,0 +1,14 @@
+{
+  "name": "maelsink",
+  "short_name": "maelsink",
+  "description": "A local fake SMTP server for development and CI — accepts any mail and lets you inspect it in a web UI, without relaying anywhere.",
+  "icons": [
+    { "src": "favicon-16.png", "sizes": "16x16", "type": "image/png" },
+    { "src": "favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "theme_color": "#635bff",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}

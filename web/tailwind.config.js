@@ -1,36 +1,46 @@
 /** @type {import('tailwindcss').Config} */
+
+// Every color below resolves through a CSS custom property (defined in
+// src/index.css's :root / [data-theme="dark"] / prefers-color-scheme
+// blocks) rather than a fixed hex, so the whole token layer responds to the
+// dark-mode toggle uniformly (M8.7) — components keep using the same
+// `bg-surface`/`text-text-primary`-style classes either way.
+function themeColor(varName) {
+  return `rgb(var(${varName}) / <alpha-value>)`
+}
+
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        bg: '#ffffff',
-        surface: '#f7f7fa',
-        'surface-2': '#f0f0f5',
+        bg: themeColor('--color-bg'),
+        surface: themeColor('--color-surface'),
+        'surface-2': themeColor('--color-surface-2'),
         border: {
-          DEFAULT: '#e3e5ea',
-          soft: '#edeef2',
+          DEFAULT: themeColor('--color-border'),
+          soft: themeColor('--color-border-soft'),
         },
-        'text-primary': '#1a1f36',
-        'text-secondary': '#6b7280',
-        'text-tertiary': '#9aa1b1',
+        'text-primary': themeColor('--color-text-primary'),
+        'text-secondary': themeColor('--color-text-secondary'),
+        'text-tertiary': themeColor('--color-text-tertiary'),
         accent: {
-          DEFAULT: '#635bff',
-          hover: '#514adb',
-          soft: '#eeecff',
-          'soft-border': '#d9d5ff',
+          DEFAULT: themeColor('--color-accent'),
+          hover: themeColor('--color-accent-hover'),
+          soft: themeColor('--color-accent-soft'),
+          'soft-border': themeColor('--color-accent-soft-border'),
         },
         success: {
-          DEFAULT: '#1f9254',
-          soft: '#e3f8ec',
+          DEFAULT: themeColor('--color-success'),
+          soft: themeColor('--color-success-soft'),
         },
         danger: {
-          DEFAULT: '#df1b41',
-          soft: '#feeaec',
+          DEFAULT: themeColor('--color-danger'),
+          soft: themeColor('--color-danger-soft'),
         },
         warning: {
-          DEFAULT: '#b25e09',
-          soft: '#fdf0dd',
+          DEFAULT: themeColor('--color-warning'),
+          soft: themeColor('--color-warning-soft'),
         },
       },
       fontFamily: {

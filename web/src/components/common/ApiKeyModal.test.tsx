@@ -56,6 +56,12 @@ describe('ApiKeyModal', () => {
     expect(useUIStore.getState().authRequired).toBe(false)
   })
 
+  it('disables browser autocomplete on the key input', () => {
+    useUIStore.setState({ authRequired: true })
+    render(<ApiKeyModal />)
+    expect(screen.getByLabelText('Enter API Key')).toHaveAttribute('autocomplete', 'off')
+  })
+
   it('does not close on Escape (non-dismissable)', () => {
     useUIStore.setState({ authRequired: true })
     render(<ApiKeyModal />)

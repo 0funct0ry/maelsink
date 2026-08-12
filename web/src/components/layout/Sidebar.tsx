@@ -25,7 +25,15 @@ function activeMailboxFilter(query: ListMessagesParams): MailboxFilter {
 // action both live in the TopBar (gear/trash icons) so they're reachable
 // from every screen, not just the Inbox — the mockup has no Settings item
 // here either.
-export default function Sidebar() {
+interface SidebarProps {
+  /** 'desktop' (default): the always-on ≥md rail, hidden below md.
+   * 'drawer': the same content rendered full-width/full-height inside the
+   * mobile navigation drawer (M8.7) — never hidden, since the drawer only
+   * mounts at all when the hamburger button opens it. */
+  variant?: 'desktop' | 'drawer'
+}
+
+export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
   const navigate = useNavigate()
   const total = useMessageStore((state) => state.total)
   const query = useMessageStore((state) => state.query)
@@ -112,10 +120,16 @@ export default function Sidebar() {
     }`
 
   const countBadgeClass = (isActiveItem: boolean) =>
-    `rounded-[5px] px-1.5 font-mono text-[11.5px] ${isActiveItem ? 'bg-white text-accent' : 'bg-surface text-text-tertiary'}`
+    `rounded-[5px] px-1.5 font-mono text-[11.5px] ${isActiveItem ? 'bg-bg text-accent' : 'bg-surface text-text-tertiary'}`
 
   return (
-    <aside className="scrollbar-thin hidden w-[216px] flex-none flex-col gap-[22px] overflow-y-auto border-r border-border bg-bg p-3 md:flex">
+    <aside
+      className={
+        variant === 'drawer'
+          ? 'scrollbar-thin flex w-full flex-col gap-[22px] overflow-y-auto bg-bg p-3'
+          : 'scrollbar-thin hidden w-[216px] flex-none flex-col gap-[22px] overflow-y-auto border-r border-border bg-bg p-3 md:flex'
+      }
+    >
       <div>
         <div className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-tertiary">
           Mailbox

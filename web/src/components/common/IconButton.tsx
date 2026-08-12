@@ -31,13 +31,23 @@ export default function IconButton({
   size = 'md',
 }: IconButtonProps) {
   return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onClick={onClick}
-      className={`inline-flex items-center justify-center rounded-md transition-colors ${sizeClasses[size]} ${variantClasses[variant]}`}
-    >
-      {icon}
-    </button>
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={onClick}
+        className={`inline-flex items-center justify-center rounded-md transition-colors ${sizeClasses[size]} ${variantClasses[variant]}`}
+      >
+        {icon}
+      </button>
+      {/* Visible hover tooltip, not just the aria-label screen readers get
+          (M8.7) — CSS-only via group-hover so no extra state/listeners. */}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-10 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-text-primary px-2 py-1 text-xs text-bg opacity-0 shadow-md transition-opacity delay-300 group-hover:opacity-100"
+      >
+        {ariaLabel}
+      </span>
+    </span>
   )
 }

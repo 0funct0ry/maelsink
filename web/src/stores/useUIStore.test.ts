@@ -75,10 +75,11 @@ describe('auth', () => {
     expect(useUIStore.getState().pendingRetry).toBeNull()
   })
 
-  it('clearAuthToken removes the in-memory token', () => {
+  it('clearAuthToken removes the in-memory token and localStorage', () => {
     useUIStore.getState().setAuthToken('secret')
     useUIStore.getState().clearAuthToken()
     expect(useUIStore.getState().authToken).toBeNull()
+    expect(window.localStorage.getItem('maelsink_api_key')).toBeNull()
   })
 
   it('setAuthRequired(false) clears any pending retry', () => {

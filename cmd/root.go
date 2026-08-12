@@ -67,9 +67,10 @@ func notImplemented(cmd *cobra.Command, milestone string) error {
 func printVersion(cmd *cobra.Command, asJSON bool) error {
 	info := version.Get()
 	if asJSON {
-		fmt.Fprintf(cmd.OutOrStdout(), "{\"version\":%q,\"commit\":%q,\"go\":%q}\n", info.Version, info.Commit, info.Go)
+		fmt.Fprintf(cmd.OutOrStdout(), "{\"version\":%q,\"commit\":%q,\"build_date\":%q,\"go\":%q}\n",
+			info.Version, info.Commit, info.BuildDate, info.Go)
 		return nil
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "maelsink version %s (commit %s)\n", info.Version, info.Commit)
+	fmt.Fprintf(cmd.OutOrStdout(), "maelsink version %s (commit %s, built %s)\n", info.Version, info.Commit, info.BuildDate)
 	return nil
 }

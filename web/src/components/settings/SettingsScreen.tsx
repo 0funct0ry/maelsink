@@ -6,6 +6,8 @@ import StatsCard from './StatsCard'
 import ConnectionInfoCard from './ConnectionInfoCard'
 import ConfigTable from './ConfigTable'
 import PrecedenceChain from './PrecedenceChain'
+import SecurityCard from './SecurityCard'
+import ThemeToggle from './ThemeToggle'
 
 function VersionCard() {
   const [version, setVersion] = useState<Version | null>(null)
@@ -58,6 +60,14 @@ function VersionCard() {
             <dt className="text-text-tertiary">Commit</dt>
             <dd className="font-mono text-text-primary">{version.commit}</dd>
           </div>
+          <div className="flex gap-2">
+            <dt className="text-text-tertiary">Built</dt>
+            <dd className="font-mono text-text-primary">{version.build_date}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-text-tertiary">Go</dt>
+            <dd className="font-mono text-text-primary">{version.go}</dd>
+          </div>
         </dl>
       )}
     </div>
@@ -67,13 +77,16 @@ function VersionCard() {
 export default function SettingsScreen() {
   return (
     <div>
-      <div className="border-b border-border-soft px-6 py-4">
-        <h1 className="mb-1 text-[19px] font-semibold tracking-tight text-text-primary">
-          Settings
-        </h1>
-        <p className="max-w-xl text-sm leading-relaxed text-text-secondary">
-          The server configuration and runtime info maelsink is currently running with.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border-soft px-6 py-4">
+        <div>
+          <h1 className="mb-1 text-[19px] font-semibold tracking-tight text-text-primary">
+            Settings
+          </h1>
+          <p className="max-w-xl text-sm leading-relaxed text-text-secondary">
+            The server configuration and runtime info maelsink is currently running with.
+          </p>
+        </div>
+        <ThemeToggle />
       </div>
 
       <div className="p-6">
@@ -83,6 +96,7 @@ export default function SettingsScreen() {
           <StatsCard />
           <ConnectionInfoCard />
           <VersionCard />
+          <SecurityCard />
         </div>
 
         <div className="mt-4">

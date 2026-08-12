@@ -77,7 +77,7 @@ export default function InboxScreen() {
 
       <ActiveFilterChips />
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden">
         <MessageList onOpenMessage={(id) => navigate(`/messages/${id}`)} onPreviewMessage={setPreviewId} />
       </div>
 

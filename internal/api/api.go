@@ -39,7 +39,7 @@ func New(messageStore store.MessageStore, bus *events.Bus, logger *slog.Logger, 
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
 
-	RegisterRoutes(&engine.RouterGroup, messageStore, bus, cfg)
+	RegisterRoutes(&engine.RouterGroup, messageStore, bus, logger, cfg)
 
 	return engine
 }
@@ -48,9 +48,11 @@ func New(messageStore store.MessageStore, bus *events.Bus, logger *slog.Logger, 
 // engine.Group(basePath)), enforcing cfg.Auth. Exported so internal/webui
 // (M5.0) can mount the same routes read-through on the Web UI port
 // (SPEC.md §5) without duplicating the route table — this is the single
-// source of truth for /api/v1's shape. bus must not be nil.
-func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, bus *events.Bus, cfg Config) {
-	h := &handlers{store: messageStore, bus: bus}
+// source of truth for /api/v1's shape. bus must not be nil. logger backs
+// respondInternalErr's server-side error logging (SPEC.md §12) so no
+// handler ever leaks a raw internal error string to the client.
+func RegisterRoutes(rg *gin.RouterGroup, messageStore store.MessageStore, bus *events.Bus, logger *slog.Logger, cfg Config) {
+	h := &handlers{store: messageStore, bus: bus, logger: logger}
 
 	v1 := rg.Group(cfg.BasePath + "/api/v1")
 	v1.Use(authMiddleware(cfg.Auth))

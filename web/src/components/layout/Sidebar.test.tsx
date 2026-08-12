@@ -322,4 +322,14 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByLabelText('Delete saved search Invoices'))
     expect(screen.queryByText('Invoices')).not.toBeInTheDocument()
   })
+
+  it('drawer variant is never hidden below the md breakpoint', () => {
+    vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
+    render(
+      <MemoryRouter>
+        <Sidebar variant="drawer" />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Mailbox').closest('aside')).not.toHaveClass('hidden')
+  })
 })

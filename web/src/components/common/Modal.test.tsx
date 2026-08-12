@@ -84,4 +84,24 @@ describe('Modal', () => {
     )
     expect(screen.getByText('content').parentElement).toHaveFocus()
   })
+
+  it('renders a full-height panel for the drawer variant', () => {
+    render(
+      <Modal open onClose={() => {}} variant="drawer">
+        <div>content</div>
+      </Modal>,
+    )
+    expect(screen.getByText('content').parentElement).toHaveClass('h-full')
+  })
+
+  it('drawer variant still closes on Escape and backdrop click', () => {
+    const onClose = vi.fn()
+    render(
+      <Modal open onClose={onClose} variant="drawer">
+        <div>content</div>
+      </Modal>,
+    )
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })

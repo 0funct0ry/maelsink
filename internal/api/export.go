@@ -23,7 +23,7 @@ func (h *handlers) bulkExport(c *gin.Context) {
 
 	summaries, _, err := h.store.List(c.Request.Context(), filter)
 	if err != nil {
-		respondInternal(c, err.Error())
+		respondInternalErr(c, h.logger, err)
 		return
 	}
 

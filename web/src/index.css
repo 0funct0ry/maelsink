@@ -2,6 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light palette (STYLE_GUIDE.md §1.1) — the default, applied whether the
+   viewer's OS is light or dark unless overridden below. */
+:root {
+  --color-bg: 255 255 255; /* #ffffff */
+  --color-surface: 247 247 250; /* #f7f7fa */
+  --color-surface-2: 240 240 245; /* #f0f0f5 */
+  --color-border: 227 229 234; /* #e3e5ea */
+  --color-border-soft: 237 238 242; /* #edeef2 */
+  --color-text-primary: 26 31 54; /* #1a1f36 */
+  --color-text-secondary: 107 114 128; /* #6b7280 */
+  --color-text-tertiary: 154 161 177; /* #9aa1b1 */
+  --color-accent: 99 91 255; /* #635bff */
+  --color-accent-hover: 81 74 219; /* #514adb */
+  --color-accent-soft: 238 236 255; /* #eeecff */
+  --color-accent-soft-border: 217 213 255; /* #d9d5ff */
+  --color-success: 31 146 84; /* #1f9254 */
+  --color-success-soft: 227 248 236; /* #e3f8ec */
+  --color-danger: 223 27 65; /* #df1b41 */
+  --color-danger-soft: 254 234 236; /* #feeaec */
+  --color-warning: 178 94 9; /* #b25e09 */
+  --color-warning-soft: 253 240 221; /* #fdf0dd */
+}
+
+/* Dark palette, seeded from STYLE_GUIDE.md §1.1's existing dark-surface
+   tokens (bg/chrome/text/muted/accents), extended to the full UI token set
+   (success/danger/warning) since that palette was written for code-block
+   panels, not a full theme. Applied when the OS prefers dark and the user
+   hasn't explicitly chosen light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: 26 31 54; /* #1a1f36 */
+    --color-surface: 32 38 63; /* #20263f */
+    --color-surface-2: 38 45 74; /* #262d4a */
+    --color-border: 51 59 92; /* #333b5c */
+    --color-border-soft: 43 50 82; /* #2b3252 */
+    --color-text-primary: 198 203 224; /* #c6cbe0 */
+    --color-text-secondary: 136 145 171; /* #8891ab */
+    --color-text-tertiary: 107 117 148; /* #6b7594 */
+    --color-accent: 168 155 255; /* #a89bff */
+    --color-accent-hover: 143 128 242; /* #8f80f2 */
+    --color-accent-soft: 44 38 80; /* #2c2650 */
+    --color-accent-soft-border: 69 63 122; /* #453f7a */
+    --color-success: 126 226 184; /* #7ee2b8 */
+    --color-success-soft: 22 56 41; /* #163829 */
+    --color-danger: 255 107 129; /* #ff6b81 */
+    --color-danger-soft: 58 22 32; /* #3a1620 */
+    --color-warning: 232 163 77; /* #e8a34d */
+    --color-warning-soft: 58 42 18; /* #3a2a12 */
+  }
+}
+
+/* Explicit user choice always wins over the OS preference, in both
+   directions — an explicit "dark" pick even when the OS is light, or an
+   explicit "light" pick even when the OS is dark (handled by the
+   :not([data-theme='light']) guard above). */
+:root[data-theme='dark'] {
+  --color-bg: 26 31 54;
+  --color-surface: 32 38 63;
+  --color-surface-2: 38 45 74;
+  --color-border: 51 59 92;
+  --color-border-soft: 43 50 82;
+  --color-text-primary: 198 203 224;
+  --color-text-secondary: 136 145 171;
+  --color-text-tertiary: 107 117 148;
+  --color-accent: 168 155 255;
+  --color-accent-hover: 143 128 242;
+  --color-accent-soft: 44 38 80;
+  --color-accent-soft-border: 69 63 122;
+  --color-success: 126 226 184;
+  --color-success-soft: 22 56 41;
+  --color-danger: 255 107 129;
+  --color-danger-soft: 58 22 32;
+  --color-warning: 232 163 77;
+  --color-warning-soft: 58 42 18;
+}
+
 html,
 body,
 #root {

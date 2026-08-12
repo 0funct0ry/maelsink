@@ -28,4 +28,9 @@ describe('IconButton', () => {
   // `aria-label` is a required prop on IconButtonProps (not optional), so
   // omitting it — e.g. `<IconButton icon={<Trash2 />} />` — is a
   // compile-time TypeScript error, not something to assert at runtime.
+
+  it('renders a visible tooltip with the same text as the aria-label', () => {
+    render(<IconButton icon={<Trash2 />} aria-label="Delete message" />)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Delete message')
+  })
 })

@@ -61,7 +61,7 @@ func New(messageStore store.MessageStore, bus *events.Bus, hub *ws.Hub, logger *
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
 
-	api.RegisterRoutes(&engine.RouterGroup, messageStore, bus, api.Config{
+	api.RegisterRoutes(&engine.RouterGroup, messageStore, bus, logger, api.Config{
 		BasePath: cfg.BasePath,
 		Auth:     cfg.Auth,
 	})

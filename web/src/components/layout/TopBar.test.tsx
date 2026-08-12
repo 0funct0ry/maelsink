@@ -99,4 +99,22 @@ describe('TopBar', () => {
     renderTopBar()
     expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument()
   })
+
+  it('opens the mobile navigation drawer with the sidebar content', () => {
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
+    renderTopBar()
+    expect(screen.queryByText('Mailbox')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Open navigation'))
+    expect(screen.getByText('Mailbox')).toBeInTheDocument()
+    expect(screen.getByText('All messages')).toBeInTheDocument()
+  })
+
+  it('closes the drawer on navigation', () => {
+    vi.mocked(uiApiClient.getInfo).mockRejectedValue(new Error('offline'))
+    renderTopBar()
+    fireEvent.click(screen.getByLabelText('Open navigation'))
+    expect(screen.getByText('Mailbox')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Manage tags'))
+    expect(screen.queryByText('Mailbox')).not.toBeInTheDocument()
+  })
 })

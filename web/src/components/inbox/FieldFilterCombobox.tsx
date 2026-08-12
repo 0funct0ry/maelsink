@@ -80,7 +80,7 @@ export default function FieldFilterCombobox({
         <ul
           id={`${id}-listbox`}
           role="listbox"
-          className="absolute left-0 top-full z-30 mt-1 max-h-52 w-full min-w-[150px] overflow-y-auto rounded-md border border-border bg-bg py-1 shadow-md"
+          className="scrollbar-thin absolute left-0 top-full z-30 mt-1 max-h-52 w-full min-w-[150px] overflow-y-auto rounded-md border border-border bg-bg py-1 shadow-md"
         >
           {matches.map((option) => (
             <li key={option} role="option" aria-selected={option === value}>

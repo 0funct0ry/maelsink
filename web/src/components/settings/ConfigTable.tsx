@@ -135,20 +135,26 @@ export default function ConfigTable() {
               <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-text-tertiary">
                 {section}
               </h3>
-              <table className="w-full text-sm">
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.key} className="border-b border-border-soft last:border-b-0 hover:bg-surface-2">
-                      <td className="w-1/3 py-2 pr-4 font-mono font-medium text-text-primary">{row.key}</td>
-                      <td className="w-1/3 py-2 pr-4 font-mono text-text-primary">{formatValue(row.value)}</td>
-                      <td className="py-2 pr-4">
-                        <Badge variant={sourceBadgeVariant(row.source.layer)}>{SOURCE_LABEL[row.source.layer]}</Badge>
-                      </td>
-                      <td className="py-2 font-mono text-[12px] text-text-tertiary">{row.source.origin}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/* Below md, this table's 4 columns can exceed the viewport
+                  width — scroll it inside its own container rather than
+                  letting it force the whole page to scroll horizontally
+                  (M8.7 mobile audit). */}
+              <div className="scrollbar-thin overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.key} className="border-b border-border-soft last:border-b-0 hover:bg-surface-2">
+                        <td className="w-1/3 py-2 pr-4 font-mono font-medium text-text-primary">{row.key}</td>
+                        <td className="w-1/3 py-2 pr-4 font-mono text-text-primary">{formatValue(row.value)}</td>
+                        <td className="py-2 pr-4">
+                          <Badge variant={sourceBadgeVariant(row.source.layer)}>{SOURCE_LABEL[row.source.layer]}</Badge>
+                        </td>
+                        <td className="py-2 font-mono text-[12px] text-text-tertiary">{row.source.origin}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
           {filteredEntries.length === 0 && <p className="py-2 text-text-tertiary">No matching fields.</p>}
