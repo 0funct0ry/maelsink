@@ -113,8 +113,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := cliclient.Send(cmd.Context(), addr, auth, from, to, raw); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "send failed: %s\n", err)
-		return err
+		return fmt.Errorf("send failed: %w", err)
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), "message sent")

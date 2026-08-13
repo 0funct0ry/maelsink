@@ -43,6 +43,21 @@ func RenderTemplate(w io.Writer, msgs []MessageSummary, tmplText string) error {
 	return nil
 }
 
+// RenderDetailTemplate executes tmplText (a text/template body) against a
+// single MessageDetail, docker-CLI-style, the same as RenderTemplate does
+// for a list of MessageSummary.
+func RenderDetailTemplate(w io.Writer, m *MessageDetail, tmplText string) error {
+	tmpl, err := template.New("get").Parse(tmplText)
+	if err != nil {
+		return fmt.Errorf("parsing --format template: %w", err)
+	}
+	if err := tmpl.Execute(w, m); err != nil {
+		return fmt.Errorf("executing --format template: %w", err)
+	}
+	fmt.Fprintln(w)
+	return nil
+}
+
 func formatRecipients(to []string) string {
 	if len(to) == 0 {
 		return ""

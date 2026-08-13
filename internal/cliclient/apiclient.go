@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 )
@@ -215,15 +216,39 @@ func (c *Client) Clear(ctx context.Context) error {
 // ExportRaw calls GET /api/v1/messages/{id}/export and returns the raw .eml
 // bytes.
 func (c *Client) ExportRaw(ctx context.Context, id string) ([]byte, error) {
+	raw, _, err := c.ExportRawNamed(ctx, id)
+	return raw, err
+}
+
+// ExportRawNamed is like ExportRaw but also returns the filename resolved
+// from the response's Content-Disposition header (the server's full,
+// prefix-resolved message ID), falling back to id if the header is absent
+// or unparseable.
+func (c *Client) ExportRawNamed(ctx context.Context, id string) ([]byte, string, error) {
 	resp, err := c.do(ctx, http.MethodGet, "/api/v1/messages/"+url.PathEscape(id)+"/export", nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, asHTTPError(resp)
+		return nil, "", asHTTPError(resp)
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	filename := id
+	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+		if _, params, err := mime.ParseMediaType(cd); err == nil {
+			if fn, ok := params["filename"]; ok && fn != "" {
+				filename = fn
+			}
+		}
+	}
+
+	return raw, filename, nil
 }
 
 func setIfNotEmpty(q url.Values, key, value string) {

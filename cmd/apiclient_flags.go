@@ -48,7 +48,7 @@ func (f *apiClientFlags) client() *cliclient.Client {
 func apiError(err error) error {
 	var httpErr *cliclient.HTTPError
 	if errors.As(err, &httpErr) {
-		return fmt.Errorf("error: %s", httpErr.Error())
+		return httpErr
 	}
-	return fmt.Errorf("error: %s", err.Error())
+	return err
 }

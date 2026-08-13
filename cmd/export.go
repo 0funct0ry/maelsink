@@ -29,14 +29,17 @@ func init() {
 
 func runExport(cmd *cobra.Command, args []string) error {
 	id := args[0]
-	raw, err := exportFlags.client().ExportRaw(cmd.Context(), id)
+	raw, filename, err := exportFlags.client().ExportRawNamed(cmd.Context(), id)
 	if err != nil {
 		return apiError(err)
 	}
 
 	path := exportOutput
 	if path == "" {
-		path = fmt.Sprintf("./%s.eml", id)
+		if filename == "" {
+			filename = id + ".eml"
+		}
+		path = fmt.Sprintf("./%s", filename)
 	}
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		return fmt.Errorf("error: writing %s: %w", path, err)

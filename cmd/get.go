@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -27,20 +26,24 @@ func init() {
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
-	if getFlags.format != "table" && getFlags.format != "json" {
-		return fmt.Errorf("--format must be table or json, got %q", getFlags.format)
-	}
-
 	msg, err := getFlags.client().Get(cmd.Context(), args[0])
 	if err != nil {
 		return apiError(err)
 	}
 
-	if getFlags.format == "json" {
+	switch getFlags.format {
+	case "json":
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
 		return enc.Encode(msg)
+
+	case "table":
+		cliclient.RenderDetail(cmd.OutOrStdout(), msg)
+		return nil
+
+	default:
+		// Any other --format value is a Go template, docker-CLI-style,
+		// executed once against the message detail.
+		return cliclient.RenderDetailTemplate(cmd.OutOrStdout(), msg, getFlags.format)
 	}
-	cliclient.RenderDetail(cmd.OutOrStdout(), msg)
-	return nil
 }

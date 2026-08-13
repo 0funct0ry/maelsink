@@ -123,6 +123,42 @@ func TestClient_ExportRaw(t *testing.T) {
 	}
 }
 
+func TestClient_ExportRawNamed_FallsBackToID(t *testing.T) {
+	srv := newFixtureServer(t)
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "")
+	raw, filename, err := c.ExportRawNamed(context.Background(), "msg_1")
+	if err != nil {
+		t.Fatalf("ExportRawNamed: %v", err)
+	}
+	if string(raw) != "Subject: hi\r\n\r\nbody\r\n" {
+		t.Errorf("raw = %q", raw)
+	}
+	if filename != "msg_1" {
+		t.Errorf("filename = %q, want fallback to id %q", filename, "msg_1")
+	}
+}
+
+func TestClient_ExportRawNamed_UsesContentDisposition(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/messages/ab/export", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", `attachment; filename="ab3c7d06adb94e07f1a92725.eml"`)
+		w.Write([]byte("Subject: hi\r\n\r\nbody\r\n"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "")
+	_, filename, err := c.ExportRawNamed(context.Background(), "ab")
+	if err != nil {
+		t.Fatalf("ExportRawNamed: %v", err)
+	}
+	if filename != "ab3c7d06adb94e07f1a92725.eml" {
+		t.Errorf("filename = %q", filename)
+	}
+}
+
 func TestClient_Unreachable(t *testing.T) {
 	c := NewClient("http://127.0.0.1:1", "")
 	_, err := c.List(context.Background(), ListParams{})

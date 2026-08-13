@@ -54,3 +54,39 @@ func TestRenderTemplate_UnknownField(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestRenderDetailTemplate(t *testing.T) {
+	m := &MessageDetail{MessageSummary: MessageSummary{ID: "msg_1", From: "a@b.com", Subject: "hi"}}
+
+	var buf bytes.Buffer
+	if err := RenderDetailTemplate(&buf, m, "{{.ID}}: {{.From}} ({{.Subject}})"); err != nil {
+		t.Fatalf("RenderDetailTemplate: %v", err)
+	}
+
+	want := "msg_1: a@b.com (hi)\n"
+	if buf.String() != want {
+		t.Fatalf("got %q, want %q", buf.String(), want)
+	}
+}
+
+func TestRenderDetailTemplate_InvalidSyntax(t *testing.T) {
+	var buf bytes.Buffer
+	err := RenderDetailTemplate(&buf, &MessageDetail{}, "{{.ID")
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "parsing --format template") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRenderDetailTemplate_UnknownField(t *testing.T) {
+	var buf bytes.Buffer
+	err := RenderDetailTemplate(&buf, &MessageDetail{}, "{{.NoSuchField}}")
+	if err == nil {
+		t.Fatal("expected execution error")
+	}
+	if !strings.Contains(err.Error(), "executing --format template") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
