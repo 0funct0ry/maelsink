@@ -40,6 +40,12 @@ type Config struct {
 	BasePath string
 	Auth     api.Auth
 
+	// WebAuthFile, if non-empty, is the path to an htpasswd-style basic-auth
+	// file gating every route on this router except /api/v1 (SPEC.md §5.4 vs
+	// the Web UI's own Basic Auth wall, M8.8). Empty disables the gate
+	// entirely — no middleware is installed, zero overhead.
+	WebAuthFile string
+
 	// SMTPHost/SMTPPort are surfaced read-only via /ui-api/v1/info for the
 	// Inbox empty state and Settings screen (SPEC.md §8.1) — the Web UI has
 	// no other way to learn the SMTP listener's address.
@@ -60,6 +66,9 @@ func New(messageStore store.MessageStore, bus *events.Bus, hub *ws.Hub, logger *
 
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
+	if cfg.WebAuthFile != "" {
+		engine.Use(basicAuthMiddleware(cfg.WebAuthFile, cfg.BasePath))
+	}
 
 	api.RegisterRoutes(&engine.RouterGroup, messageStore, bus, logger, api.Config{
 		BasePath: cfg.BasePath,

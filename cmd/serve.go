@@ -19,6 +19,7 @@ import (
 	"github.com/0funct0ry/maelsink/internal/smtp"
 	"github.com/0funct0ry/maelsink/internal/store"
 	"github.com/0funct0ry/maelsink/internal/store/sqlite"
+	"github.com/0funct0ry/maelsink/internal/webauth"
 	"github.com/0funct0ry/maelsink/internal/webui"
 	"github.com/0funct0ry/maelsink/internal/ws"
 )
@@ -40,6 +41,7 @@ var (
 	flagWebPort                       int
 	flagWebBasePath                   string
 	flagWebCORSOrigins                []string
+	flagWebAuthFile                   string
 	flagAPIHost                       string
 	flagAPIPort                       int
 	flagAPIBasePath                   string
@@ -89,6 +91,7 @@ func addServeFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&flagWebPort, "web-port", "P", d.Web.Port, "Web UI listen port")
 	cmd.Flags().StringVarP(&flagWebBasePath, "web-base-path", "b", d.Web.BasePath, "Web UI reverse-proxy base path")
 	cmd.Flags().StringSliceVarP(&flagWebCORSOrigins, "web-cors-origins", "O", d.Web.CORSOrigins, "allowed CORS origins for the Web UI server")
+	cmd.Flags().StringVarP(&flagWebAuthFile, "web-auth-file", "L", d.Web.Auth.File, "path to htpasswd-style basic-auth file for the Web UI (disabled if empty)")
 	cmd.Flags().StringVarP(&flagAPIHost, "api-host", "A", d.API.Host, "REST API listen host")
 	cmd.Flags().IntVarP(&flagAPIPort, "api-port", "o", d.API.Port, "REST API listen port")
 	cmd.Flags().StringVarP(&flagAPIBasePath, "api-base-path", "B", d.API.BasePath, "REST API reverse-proxy base path")
@@ -163,6 +166,9 @@ func resolveConfig(cmd *cobra.Command) (config.Config, config.Provenance, error)
 	if f.Changed("web-cors-origins") {
 		overrides.WebCORSOrigins = &flagWebCORSOrigins
 	}
+	if f.Changed("web-auth-file") {
+		overrides.WebAuthFile = &flagWebAuthFile
+	}
 	if f.Changed("api-host") {
 		overrides.APIHost = &flagAPIHost
 	}
@@ -222,6 +228,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	if cfg.Web.Auth.File != "" {
+		if err := webauth.ValidateFile(cfg.Web.Auth.File); err != nil {
+			return fmt.Errorf("web-auth-file: %w", err)
+		}
 	}
 
 	logger, err := logging.New(cfg.Logging.Level, cfg.Logging.Format, cfg.Logging.File)
@@ -288,6 +299,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		webuiRouter := webui.New(messageStore, bus, hub, logger, webui.Config{
 			BasePath:      cfg.Web.BasePath,
 			Auth:          api.Auth{Enabled: cfg.API.Auth.Enabled, APIKey: cfg.API.Auth.APIKey},
+			WebAuthFile:   cfg.Web.Auth.File,
 			SMTPHost:      cfg.SMTP.Host,
 			SMTPPort:      cfg.SMTP.Port,
 			ConfigEntries: config.Dump(cfg, provenance),

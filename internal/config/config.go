@@ -36,6 +36,11 @@ type Web struct {
 	Port        int      `yaml:"port" mapstructure:"port"`
 	BasePath    string   `yaml:"base_path" mapstructure:"base_path"`
 	CORSOrigins []string `yaml:"cors_origins" mapstructure:"cors_origins"`
+	Auth        WebAuth  `yaml:"auth" mapstructure:"auth"`
+}
+
+type WebAuth struct {
+	File string `yaml:"file" mapstructure:"file"`
 }
 
 type APIAuth struct {
@@ -126,6 +131,7 @@ func Defaults() Config {
 			Host:        "127.0.0.1",
 			Port:        8080,
 			CORSOrigins: []string{},
+			Auth:        WebAuth{File: ""},
 		},
 		API: API{
 			Host: "127.0.0.1",
@@ -180,6 +186,7 @@ type FlagOverrides struct {
 	WebPort                       *int
 	WebBasePath                   *string
 	WebCORSOrigins                *[]string
+	WebAuthFile                   *string
 	APIHost                       *string
 	APIPort                       *int
 	APIBasePath                   *string
