@@ -37,10 +37,16 @@ type Web struct {
 	BasePath    string   `yaml:"base_path" mapstructure:"base_path"`
 	CORSOrigins []string `yaml:"cors_origins" mapstructure:"cors_origins"`
 	Auth        WebAuth  `yaml:"auth" mapstructure:"auth"`
+	Tls         WebTLS   `yaml:"tls" mapstructure:"tls"`
 }
 
 type WebAuth struct {
 	File string `yaml:"file" mapstructure:"file"`
+}
+
+type WebTLS struct {
+	Cert string `yaml:"cert" mapstructure:"cert"`
+	Key  string `yaml:"key" mapstructure:"key"`
 }
 
 type APIAuth struct {
@@ -132,6 +138,7 @@ func Defaults() Config {
 			Port:        8080,
 			CORSOrigins: []string{},
 			Auth:        WebAuth{File: ""},
+			Tls:         WebTLS{Cert: "", Key: ""},
 		},
 		API: API{
 			Host: "127.0.0.1",
@@ -187,6 +194,8 @@ type FlagOverrides struct {
 	WebBasePath                   *string
 	WebCORSOrigins                *[]string
 	WebAuthFile                   *string
+	WebTLSCert                    *string
+	WebTLSKey                     *string
 	APIHost                       *string
 	APIPort                       *int
 	APIBasePath                   *string
@@ -317,6 +326,9 @@ func (c Config) Validate() error {
 		if c.SMTP.TLSCert == "" || c.SMTP.TLSKey == "" {
 			return fmt.Errorf("smtp.starttls: tls_cert and tls_key are both required when starttls is enabled")
 		}
+	}
+	if (c.Web.Tls.Cert == "") != (c.Web.Tls.Key == "") {
+		return fmt.Errorf("web.tls: cert and key must both be set or both be empty")
 	}
 	if c.SMTP.Auth.Enabled {
 		if c.SMTP.Auth.Username == "" || c.SMTP.Auth.Password == "" {

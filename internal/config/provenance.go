@@ -28,12 +28,13 @@ type Source struct {
 // Source that resolved it.
 type Provenance map[string]Source
 
-// keyToFlag maps every non-secret config key eligible for the Settings
-// screen's provenance table (smtp/web/api/storage/logging/server sections
-// only — shell.* keys aren't part of that screen) to the CLI flag name that
-// can override it. smtp.auth.password and api.auth.api_key are
-// deliberately absent: SPEC.md's "non-secret fields" requirement means
-// secret values are never resolved or surfaced here at all.
+// keyToFlag maps every config key eligible for the Settings screen's
+// provenance table (smtp/web/api/storage/logging/server sections only —
+// shell.* keys aren't part of that screen) to the CLI flag name that can
+// override it. This includes secret keys (smtp.auth.password,
+// api.auth.api_key) so their *provenance* (which layer set them, and a
+// value-free origin) can be shown — see isSecretKey and Dump's addSecret:
+// the resolved secret value itself is never sent to the client.
 var keyToFlag = map[string]string{
 	"smtp.host":                       "smtp-host",
 	"smtp.port":                       "smtp-port",
@@ -44,15 +45,20 @@ var keyToFlag = map[string]string{
 	"smtp.tls_key":                    "smtp-tls-key",
 	"smtp.auth.enabled":               "smtp-auth-enabled",
 	"smtp.auth.username":              "smtp-auth-username",
+	"smtp.auth.password":              "smtp-auth-password",
 	"web.enabled":                     "web-enabled",
 	"web.host":                        "web-host",
 	"web.port":                        "web-port",
 	"web.base_path":                   "web-base-path",
 	"web.cors_origins":                "web-cors-origins",
+	"web.auth.file":                   "web-auth-file",
+	"web.tls.cert":                    "web-tls-cert",
+	"web.tls.key":                     "web-tls-key",
 	"api.host":                        "api-host",
 	"api.port":                        "api-port",
 	"api.base_path":                   "api-base-path",
 	"api.auth.enabled":                "api-auth-enabled",
+	"api.auth.api_key":                "api-auth-api-key",
 	"storage.driver":                  "storage-driver",
 	"storage.path":                    "db",
 	"storage.retention.max_messages":  "retention-max-messages",
@@ -71,7 +77,21 @@ var keyToFlag = map[string]string{
 // basename the same way Dump reduces the value itself (M8.7
 // abstraction-leakage hardening).
 func isPathKey(key string) bool {
-	return key == "storage.path" || key == "storage.attachments.disk_path"
+	switch key {
+	case "storage.path", "storage.attachments.disk_path",
+		"web.auth.file", "web.tls.cert", "web.tls.key":
+		return true
+	default:
+		return false
+	}
+}
+
+// isSecretKey reports whether key's resolved value is a secret that must
+// never reach the client — the Settings screen shows only that it's
+// configured and by which layer, never the value or a flag-origin string
+// that embeds it.
+func isSecretKey(key string) bool {
+	return key == "smtp.auth.password" || key == "api.auth.api_key"
 }
 
 // ProvenanceKeys returns every key ResolveProvenance/Dump know about, sorted
@@ -108,7 +128,10 @@ func ResolveProvenance(v *viper.Viper, flagSet *pflag.FlagSet, envKeys []string)
 			if flagName, ok := keyToFlag[key]; ok {
 				if f := flagSet.Lookup(flagName); f != nil && f.Changed {
 					value := f.Value.String()
-					if isPathKey(key) {
+					switch {
+					case isSecretKey(key):
+						value = "***"
+					case isPathKey(key):
 						value = filepath.Base(value)
 					}
 					prov[key] = Source{Layer: "flag", Origin: "--" + flagName + "=" + value}

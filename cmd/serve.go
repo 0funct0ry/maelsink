@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -42,6 +43,8 @@ var (
 	flagWebBasePath                   string
 	flagWebCORSOrigins                []string
 	flagWebAuthFile                   string
+	flagWebTLSCert                    string
+	flagWebTLSKey                     string
 	flagAPIHost                       string
 	flagAPIPort                       int
 	flagAPIBasePath                   string
@@ -92,6 +95,8 @@ func addServeFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&flagWebBasePath, "web-base-path", "b", d.Web.BasePath, "Web UI reverse-proxy base path")
 	cmd.Flags().StringSliceVarP(&flagWebCORSOrigins, "web-cors-origins", "O", d.Web.CORSOrigins, "allowed CORS origins for the Web UI server")
 	cmd.Flags().StringVarP(&flagWebAuthFile, "web-auth-file", "L", d.Web.Auth.File, "path to htpasswd-style basic-auth file for the Web UI (disabled if empty)")
+	cmd.Flags().StringVarP(&flagWebTLSCert, "web-tls-cert", "q", d.Web.Tls.Cert, "path to PEM certificate for Web UI HTTPS (both cert+key required together; disabled if empty)")
+	cmd.Flags().StringVarP(&flagWebTLSKey, "web-tls-key", "z", d.Web.Tls.Key, "path to PEM private key for Web UI HTTPS (both cert+key required together; disabled if empty)")
 	cmd.Flags().StringVarP(&flagAPIHost, "api-host", "A", d.API.Host, "REST API listen host")
 	cmd.Flags().IntVarP(&flagAPIPort, "api-port", "o", d.API.Port, "REST API listen port")
 	cmd.Flags().StringVarP(&flagAPIBasePath, "api-base-path", "B", d.API.BasePath, "REST API reverse-proxy base path")
@@ -169,6 +174,12 @@ func resolveConfig(cmd *cobra.Command) (config.Config, config.Provenance, error)
 	if f.Changed("web-auth-file") {
 		overrides.WebAuthFile = &flagWebAuthFile
 	}
+	if f.Changed("web-tls-cert") {
+		overrides.WebTLSCert = &flagWebTLSCert
+	}
+	if f.Changed("web-tls-key") {
+		overrides.WebTLSKey = &flagWebTLSKey
+	}
 	if f.Changed("api-host") {
 		overrides.APIHost = &flagAPIHost
 	}
@@ -232,6 +243,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if cfg.Web.Auth.File != "" {
 		if err := webauth.ValidateFile(cfg.Web.Auth.File); err != nil {
 			return fmt.Errorf("web-auth-file: %w", err)
+		}
+	}
+	if cfg.Web.Tls.Cert != "" || cfg.Web.Tls.Key != "" {
+		if cfg.Web.Tls.Cert == "" || cfg.Web.Tls.Key == "" {
+			return fmt.Errorf("web-tls-cert and web-tls-key must both be set")
+		}
+		if _, err := tls.LoadX509KeyPair(cfg.Web.Tls.Cert, cfg.Web.Tls.Key); err != nil {
+			return fmt.Errorf("web-tls: %w", err)
 		}
 	}
 
@@ -310,9 +329,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	webTLSEnabled := cfg.Web.Tls.Cert != "" && cfg.Web.Tls.Key != ""
+
 	fmt.Fprintf(cmd.OutOrStdout(), "  SMTP     -> %s:%d\n", cfg.SMTP.Host, cfg.SMTP.Port)
 	if cfg.Web.Enabled {
-		fmt.Fprintf(cmd.OutOrStdout(), "  Web UI   -> http://%s:%d%s/\n", cfg.Web.Host, cfg.Web.Port, cfg.Web.BasePath)
+		webScheme := "http"
+		if webTLSEnabled {
+			webScheme = "https"
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "  Web UI   -> %s://%s:%d%s/\n", webScheme, cfg.Web.Host, cfg.Web.Port, cfg.Web.BasePath)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  REST API -> http://%s:%d%s/api/v1\n", cfg.API.Host, cfg.API.Port, cfg.API.BasePath)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Storage  -> %s (%s)\n", cfg.Storage.Path, cfg.Storage.Driver)
@@ -333,7 +358,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 	webErrCh := make(chan error, 1)
 	if webSrv != nil {
 		go func() {
-			if err := webSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			var err error
+			if webTLSEnabled {
+				err = webSrv.ListenAndServeTLS(cfg.Web.Tls.Cert, cfg.Web.Tls.Key)
+			} else {
+				err = webSrv.ListenAndServe()
+			}
+			if err != nil && err != http.ErrServerClosed {
 				webErrCh <- err
 			}
 		}()

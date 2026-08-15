@@ -9,22 +9,41 @@ import (
 	"github.com/spf13/pflag"
 )
 
-func TestDump_ExcludesSecrets(t *testing.T) {
+// TestDump_MasksSecretValues asserts that secret keys (smtp.auth.password,
+// api.auth.api_key) are present in the dump — so the Settings screen can
+// show that they're configured and by which layer — but their Value is
+// always a "is it set" bool, never the actual secret string, and Secret is
+// always true.
+func TestDump_MasksSecretValues(t *testing.T) {
 	cfg := Defaults()
 	cfg.SMTP.Auth.Password = "supersecret"
 	cfg.API.Auth.APIKey = "topsecretkey"
 
 	entries := Dump(cfg, Provenance{})
 
+	seen := map[string]bool{}
 	for _, e := range entries {
-		if e.Key == "smtp.auth.password" || e.Key == "api.auth.api_key" {
-			t.Fatalf("Dump() included secret key %q", e.Key)
-		}
-		if s, ok := e.Value.(string); ok {
-			if s == "supersecret" || s == "topsecretkey" {
-				t.Fatalf("Dump() leaked a secret value via key %q", e.Key)
+		if e.Key != "smtp.auth.password" && e.Key != "api.auth.api_key" {
+			if s, ok := e.Value.(string); ok {
+				if s == "supersecret" || s == "topsecretkey" {
+					t.Fatalf("Dump() leaked a secret value via non-secret key %q", e.Key)
+				}
 			}
+			continue
 		}
+		seen[e.Key] = true
+		if !e.Secret {
+			t.Errorf("Dump() entry %q: Secret = false, want true", e.Key)
+		}
+		if _, ok := e.Value.(bool); !ok {
+			t.Errorf("Dump() entry %q: Value = %v (%T), want a bool", e.Key, e.Value, e.Value)
+		}
+		if e.Value != true {
+			t.Errorf("Dump() entry %q: Value = %v, want true (password/key is set)", e.Key, e.Value)
+		}
+	}
+	if !seen["smtp.auth.password"] || !seen["api.auth.api_key"] {
+		t.Fatalf("Dump() did not include both secret keys, got entries: %+v", entries)
 	}
 }
 
@@ -79,10 +98,29 @@ func TestResolveProvenance_AllFourLayers(t *testing.T) {
 	}
 }
 
-func TestResolveProvenance_NeverIncludesSecretKeys(t *testing.T) {
-	for _, k := range ProvenanceKeys() {
-		if k == "smtp.auth.password" || k == "api.auth.api_key" {
-			t.Fatalf("ProvenanceKeys() included secret key %q", k)
+// TestResolveProvenance_SecretFlagOriginNeverLeaksValue asserts that when a
+// secret key is set via a CLI flag, the resulting Source.Origin string
+// (e.g. "--smtp-auth-password=...") never embeds the actual flag value.
+func TestResolveProvenance_SecretFlagOriginNeverLeaksValue(t *testing.T) {
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.String("smtp-auth-password", "", "")
+	fs.String("api-auth-api-key", "", "")
+	if err := fs.Set("smtp-auth-password", "supersecret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.Set("api-auth-api-key", "topsecretkey"); err != nil {
+		t.Fatal(err)
+	}
+
+	prov := ResolveProvenance(nil, fs, ProvenanceKeys())
+
+	for _, key := range []string{"smtp.auth.password", "api.auth.api_key"} {
+		src := prov[key]
+		if src.Layer != "flag" {
+			t.Fatalf("%s: Layer = %q, want flag", key, src.Layer)
+		}
+		if strings.Contains(src.Origin, "supersecret") || strings.Contains(src.Origin, "topsecretkey") {
+			t.Fatalf("%s: Origin = %q leaked the secret value", key, src.Origin)
 		}
 	}
 }

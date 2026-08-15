@@ -142,6 +142,29 @@ func TestValidate_SMTPStartTLSRequiresCertAndKey(t *testing.T) {
 	}
 }
 
+func TestValidate_WebTLSRequiresBothCertAndKey(t *testing.T) {
+	cfg := Defaults()
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() with cert/key both unset = %v, want nil", err)
+	}
+
+	cfg.Web.Tls.Cert = "cert.pem"
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with only cert set = nil, want error")
+	}
+
+	cfg.Web.Tls.Cert = ""
+	cfg.Web.Tls.Key = "key.pem"
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with only key set = nil, want error")
+	}
+
+	cfg.Web.Tls.Cert = "cert.pem"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() with both cert and key set = %v, want nil", err)
+	}
+}
+
 func TestValidate_SMTPAuthRequiresUsernameAndPassword(t *testing.T) {
 	cfg := Defaults()
 	cfg.SMTP.Auth.Enabled = true

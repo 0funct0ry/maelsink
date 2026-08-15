@@ -122,7 +122,11 @@ func TestInfo_RequiresAuthWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestConfig_ReturnsEntriesAndExcludesSecrets(t *testing.T) {
+// TestConfig_ReturnsEntriesAndMasksSecretValues asserts that secret keys
+// (smtp.auth.password, api.auth.api_key) appear in the response — so the
+// Settings screen can show they're configured, with "secret": true — but
+// the actual secret value never reaches the client.
+func TestConfig_ReturnsEntriesAndMasksSecretValues(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.SMTP.Auth.Password = "supersecret"
 	cfg.API.Auth.APIKey = "topsecretkey"
@@ -141,8 +145,8 @@ func TestConfig_ReturnsEntriesAndExcludesSecrets(t *testing.T) {
 	if strings.Contains(body, "supersecret") || strings.Contains(body, "topsecretkey") {
 		t.Fatalf("response leaked a secret value: %s", body)
 	}
-	if strings.Contains(body, "smtp.auth.password") || strings.Contains(body, "api.auth.api_key") {
-		t.Fatalf("response included a secret key: %s", body)
+	if !strings.Contains(body, `"smtp.auth.password"`) || !strings.Contains(body, `"api.auth.api_key"`) {
+		t.Fatalf("response missing secret keys' provenance rows: %s", body)
 	}
 	if !strings.Contains(body, `"smtp.host"`) {
 		t.Fatalf("response missing expected key smtp.host: %s", body)

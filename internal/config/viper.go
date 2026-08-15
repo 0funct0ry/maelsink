@@ -26,6 +26,8 @@ func setDefaults(v *viper.Viper, d Config) {
 	v.SetDefault("web.base_path", d.Web.BasePath)
 	v.SetDefault("web.cors_origins", d.Web.CORSOrigins)
 	v.SetDefault("web.auth.file", d.Web.Auth.File)
+	v.SetDefault("web.tls.cert", d.Web.Tls.Cert)
+	v.SetDefault("web.tls.key", d.Web.Tls.Key)
 
 	v.SetDefault("api.host", d.API.Host)
 	v.SetDefault("api.port", d.API.Port)
@@ -78,6 +80,7 @@ func bindEnv(v *viper.Viper) {
 		"smtp.auth.enabled", "smtp.auth.username", "smtp.auth.password",
 
 		"web.enabled", "web.host", "web.port", "web.base_path", "web.cors_origins", "web.auth.file",
+		"web.tls.cert", "web.tls.key",
 
 		"api.host", "api.port", "api.base_path",
 		"api.auth.enabled", "api.auth.api_key",
@@ -151,6 +154,12 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	}
 	if f.WebAuthFile != nil {
 		cfg.Web.Auth.File = *f.WebAuthFile
+	}
+	if f.WebTLSCert != nil {
+		cfg.Web.Tls.Cert = *f.WebTLSCert
+	}
+	if f.WebTLSKey != nil {
+		cfg.Web.Tls.Key = *f.WebTLSKey
 	}
 	if f.APIHost != nil {
 		cfg.API.Host = *f.APIHost

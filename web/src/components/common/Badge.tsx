@@ -6,6 +6,7 @@ type BadgeVariant =
   | 'warning'
   | 'danger'
   | 'accent'
+  | 'secret'
   | 'source-default'
   | 'source-file'
   | 'source-env'
@@ -22,6 +23,7 @@ const variantClasses: Record<BadgeVariant, string> = {
   warning: 'bg-warning-soft text-warning',
   danger: 'bg-danger-soft text-danger',
   accent: 'bg-accent-soft text-accent',
+  secret: 'bg-warning-soft text-warning',
   // Source badges mirror PrecedenceChain's default/file/env/flag swatch
   // colors (M6.1's Settings screen provenance table), so a value's badge
   // color always matches the same layer's color in the precedence legend.

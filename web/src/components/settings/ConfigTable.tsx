@@ -31,6 +31,13 @@ function formatValue(value: unknown): string {
   return String(value)
 }
 
+// Secret entries never carry their real value over the network (see
+// internal/config/dump.go's addSecret) — `value` is just an "is it set"
+// bool, so render that as a masked placeholder rather than "true"/"false".
+function formatSecretValue(value: unknown): string {
+  return value ? '••••••••' : 'Not set'
+}
+
 /**
  * Full per-section config dump backed by GET /ui-api/v1/config (M6.1):
  * every non-secret key's resolved value plus real provenance (which layer
@@ -144,8 +151,15 @@ export default function ConfigTable() {
                   <tbody>
                     {rows.map((row) => (
                       <tr key={row.key} className="border-b border-border-soft last:border-b-0 hover:bg-surface-2">
-                        <td className="w-1/3 py-2 pr-4 font-mono font-medium text-text-primary">{row.key}</td>
-                        <td className="w-1/3 py-2 pr-4 font-mono text-text-primary">{formatValue(row.value)}</td>
+                        <td className="w-1/3 py-2 pr-4 font-mono font-medium text-text-primary">
+                          <span className="inline-flex items-center gap-1.5">
+                            {row.key}
+                            {row.secret && <Badge variant="secret">Secret</Badge>}
+                          </span>
+                        </td>
+                        <td className="w-1/3 py-2 pr-4 font-mono text-text-primary">
+                          {row.secret ? formatSecretValue(row.value) : formatValue(row.value)}
+                        </td>
                         <td className="py-2 pr-4">
                           <Badge variant={sourceBadgeVariant(row.source.layer)}>{SOURCE_LABEL[row.source.layer]}</Badge>
                         </td>

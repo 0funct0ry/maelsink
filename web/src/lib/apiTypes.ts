@@ -80,6 +80,7 @@ export interface ConfigEntry {
   section: string
   key: string
   value: unknown
+  secret: boolean
   source: ConfigSource
 }
 
