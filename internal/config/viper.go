@@ -65,6 +65,17 @@ func setDefaults(v *viper.Viper, d Config) {
 	v.SetDefault("shell.abbr_trigger_key", d.Shell.AbbrTriggerKey)
 	v.SetDefault("shell.template_enabled", d.Shell.TemplateEnabled)
 	v.SetDefault("shell.template_unsafe_funcs", d.Shell.TemplateUnsafeFuncs)
+
+	v.SetDefault("compose.listen", d.Compose.Listen)
+	v.SetDefault("compose.api_addr", d.Compose.APIAddr)
+	v.SetDefault("compose.api_user", d.Compose.APIUser)
+	v.SetDefault("compose.api_pass", d.Compose.APIPass)
+	v.SetDefault("compose.api_insecure_skip_verify", d.Compose.APIInsecureSkipVerify)
+	v.SetDefault("compose.api_ca_cert", d.Compose.APICACert)
+	v.SetDefault("compose.smtp_addr", d.Compose.SMTPAddr)
+	v.SetDefault("compose.smtp_user", d.Compose.SMTPUser)
+	v.SetDefault("compose.smtp_pass", d.Compose.SMTPPass)
+	v.SetDefault("compose.open", d.Compose.Open)
 }
 
 // newEnvReplacer maps YAML key path "smtp.max_message_size_mb" to the env
@@ -103,6 +114,10 @@ func bindEnv(v *viper.Viper) {
 		"shell.history_size", "shell.color", "shell.seed", "shell.editor",
 		"shell.sh_enabled", "shell.exit_on_error", "shell.abbr_trigger_key",
 		"shell.template_enabled", "shell.template_unsafe_funcs",
+
+		"compose.listen", "compose.api_addr", "compose.api_user", "compose.api_pass",
+		"compose.api_insecure_skip_verify", "compose.api_ca_cert",
+		"compose.smtp_addr", "compose.smtp_user", "compose.smtp_pass", "compose.open",
 	}
 	for _, k := range keys {
 		_ = v.BindEnv(k)
@@ -261,5 +276,35 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	}
 	if f.ShellTemplateUnsafeFuncs != nil {
 		cfg.Shell.TemplateUnsafeFuncs = *f.ShellTemplateUnsafeFuncs
+	}
+	if f.ComposeListen != nil {
+		cfg.Compose.Listen = *f.ComposeListen
+	}
+	if f.ComposeAPIAddr != nil {
+		cfg.Compose.APIAddr = *f.ComposeAPIAddr
+	}
+	if f.ComposeAPIUser != nil {
+		cfg.Compose.APIUser = *f.ComposeAPIUser
+	}
+	if f.ComposeAPIPass != nil {
+		cfg.Compose.APIPass = *f.ComposeAPIPass
+	}
+	if f.ComposeAPIInsecureSkipVerify != nil {
+		cfg.Compose.APIInsecureSkipVerify = *f.ComposeAPIInsecureSkipVerify
+	}
+	if f.ComposeAPICACert != nil {
+		cfg.Compose.APICACert = *f.ComposeAPICACert
+	}
+	if f.ComposeSMTPAddr != nil {
+		cfg.Compose.SMTPAddr = *f.ComposeSMTPAddr
+	}
+	if f.ComposeSMTPUser != nil {
+		cfg.Compose.SMTPUser = *f.ComposeSMTPUser
+	}
+	if f.ComposeSMTPPass != nil {
+		cfg.Compose.SMTPPass = *f.ComposeSMTPPass
+	}
+	if f.ComposeOpen != nil {
+		cfg.Compose.Open = *f.ComposeOpen
 	}
 }

@@ -30,8 +30,10 @@ type Provenance map[string]Source
 
 // keyToFlag maps every config key eligible for the Settings screen's
 // provenance table (smtp/web/api/storage/logging/server sections only —
-// shell.* keys aren't part of that screen) to the CLI flag name that can
-// override it. This includes secret keys (smtp.auth.password,
+// shell.* and compose.* keys aren't part of that screen, since both
+// describe a client's target connection rather than the running serve
+// process's own config) to the CLI flag name that can override it. This
+// includes secret keys (smtp.auth.password,
 // api.auth.api_key) so their *provenance* (which layer set them, and a
 // value-free origin) can be shown — see isSecretKey and Dump's addSecret:
 // the resolved secret value itself is never sent to the client.

@@ -108,6 +108,25 @@ type Shell struct {
 	TemplateUnsafeFuncs bool   `yaml:"template_unsafe_funcs" mapstructure:"template_unsafe_funcs"`
 }
 
+// Compose configures `maelsink compose` (SPEC.md §7.7): the process it
+// connects to (its own local server always binds Listen), not compose's own
+// server behavior. APIUser/APIPass are Basic Auth credentials for whatever
+// fronts the target's REST API (e.g. the Web UI port with M8.8's htpasswd
+// gate enabled), injected server-side by compose — never the target API's
+// own Bearer api_key auth (SPEC.md §7.7.3).
+type Compose struct {
+	Listen                string `yaml:"listen" mapstructure:"listen"`
+	APIAddr               string `yaml:"api_addr" mapstructure:"api_addr"`
+	APIUser               string `yaml:"api_user" mapstructure:"api_user"`
+	APIPass               string `yaml:"api_pass" mapstructure:"api_pass"`
+	APIInsecureSkipVerify bool   `yaml:"api_insecure_skip_verify" mapstructure:"api_insecure_skip_verify"`
+	APICACert             string `yaml:"api_ca_cert" mapstructure:"api_ca_cert"`
+	SMTPAddr              string `yaml:"smtp_addr" mapstructure:"smtp_addr"`
+	SMTPUser              string `yaml:"smtp_user" mapstructure:"smtp_user"`
+	SMTPPass              string `yaml:"smtp_pass" mapstructure:"smtp_pass"`
+	Open                  bool   `yaml:"open" mapstructure:"open"`
+}
+
 // Config is the fully-resolved maelsink configuration (SPEC.md §3.1).
 type Config struct {
 	SMTP    SMTP    `yaml:"smtp" mapstructure:"smtp"`
@@ -117,6 +136,7 @@ type Config struct {
 	Logging Logging `yaml:"logging" mapstructure:"logging"`
 	Server  Server  `yaml:"server" mapstructure:"server"`
 	Shell   Shell   `yaml:"shell" mapstructure:"shell"`
+	Compose Compose `yaml:"compose" mapstructure:"compose"`
 }
 
 // Defaults returns maelsink's built-in defaults (SPEC.md §3.1), the lowest
@@ -172,6 +192,14 @@ func Defaults() Config {
 			ShEnabled:       true,
 			AbbrTriggerKey:  "space",
 			TemplateEnabled: true,
+		},
+		Compose: Compose{
+			Listen:   ":8090",
+			APIAddr:  "http://localhost:9090",
+			SMTPAddr: "127.0.0.1:1025",
+			// APIUser/APIPass/APIInsecureSkipVerify/APICACert/SMTPUser/
+			// SMTPPass/Open all default to their Go zero values ("", "",
+			// false, "", "", "", false).
 		},
 	}
 }
@@ -231,6 +259,16 @@ type FlagOverrides struct {
 	ShellAbbrTriggerKey           *string
 	ShellTemplateEnabled          *bool
 	ShellTemplateUnsafeFuncs      *bool
+	ComposeListen                 *string
+	ComposeAPIAddr                *string
+	ComposeAPIUser                *string
+	ComposeAPIPass                *string
+	ComposeAPIInsecureSkipVerify  *bool
+	ComposeAPICACert              *string
+	ComposeSMTPAddr               *string
+	ComposeSMTPUser               *string
+	ComposeSMTPPass               *string
+	ComposeOpen                   *bool
 }
 
 // Options controls a single Load call.

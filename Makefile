@@ -8,6 +8,7 @@ BIN_DIR=bin
 PKG=github.com/0funct0ry/maelsink
 MAIN_DIR=.
 WEB_DIR=web
+WEB_COMPOSE_DIR=web-compose
 SITE_DIR=site
 
 # Build-time variables
@@ -37,7 +38,7 @@ GREEN=\033[0;32m
 CYAN=\033[0;36m
 NC=\033[0m # No Color
 
-.PHONY: all help build build-go build-web build-docker ensure-web-embed fmt vet test test-leak check lint clean run site-dev site-build vhs
+.PHONY: all help build build-go build-web build-web-compose build-docker ensure-web-embed ensure-web-compose-embed fmt vet test test-leak check lint clean run dev-go dev-web dev-web-compose site-dev site-build vhs
 
 all: build ## Build everything (frontend and backend)
 
@@ -51,9 +52,9 @@ help: ## Show this help message
 
 # --- Build Targets ---
 
-build: build-web build-go ## Build frontend assets and then the Go binary
+build: build-web build-web-compose build-go ## Build frontend assets and then the Go binary
 
-build-go: ensure-web-embed ## Build the Go binary
+build-go: ensure-web-embed ensure-web-compose-embed ## Build the Go binary
 	@echo "$(BLUE)Building Go binary...$(NC)"
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_DIR)/main.go
@@ -66,6 +67,14 @@ build-web: ## Build the frontend SPA (React/Vite)
 		echo "$(GREEN)Skip: $(WEB_DIR) directory not found.$(NC)"; \
 	fi
 
+build-web-compose: ## Build the compose frontend SPA (React/Vite)
+	@echo "$(BLUE)Building compose frontend assets...$(NC)"
+	@if [ -d "$(WEB_COMPOSE_DIR)" ]; then \
+		cd $(WEB_COMPOSE_DIR) && npm ci && npm run build; \
+	else \
+		echo "$(GREEN)Skip: $(WEB_COMPOSE_DIR) directory not found.$(NC)"; \
+	fi
+
 build-docker: ## Build the multi-stage Docker image
 	@echo "$(BLUE)Building Docker image...$(NC)"
 	docker build -t maelsink:latest .
@@ -73,6 +82,11 @@ build-docker: ## Build the multi-stage Docker image
 ensure-web-embed: ## Build web assets only if missing, so go:embed has something to compile
 	@if [ ! -f internal/webui/dist/index.html ]; then \
 		$(MAKE) build-web; \
+	fi
+
+ensure-web-compose-embed: ## Build compose web assets only if missing, so go:embed has something to compile
+	@if [ ! -f internal/compose/dist/index.html ]; then \
+		$(MAKE) build-web-compose; \
 	fi
 
 # --- Development Targets ---
@@ -91,21 +105,28 @@ dev-web: ## Run frontend dev server (Vite)
 		echo "Error: $(WEB_DIR) directory not found."; exit 1; \
 	fi
 
+dev-web-compose: ## Run compose frontend dev server (Vite)
+	@if [ -d "$(WEB_COMPOSE_DIR)" ]; then \
+		cd $(WEB_COMPOSE_DIR) && npm run dev; \
+	else \
+		echo "Error: $(WEB_COMPOSE_DIR) directory not found."; exit 1; \
+	fi
+
 # --- QA Targets ---
 
 fmt: ## Format Go source code
 	@echo "$(BLUE)Formatting code...$(NC)"
 	go fmt ./...
 
-vet: ensure-web-embed ## Run Go vet
+vet: ensure-web-embed ensure-web-compose-embed ## Run Go vet
 	@echo "$(BLUE)Running vet...$(NC)"
 	go vet ./...
 
-test: ensure-web-embed ## Run Go tests with the race detector (always on, never skip it)
+test: ensure-web-embed ensure-web-compose-embed ## Run Go tests with the race detector (always on, never skip it)
 	@echo "$(BLUE)Running tests...$(NC)"
 	go test -v -race ./...
 
-test-leak: ensure-web-embed ## Run tests with goroutine-leak detection (uber-go/goleak) in addition to -race
+test-leak: ensure-web-embed ensure-web-compose-embed ## Run tests with goroutine-leak detection (uber-go/goleak) in addition to -race
 	@echo "$(BLUE)Running tests with leak detection...$(NC)"
 	go test -v -race -tags leakcheck ./...
 
@@ -147,5 +168,6 @@ clean: ## Remove build artifacts and temporary files
 	@echo "$(BLUE)Cleaning up...$(NC)"
 	rm -rf $(BIN_DIR)
 	rm -rf internal/webui/dist
+	rm -rf internal/compose/dist
 	rm -rf $(SITE_DIR)/dist
 	go clean

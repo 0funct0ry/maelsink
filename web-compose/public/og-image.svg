@@ -1,0 +1,14 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#1a1f36"/>
+  <rect x="460" y="195" width="120" height="120" rx="28" fill="url(#og-gradient)"/>
+  <path d="M488 235L520 258L552 235" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M488 235C488 229 493 224 499 224H541C547 224 552 229 552 235V269C552 280 543 289 532 289H508C497 289 488 280 488 269V235Z" stroke="white" stroke-width="6" stroke-linejoin="round"/>
+  <text x="600" y="400" font-family="JetBrains Mono, monospace" font-size="56" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-1">maelsink</text>
+  <text x="600" y="445" font-family="Inter, sans-serif" font-size="20" fill="#8891ab" text-anchor="middle">A fake SMTP server for local dev &amp; CI</text>
+  <defs>
+    <linearGradient id="og-gradient" x1="460" y1="195" x2="580" y2="315" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#635BFF"/>
+      <stop offset="1" stop-color="#8B7FFF"/>
+    </linearGradient>
+  </defs>
+</svg>
