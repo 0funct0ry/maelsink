@@ -148,6 +148,15 @@ func buildBody(text, html string) (body []byte, contentType string, err error) {
 	}
 }
 
+// AttachFile writes att as one multipart part on mw. Exported so callers
+// building their own multipart/mixed envelope outside MessageSpec.Build
+// (e.g. internal/compose's EML-format /send, which splices attachments
+// around an already-rendered whole-document template) can reuse the same
+// attachment-encoding logic instead of duplicating it.
+func AttachFile(mw *multipart.Writer, att AttachmentSpec) error {
+	return attachFile(mw, att)
+}
+
 func attachFile(mw *multipart.Writer, att AttachmentSpec) error {
 	data, err := os.ReadFile(att.Path)
 	if err != nil {

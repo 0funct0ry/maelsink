@@ -26,7 +26,10 @@ type Config struct{}
 
 // New builds compose's router: the /compose-api/v1/* target-proxy handlers
 // plus the embedded SPA, served at the root (no BasePath support yet).
-func New(client *cliclient.Client, logger *slog.Logger, cfg Config) *gin.Engine {
+// target carries the SMTP credentials the Composer's stateless /send
+// handler dials with (SPEC.md §7.7.4.1) — separate from client, which only
+// talks to the target's REST API.
+func New(client *cliclient.Client, logger *slog.Logger, target TargetConfig, cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
@@ -37,6 +40,9 @@ func New(client *cliclient.Client, logger *slog.Logger, cfg Config) *gin.Engine 
 	rg.GET("/messages/:id", getMessageHandler(client))
 	rg.DELETE("/messages/:id", deleteMessageHandler(client))
 	rg.DELETE("/messages", clearMessagesHandler(client))
+	rg.POST("/render", renderHandler())
+	rg.POST("/send", sendHandler(target))
+	rg.GET("/functions", functionsHandler())
 
 	assets, err := fs.Sub(distFS, "dist")
 	if err != nil {

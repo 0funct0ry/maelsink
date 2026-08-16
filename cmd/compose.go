@@ -132,7 +132,7 @@ func runCompose(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	client, err := compose.NewTargetClient(compose.TargetConfig{
+	target := compose.TargetConfig{
 		APIAddr:               composeCfg.APIAddr,
 		APIUser:               composeCfg.APIUser,
 		APIPass:               composeCfg.APIPass,
@@ -141,12 +141,13 @@ func runCompose(cmd *cobra.Command, args []string) error {
 		SMTPAddr:              composeCfg.SMTPAddr,
 		SMTPUser:              composeCfg.SMTPUser,
 		SMTPPass:              composeCfg.SMTPPass,
-	})
+	}
+	client, err := compose.NewTargetClient(target)
 	if err != nil {
 		return fmt.Errorf("compose: building target client: %w", err)
 	}
 
-	router := compose.New(client, logger, compose.Config{})
+	router := compose.New(client, logger, target, compose.Config{})
 
 	srv := &http.Server{Addr: composeCfg.Listen, Handler: router}
 

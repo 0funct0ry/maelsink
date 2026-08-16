@@ -58,11 +58,15 @@ export interface HealthResponse {
 export class ComposeApiError extends Error {
   status: number
   code: string
+  line?: number
+  column?: number
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, line?: number, column?: number) {
     super(message)
     this.status = status
     this.code = code
+    this.line = line
+    this.column = column
   }
 }
 
@@ -71,16 +75,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!resp.ok) {
     let code = 'unknown_error'
     let message = resp.statusText
+    let line: number | undefined
+    let column: number | undefined
     try {
       const body = await resp.json()
       if (body?.error?.code) {
         code = body.error.code
         message = body.error.message ?? message
+        line = body.error.line
+        column = body.error.column
       }
     } catch {
       // non-JSON error body — fall back to statusText
     }
-    throw new ComposeApiError(resp.status, code, message)
+    throw new ComposeApiError(resp.status, code, message, line, column)
   }
   if (resp.status === 204) {
     return undefined as T
@@ -114,4 +122,66 @@ export function deleteMessage(id: string): Promise<void> {
 
 export function clearMessages(): Promise<void> {
   return request<void>('/compose-api/v1/messages', { method: 'DELETE' })
+}
+
+export type TemplateFormat = 'eml' | 'json'
+
+// AttachmentInput mirrors cliclient.AttachmentSpec. Only meaningful for
+// format "eml": raw RFC 5322 text has no structured place to say "attach
+// this file", unlike "json" (cliclient.MessageSpec), which carries its own
+// attachments field inline in the template document — so this is ignored
+// when format is "json".
+export interface AttachmentInput {
+  path: string
+  filename: string
+}
+
+export interface RenderSendRequest {
+  template: string
+  format: TemplateFormat
+  vars: Record<string, string>
+  attachments?: AttachmentInput[]
+}
+
+export interface ResolvedAttachment {
+  path: string
+  filename: string
+}
+
+export interface RenderResponse {
+  rendered: string
+  attachments?: ResolvedAttachment[]
+}
+
+export interface SendResponse {
+  from: string
+  to: string[]
+}
+
+export function renderTemplate(req: RenderSendRequest): Promise<RenderResponse> {
+  return request<RenderResponse>('/compose-api/v1/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export function sendTemplate(req: RenderSendRequest): Promise<SendResponse> {
+  return request<SendResponse>('/compose-api/v1/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+}
+
+export interface FuncDoc {
+  name: string
+  category: string
+  args: string
+  returns: string
+  description: string
+}
+
+export function getFunctions(): Promise<FuncDoc[]> {
+  return request<{ functions: FuncDoc[] }>('/compose-api/v1/functions').then((r) => r.functions)
 }

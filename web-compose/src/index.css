@@ -102,3 +102,32 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: theme('colors.text-tertiary');
 }
+
+/* CodeMirror's own internal scroller (.cm-scroller) isn't reachable via a
+   className prop on <CodeMirror>, and its built-in light/dark themes don't
+   style scrollbars at all — left to the browser/OS default, which looks
+   out of place next to the rest of the app's themed chrome. Style it
+   directly here instead, using the same tokens as .scrollbar-thin above so
+   it matches in both light and dark mode. */
+.cm-editor .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.border.DEFAULT') transparent;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background-color: theme('colors.border.DEFAULT');
+  border-radius: 4px;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background-color: theme('colors.text-tertiary');
+}
