@@ -6,6 +6,7 @@ import (
 	"testing"
 	"text/template"
 
+	"github.com/0funct0ry/maelsink/internal/cliclient"
 	"github.com/0funct0ry/maelsink/internal/config"
 )
 
@@ -16,7 +17,7 @@ import (
 // prompt's {{ if not .connected }} would silently always evaluate to
 // false and never show "(offline)".
 func TestNewSession_ConnectedDefaultsToFalsyEmptyNotLiteralFalse(t *testing.T) {
-	s := NewSession(config.Shell{}, nil, "", nil, nil, io.Discard, io.Discard, nil)
+	s := NewSession(config.Shell{}, nil, "", nil, cliclient.TLSOptions{}, nil, io.Discard, io.Discard, nil)
 	got, ok := s.GetVar("connected")
 	if !ok {
 		t.Fatal("expected $connected to be initialized, found nothing")

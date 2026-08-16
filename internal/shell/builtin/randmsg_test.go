@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/0funct0ry/maelsink/internal/cliclient"
 	"github.com/0funct0ry/maelsink/internal/config"
 	"github.com/0funct0ry/maelsink/internal/shell"
 	"github.com/0funct0ry/maelsink/internal/shell/tmpl"
@@ -40,7 +41,7 @@ func newSeededSession(t *testing.T, seed int64) (*shell.Session, func()) {
 	if err != nil {
 		t.Fatalf("tmpl.New: %v", err)
 	}
-	s := shell.NewSession(config.Shell{TemplateEnabled: true}, nil, "", nil, engine, new(strings.Builder), new(strings.Builder), nil)
+	s := shell.NewSession(config.Shell{TemplateEnabled: true}, nil, "", nil, cliclient.TLSOptions{}, engine, new(strings.Builder), new(strings.Builder), nil)
 	s.Interactive = false
 	return s, func() { engine.Close() }
 }
@@ -56,7 +57,7 @@ func TestRandMsgSeedReproducesContent(t *testing.T) {
 		if err := fs.Parse([]string{"--dry-run"}); err != nil {
 			return "", err
 		}
-		s := shell.NewSession(config.Shell{TemplateEnabled: true}, nil, "", nil, engine, new(strings.Builder), new(strings.Builder), nil)
+		s := shell.NewSession(config.Shell{TemplateEnabled: true}, nil, "", nil, cliclient.TLSOptions{}, engine, new(strings.Builder), new(strings.Builder), nil)
 		spec, err := buildRandomSpec(fs, s, map[string]any{})
 		if err != nil {
 			return "", err

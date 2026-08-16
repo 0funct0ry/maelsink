@@ -25,6 +25,7 @@ type Options struct {
 	Client   *cliclient.Client
 	SMTPAddr string
 	SMTPAuth *cliclient.Auth
+	SMTPTLS  cliclient.TLSOptions
 
 	// Registry is the builtin command table. It may be nil or empty (the
 	// internal/shell/builtin package is built in a later phase) — Run must
@@ -77,7 +78,7 @@ func Run(ctx context.Context, opts Options) (int, error) {
 	}
 	stdin := opts.Stdin
 
-	s := NewSession(opts.Cfg, opts.Client, opts.SMTPAddr, opts.SMTPAuth, engine, stdout, stderr, stdin)
+	s := NewSession(opts.Cfg, opts.Client, opts.SMTPAddr, opts.SMTPAuth, opts.SMTPTLS, engine, stdout, stderr, stdin)
 	s.ExitOnError = opts.Cfg.ExitOnError
 
 	reg := opts.Registry

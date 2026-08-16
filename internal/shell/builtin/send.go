@@ -55,6 +55,8 @@ func (Send) Flags() *pflag.FlagSet {
 	fs.Int("smtp-port", 0, "override the session's SMTP port for this invocation")
 	fs.String("auth-user", "", "override SMTP AUTH username for this invocation")
 	fs.String("auth-pass", "", "override SMTP AUTH password for this invocation")
+	fs.String("smtp-tls", "", "override transport security for this invocation: none|starttls|implicit")
+	fs.Bool("smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification for this invocation")
 	return fs
 }
 
@@ -96,7 +98,7 @@ func (b Send) Run(ctx context.Context, s *shell.Session, args []string) error {
 	}
 	dryRun, _ := fs.GetBool("dry-run")
 
-	addr, auth, err := resolveSMTP(s, fs)
+	addr, auth, tlsOpts, err := resolveSMTP(s, fs)
 	if err != nil {
 		return err
 	}
@@ -116,7 +118,7 @@ func (b Send) Run(ctx context.Context, s *shell.Session, args []string) error {
 			fmt.Fprintf(s.Out, "--- dry run: %s -> %v ---\n%s\n", from, to, string(raw))
 			return nil
 		}
-		if err := cliclient.Send(ctx, addr, auth, from, to, raw); err != nil {
+		if err := cliclient.SendTLS(ctx, addr, tlsOpts, auth, from, to, raw); err != nil {
 			return fmt.Errorf("send: %w", err)
 		}
 		fmt.Fprintln(s.Out, "sent 1 message")
@@ -262,7 +264,7 @@ func (b Send) Run(ctx context.Context, s *shell.Session, args []string) error {
 				mu.Unlock()
 				return
 			}
-			if err := cliclient.Send(ctx, addr, auth, bmsg.from, bmsg.to, bmsg.raw); err != nil {
+			if err := cliclient.SendTLS(ctx, addr, tlsOpts, auth, bmsg.from, bmsg.to, bmsg.raw); err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Sprintf("message %d: send: %v", idx+1, err))
 				mu.Unlock()
@@ -320,7 +322,7 @@ func resolveSendMode(eml, tmplFile, bodyFile, jsonFile string) (sendMode, string
 	}
 }
 
-func resolveSMTP(s *shell.Session, fs *pflag.FlagSet) (string, *cliclient.Auth, error) {
+func resolveSMTP(s *shell.Session, fs *pflag.FlagSet) (string, *cliclient.Auth, cliclient.TLSOptions, error) {
 	addr := s.SMTPAddr
 	host, port := "", ""
 	if h, _ := fs.GetString("smtp-host"); h != "" {
@@ -356,7 +358,21 @@ func resolveSMTP(s *shell.Session, fs *pflag.FlagSet) (string, *cliclient.Auth, 
 		}
 		auth = a
 	}
-	return addr, auth, nil
+
+	tlsOpts := s.SMTPTLS
+	if tlsModeStr, _ := fs.GetString("smtp-tls"); tlsModeStr != "" {
+		mode, err := cliclient.ParseTLSMode(tlsModeStr)
+		if err != nil {
+			return "", nil, cliclient.TLSOptions{}, err
+		}
+		tlsOpts.Mode = mode
+	}
+	if skipVerifyFlag := fs.Lookup("smtp-tls-insecure-skip-verify"); skipVerifyFlag != nil && skipVerifyFlag.Changed {
+		skipVerify, _ := fs.GetBool("smtp-tls-insecure-skip-verify")
+		tlsOpts.InsecureSkipVerify = skipVerify
+	}
+
+	return addr, auth, tlsOpts, nil
 }
 
 func splitAddr(addr string) (host, port string) {

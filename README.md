@@ -52,3 +52,9 @@ make test   # run the test suite
 make fmt    # format Go source
 make vet    # run go vet
 ```
+
+## Documentation
+
+- [docs/cli-smtp-tls.md](docs/cli-smtp-tls.md) — using `maelsink send`/`shell` against a TLS/auth-hardened SMTP listener
+- [docs/deployment.md](docs/deployment.md) — deployment guide
+- [docs/reverse-proxy.md](docs/reverse-proxy.md) — running the Web UI behind a reverse proxy

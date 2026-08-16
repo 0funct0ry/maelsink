@@ -171,7 +171,7 @@ func randomAttachments(s *shell.Session, data map[string]any, n int, size string
 // runBulkRandom re-renders and sends count messages built by buildRandomSpec
 // with bounded concurrency, mirroring send.go's bulk-send loop exactly. It
 // backs both the "randmsg" and "deluge" builtins.
-func runBulkRandom(ctx context.Context, s *shell.Session, fs *pflag.FlagSet, addr string, auth *cliclient.Auth, count, concurrency int) (sent int, errs []string, err error) {
+func runBulkRandom(ctx context.Context, s *shell.Session, fs *pflag.FlagSet, addr string, tlsOpts cliclient.TLSOptions, auth *cliclient.Auth, count, concurrency int) (sent int, errs []string, err error) {
 	if count < 1 {
 		count = 1
 	}
@@ -210,7 +210,7 @@ func runBulkRandom(ctx context.Context, s *shell.Session, fs *pflag.FlagSet, add
 				return
 			}
 			from, to := spec.Envelope()
-			if sendErr := cliclient.Send(ctx, addr, auth, from, to, raw); sendErr != nil {
+			if sendErr := cliclient.SendTLS(ctx, addr, tlsOpts, auth, from, to, raw); sendErr != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Sprintf("message %d: send: %v", idx+1, sendErr))
 				mu.Unlock()
@@ -247,6 +247,8 @@ func (RandMsg) Flags() *pflag.FlagSet {
 	fs.IntP("smtp-port", "P", 0, "override the session's SMTP port for this invocation")
 	fs.StringP("auth-user", "U", "", "override SMTP AUTH username for this invocation")
 	fs.StringP("auth-pass", "W", "", "override SMTP AUTH password for this invocation")
+	fs.String("smtp-tls", "", "override transport security for this invocation: none|starttls|implicit")
+	fs.Bool("smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification for this invocation")
 	return fs
 }
 
@@ -262,7 +264,7 @@ func (b RandMsg) Run(ctx context.Context, s *shell.Session, args []string) error
 	}
 	concurrency, _ := fs.GetInt("concurrency")
 
-	addr, auth, err := resolveSMTP(s, fs)
+	addr, auth, tlsOpts, err := resolveSMTP(s, fs)
 	if err != nil {
 		return err
 	}
@@ -288,7 +290,7 @@ func (b RandMsg) Run(ctx context.Context, s *shell.Session, args []string) error
 		return nil
 	}
 
-	sent, errs, err := runBulkRandom(ctx, s, fs, addr, auth, count, concurrency)
+	sent, errs, err := runBulkRandom(ctx, s, fs, addr, tlsOpts, auth, count, concurrency)
 	fmt.Fprintf(s.Out, "%d/%d sent\n", sent, count)
 	for _, e := range errs {
 		fmt.Fprintln(s.Err, e)

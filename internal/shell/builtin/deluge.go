@@ -28,6 +28,8 @@ func (Deluge) Flags() *pflag.FlagSet {
 	fs.IntP("smtp-port", "P", 0, "override the session's SMTP port for this invocation")
 	fs.StringP("auth-user", "U", "", "override SMTP AUTH username for this invocation")
 	fs.StringP("auth-pass", "W", "", "override SMTP AUTH password for this invocation")
+	fs.String("smtp-tls", "", "override transport security for this invocation: none|starttls|implicit")
+	fs.Bool("smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification for this invocation")
 	return fs
 }
 
@@ -43,12 +45,12 @@ func (b Deluge) Run(ctx context.Context, s *shell.Session, args []string) error 
 	}
 	concurrency, _ := fs.GetInt("concurrency")
 
-	addr, auth, err := resolveSMTP(s, fs)
+	addr, auth, tlsOpts, err := resolveSMTP(s, fs)
 	if err != nil {
 		return err
 	}
 
-	sent, errs, err := runBulkRandom(ctx, s, fs, addr, auth, count, concurrency)
+	sent, errs, err := runBulkRandom(ctx, s, fs, addr, tlsOpts, auth, count, concurrency)
 	fmt.Fprintf(s.Out, "%d/%d sent\n", sent, count)
 	for _, e := range errs {
 		fmt.Fprintln(s.Err, e)

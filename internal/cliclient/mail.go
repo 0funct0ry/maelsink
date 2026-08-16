@@ -7,6 +7,7 @@ package cliclient
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -242,20 +243,103 @@ type Auth struct {
 	Password string
 }
 
+// TLSMode selects how SendTLS establishes transport security with the SMTP
+// server, mirroring the modes internal/smtp's server-side hardening (M8.10)
+// supports: no TLS, opportunistic STARTTLS, or dialing straight into TLS.
+type TLSMode int
+
+const (
+	// TLSNone dials plain TCP with no transport security. This is Send's
+	// (and SendTLS's zero-value) behavior, unchanged from before M8.10a.
+	TLSNone TLSMode = iota
+	// TLSStartTLS dials plain TCP, then issues STARTTLS after EHLO,
+	// upgrading the connection before AUTH/MAIL FROM/etc.
+	TLSStartTLS
+	// TLSImplicit dials directly into TLS (no STARTTLS negotiation),
+	// matching a server started with --smtp-require-tls.
+	TLSImplicit
+)
+
+// ParseTLSMode parses the --smtp-tls flag value ("none", "starttls", or
+// "implicit") into a TLSMode, returning a clear error for anything else.
+func ParseTLSMode(s string) (TLSMode, error) {
+	switch s {
+	case "", "none":
+		return TLSNone, nil
+	case "starttls":
+		return TLSStartTLS, nil
+	case "implicit":
+		return TLSImplicit, nil
+	default:
+		return TLSNone, fmt.Errorf("cliclient: invalid --smtp-tls value %q (want none, starttls, or implicit)", s)
+	}
+}
+
+// TLSOptions configures SendTLS's transport security.
+type TLSOptions struct {
+	Mode TLSMode
+	// InsecureSkipVerify accepts a self-signed/dev certificate without
+	// verifying it against a CA — expected routine use against maelsink's
+	// own --smtp-tls-cert/--smtp-tls-key, never against a production server.
+	InsecureSkipVerify bool
+	// ServerName overrides the hostname used for SNI/certificate
+	// verification. Empty uses the dial address's host.
+	ServerName string
+}
+
+// handshakeTimeout bounds every step up through RCPT TO (dial, initial
+// greeting, EHLO, optional STARTTLS, optional AUTH, MAIL FROM/RCPT TO) so
+// that pointing a client at a mismatched TLS mode (e.g. a plaintext client
+// against a --smtp-require-tls listener, which is waiting for a TLS
+// ClientHello the client never sends) fails with a clear timeout instead of
+// hanging forever — both sides would otherwise block on a read that never
+// resolves. It is a package var, not a const, so tests can shorten it.
+// Deliberately not applied to the DATA write below, since a large
+// attachment can legitimately take longer than this to transfer once the
+// TLS mode is confirmed correct.
+var handshakeTimeout = 30 * time.Second
+
 // Send dials addr, optionally authenticates, and delivers raw to the given
 // envelope recipients. It returns the underlying *textproto.Error verbatim
 // on rejection so callers can surface the server's exact error text.
+//
+// Send is a thin wrapper around SendTLS with TLSOptions{} (TLSNone),
+// preserved so existing callers compile unchanged.
 func Send(ctx context.Context, addr string, auth *Auth, from string, to []string, raw []byte) error {
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return fmt.Errorf("cliclient: dial %s: %w", addr, err)
-	}
-	defer conn.Close()
+	return SendTLS(ctx, addr, TLSOptions{}, auth, from, to, raw)
+}
 
+// SendTLS dials addr (optionally over TLS per tlsOpts), optionally
+// authenticates, and delivers raw to the given envelope recipients.
+func SendTLS(ctx context.Context, addr string, tlsOpts TLSOptions, auth *Auth, from string, to []string, raw []byte) error {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr
+	}
+	serverName := tlsOpts.ServerName
+	if serverName == "" {
+		serverName = host
+	}
+
+	var conn net.Conn
+	if tlsOpts.Mode == TLSImplicit {
+		var d tls.Dialer
+		d.Config = &tls.Config{InsecureSkipVerify: tlsOpts.InsecureSkipVerify, ServerName: serverName}
+		conn, err = d.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return fmt.Errorf("cliclient: implicit TLS dial %s: %w", addr, err)
+		}
+	} else {
+		var d net.Dialer
+		conn, err = d.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return fmt.Errorf("cliclient: dial %s: %w", addr, err)
+		}
+	}
+	defer conn.Close()
+
+	if err := conn.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil {
+		return fmt.Errorf("cliclient: set deadline: %w", err)
 	}
 
 	c, err := smtp.NewClient(conn, host)
@@ -266,6 +350,12 @@ func Send(ctx context.Context, addr string, auth *Auth, from string, to []string
 
 	if err := c.Hello("maelsink-cli"); err != nil {
 		return fmt.Errorf("cliclient: EHLO: %w", err)
+	}
+
+	if tlsOpts.Mode == TLSStartTLS {
+		if err := c.StartTLS(&tls.Config{InsecureSkipVerify: tlsOpts.InsecureSkipVerify, ServerName: serverName}); err != nil {
+			return fmt.Errorf("cliclient: STARTTLS: %w", err)
+		}
 	}
 
 	if auth != nil {
@@ -281,6 +371,13 @@ func Send(ctx context.Context, addr string, auth *Auth, from string, to []string
 		if err := c.Rcpt(rcpt); err != nil {
 			return fmt.Errorf("cliclient: RCPT TO %s: %w", rcpt, err)
 		}
+	}
+
+	// Clear the handshake deadline before the potentially-large DATA
+	// transfer: everything up to here is small protocol chatter that should
+	// never legitimately take this long, but a big attachment might.
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		return fmt.Errorf("cliclient: clear deadline: %w", err)
 	}
 
 	w, err := c.Data()

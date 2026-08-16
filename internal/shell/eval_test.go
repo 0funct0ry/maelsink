@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/0funct0ry/maelsink/internal/cliclient"
 	"github.com/0funct0ry/maelsink/internal/config"
 	"github.com/0funct0ry/maelsink/internal/shell/tmpl"
 )
@@ -346,7 +347,7 @@ func TestEvalIntegration(t *testing.T) {
 	}
 	defer engine.Close()
 
-	s := NewSession(config.Shell{TemplateEnabled: false}, nil, "", nil, engine, new(bytes.Buffer), new(bytes.Buffer), nil)
+	s := NewSession(config.Shell{TemplateEnabled: false}, nil, "", nil, cliclient.TLSOptions{}, engine, new(bytes.Buffer), new(bytes.Buffer), nil)
 
 	if err := Eval(context.Background(), s, reg, "echo a b"); err != nil {
 		t.Fatalf("unexpected error: %v", err)

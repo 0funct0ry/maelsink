@@ -16,20 +16,22 @@ import (
 )
 
 var (
-	sendTo       []string
-	sendCc       []string
-	sendBcc      []string
-	sendFrom     string
-	sendSubject  string
-	sendText     string
-	sendHTML     string
-	sendAttach   []string
-	sendRaw      bool
-	sendFile     string
-	sendSMTPHost string
-	sendSMTPPort int
-	sendAuthUser string
-	sendAuthPass string
+	sendTo                    []string
+	sendCc                    []string
+	sendBcc                   []string
+	sendFrom                  string
+	sendSubject               string
+	sendText                  string
+	sendHTML                  string
+	sendAttach                []string
+	sendRaw                   bool
+	sendFile                  string
+	sendSMTPHost              string
+	sendSMTPPort              int
+	sendAuthUser              string
+	sendAuthPass              string
+	sendSMTPTLS               string
+	sendTLSInsecureSkipVerify bool
 )
 
 // sendCmd is a sendmail-equivalent SMTP client (SPEC.md §7.2).
@@ -58,10 +60,18 @@ func init() {
 	sendCmd.Flags().IntVar(&sendSMTPPort, "smtp-port", d.SMTP.Port, "SMTP server port")
 	sendCmd.Flags().StringVar(&sendAuthUser, "auth-user", "", "SMTP AUTH username")
 	sendCmd.Flags().StringVar(&sendAuthPass, "auth-pass", "", "SMTP AUTH password")
+	sendCmd.Flags().StringVar(&sendSMTPTLS, "smtp-tls", "none", "transport security: none|starttls|implicit")
+	sendCmd.Flags().BoolVar(&sendTLSInsecureSkipVerify, "smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification (local/CI use only)")
 }
 
 func runSend(cmd *cobra.Command, args []string) error {
 	addr := fmt.Sprintf("%s:%d", sendSMTPHost, sendSMTPPort)
+
+	tlsMode, err := cliclient.ParseTLSMode(sendSMTPTLS)
+	if err != nil {
+		return fmt.Errorf("send: %w", err)
+	}
+	tlsOpts := cliclient.TLSOptions{Mode: tlsMode, InsecureSkipVerify: sendTLSInsecureSkipVerify}
 
 	var auth *cliclient.Auth
 	if sendAuthUser != "" {
@@ -72,7 +82,6 @@ func runSend(cmd *cobra.Command, args []string) error {
 		from string
 		to   []string
 		raw  []byte
-		err  error
 	)
 
 	switch {
@@ -112,7 +121,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := cliclient.Send(cmd.Context(), addr, auth, from, to, raw); err != nil {
+	if err := cliclient.SendTLS(cmd.Context(), addr, tlsOpts, auth, from, to, raw); err != nil {
 		return fmt.Errorf("send failed: %w", err)
 	}
 

@@ -26,6 +26,8 @@ var (
 	shellSMTPHost                                                                             string
 	shellSMTPPort                                                                             int
 	shellAuthUser, shellAuthPass                                                              string
+	shellSMTPTLS                                                                              string
+	shellTLSInsecureSkipVerify                                                                bool
 
 	// shellAPI, shellAPIKey, shellFormat mirror apiClientFlags' fields, but
 	// are registered directly on shellCmd rather than via
@@ -80,6 +82,8 @@ func init() {
 	shellCmd.Flags().IntVarP(&shellSMTPPort, "smtp-port", "p", d.SMTP.Port, "default SMTP target for the send builtin")
 	shellCmd.Flags().StringVarP(&shellAuthUser, "auth-user", "U", "", "SMTP AUTH username")
 	shellCmd.Flags().StringVarP(&shellAuthPass, "auth-pass", "W", "", "SMTP AUTH password")
+	shellCmd.Flags().StringVar(&shellSMTPTLS, "smtp-tls", "none", "default transport security for the send builtins: none|starttls|implicit")
+	shellCmd.Flags().BoolVar(&shellTLSInsecureSkipVerify, "smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification (local/CI use only)")
 }
 
 // resolveShellConfig loads the layered config (defaults < file < env < flags)
@@ -157,6 +161,12 @@ func runShell(cmd *cobra.Command, args []string) error {
 		auth = &cliclient.Auth{Username: shellAuthUser, Password: shellAuthPass}
 	}
 
+	tlsMode, err := cliclient.ParseTLSMode(shellSMTPTLS)
+	if err != nil {
+		return fmt.Errorf("shell: %w", err)
+	}
+	tlsOpts := cliclient.TLSOptions{Mode: tlsMode, InsecureSkipVerify: shellTLSInsecureSkipVerify}
+
 	interactive := len(flagExecs) == 0 && flagScript == "" &&
 		isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
 
@@ -167,6 +177,7 @@ func runShell(cmd *cobra.Command, args []string) error {
 		Client:      client,
 		SMTPAddr:    addr,
 		SMTPAuth:    auth,
+		SMTPTLS:     tlsOpts,
 		Registry:    registry,
 		Execs:       flagExecs,
 		ScriptPath:  flagScript,

@@ -29,7 +29,7 @@ func newTestSession(t *testing.T, mux *http.ServeMux) (*shell.Session, *bytes.Bu
 	t.Cleanup(func() { engine.Close() })
 
 	var out, errBuf bytes.Buffer
-	s := shell.NewSession(config.Shell{TemplateEnabled: true, ShEnabled: true}, client, "", nil, engine, &out, &errBuf, nil)
+	s := shell.NewSession(config.Shell{TemplateEnabled: true, ShEnabled: true}, client, "", nil, cliclient.TLSOptions{}, engine, &out, &errBuf, nil)
 	s.Interactive = false
 	return s, &out, &errBuf
 }

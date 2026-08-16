@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
+
+	"github.com/0funct0ry/maelsink/internal/cliclient"
 )
 
 // fakeSMTPServer accepts connections and discards SMTP commands, replying
@@ -226,6 +228,55 @@ func TestSend_EndToEnd_FakeSMTP(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "1/1 sent") {
 		t.Errorf("out = %q", out.String())
+	}
+}
+
+func TestResolveSMTP_TLSDefaultsToSessionOptions(t *testing.T) {
+	s, _, _ := newTestSession(t, nil)
+	s.SMTPTLS = cliclient.TLSOptions{Mode: cliclient.TLSStartTLS, InsecureSkipVerify: true}
+
+	fs := (Send{}).Flags()
+	if err := fs.Parse(nil); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	_, _, tlsOpts, err := resolveSMTP(s, fs)
+	if err != nil {
+		t.Fatalf("resolveSMTP: %v", err)
+	}
+	if tlsOpts.Mode != cliclient.TLSStartTLS || !tlsOpts.InsecureSkipVerify {
+		t.Errorf("tlsOpts = %+v, want session default", tlsOpts)
+	}
+}
+
+func TestResolveSMTP_TLSPerInvocationOverride(t *testing.T) {
+	s, _, _ := newTestSession(t, nil)
+	s.SMTPTLS = cliclient.TLSOptions{Mode: cliclient.TLSStartTLS, InsecureSkipVerify: true}
+
+	fs := (Send{}).Flags()
+	if err := fs.Parse([]string{"--smtp-tls", "implicit"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	_, _, tlsOpts, err := resolveSMTP(s, fs)
+	if err != nil {
+		t.Fatalf("resolveSMTP: %v", err)
+	}
+	if tlsOpts.Mode != cliclient.TLSImplicit {
+		t.Errorf("tlsOpts.Mode = %v, want TLSImplicit (per-invocation override)", tlsOpts.Mode)
+	}
+	if !tlsOpts.InsecureSkipVerify {
+		t.Errorf("expected InsecureSkipVerify to still carry the session default when the override flag wasn't set")
+	}
+}
+
+func TestResolveSMTP_InvalidTLSValue(t *testing.T) {
+	s, _, _ := newTestSession(t, nil)
+
+	fs := (Send{}).Flags()
+	if err := fs.Parse([]string{"--smtp-tls", "bogus"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, _, _, err := resolveSMTP(s, fs); err == nil {
+		t.Fatal("expected an error for an invalid --smtp-tls value")
 	}
 }
 

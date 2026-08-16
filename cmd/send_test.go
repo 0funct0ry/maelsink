@@ -2,8 +2,14 @@ package cmd
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"log/slog"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,12 +22,73 @@ import (
 	"github.com/0funct0ry/maelsink/internal/store"
 )
 
+// writeTestCert generates a throwaway self-signed cert/key pair, mirroring
+// internal/smtp/session_test.go's helper of the same purpose, for tests that
+// need a real --smtp-tls-cert/--smtp-tls-key pair on the test server.
+func writeTestCert(t *testing.T) (certPath, keyPath string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "127.0.0.1"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	derBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+
+	dir := t.TempDir()
+	certPath = filepath.Join(dir, "cert.pem")
+	keyPath = filepath.Join(dir, "key.pem")
+
+	certOut, err := os.Create(certPath)
+	if err != nil {
+		t.Fatalf("create cert file: %v", err)
+	}
+	defer certOut.Close()
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		t.Fatalf("encode cert: %v", err)
+	}
+
+	keyOut, err := os.Create(keyPath)
+	if err != nil {
+		t.Fatalf("create key file: %v", err)
+	}
+	defer keyOut.Close()
+	if err := pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}); err != nil {
+		t.Fatalf("encode key: %v", err)
+	}
+	return certPath, keyPath
+}
+
 func newTestSMTPServer(t *testing.T) (host string, port int, st store.MessageStore) {
 	t.Helper()
+	return newTestSMTPServerWithConfig(t, smtp.Config{})
+}
+
+// newTestSMTPServerWithConfig starts a real internal/smtp server with cfg's
+// Host/Port/Domain/MaxMessageSize defaulted, letting callers layer in
+// TLS/auth fields (e.g. RequireTLS, RequireStartTLS) to exercise M8.10a's CLI
+// TLS support against the real M8.10-hardened server.
+func newTestSMTPServerWithConfig(t *testing.T, cfg smtp.Config) (host string, port int, st store.MessageStore) {
+	t.Helper()
 	st = store.NewMemoryStore()
-	srv, err := smtp.New(smtp.Config{
-		Host: "127.0.0.1", Port: 0, Domain: "maelsink.test", MaxMessageSize: 1 << 20,
-	}, st, events.NewBus(), slog.New(slog.DiscardHandler))
+	cfg.Host = "127.0.0.1"
+	cfg.Port = 0
+	if cfg.Domain == "" {
+		cfg.Domain = "maelsink.test"
+	}
+	if cfg.MaxMessageSize == 0 {
+		cfg.MaxMessageSize = 1 << 20
+	}
+	srv, err := smtp.New(cfg, st, events.NewBus(), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("smtp.New: %v", err)
 	}
@@ -151,6 +218,85 @@ func TestSend_JSONFile(t *testing.T) {
 	}
 	if total != 1 || !strings.Contains(msgs[0].TextBody, "body from json") {
 		t.Fatalf("unexpected result: total=%d msgs=%+v", total, msgs)
+	}
+}
+
+func TestSend_SMTPTLS_Implicit(t *testing.T) {
+	certPath, keyPath := writeTestCert(t)
+	host, port, st := newTestSMTPServerWithConfig(t, smtp.Config{
+		RequireTLS: true, TLSCert: certPath, TLSKey: keyPath,
+	})
+
+	_, stderr, err := execCommand(t, "", "send",
+		"--smtp-host", host, "--smtp-port", strconv.Itoa(port),
+		"--smtp-tls", "implicit", "--smtp-tls-insecure-skip-verify",
+		"--from", "sender@example.com", "--to", "rcpt@example.com",
+		"--subject", "implicit tls", "--text", "hello over implicit tls")
+	if err != nil {
+		t.Fatalf("execCommand: err=%v stderr=%s", err, stderr)
+	}
+
+	_, total, err := st.List(context.Background(), store.ListFilter{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("total = %d, want 1", total)
+	}
+}
+
+func TestSend_SMTPTLS_StartTLS(t *testing.T) {
+	certPath, keyPath := writeTestCert(t)
+	host, port, st := newTestSMTPServerWithConfig(t, smtp.Config{
+		RequireStartTLS: true, TLSCert: certPath, TLSKey: keyPath,
+	})
+
+	_, stderr, err := execCommand(t, "", "send",
+		"--smtp-host", host, "--smtp-port", strconv.Itoa(port),
+		"--smtp-tls", "starttls", "--smtp-tls-insecure-skip-verify",
+		"--from", "sender@example.com", "--to", "rcpt@example.com",
+		"--subject", "starttls", "--text", "hello over starttls")
+	if err != nil {
+		t.Fatalf("execCommand: err=%v stderr=%s", err, stderr)
+	}
+
+	_, total, err := st.List(context.Background(), store.ListFilter{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("total = %d, want 1", total)
+	}
+}
+
+func TestSend_SMTPTLS_RequireStartTLS_FailsWithoutFlag(t *testing.T) {
+	certPath, keyPath := writeTestCert(t)
+	host, port, _ := newTestSMTPServerWithConfig(t, smtp.Config{
+		RequireStartTLS: true, TLSCert: certPath, TLSKey: keyPath,
+	})
+
+	_, stderr, err := execCommand(t, "", "send",
+		"--smtp-host", host, "--smtp-port", strconv.Itoa(port),
+		"--from", "sender@example.com", "--to", "rcpt@example.com",
+		"--subject", "no tls", "--text", "should be rejected")
+	if err == nil {
+		t.Fatal("expected an error when --smtp-tls is omitted against a require-starttls server")
+	}
+	if !strings.Contains(stderr, "send failed") {
+		t.Fatalf("expected a clear send failure message, got stderr:\n%s", stderr)
+	}
+}
+
+func TestSend_InvalidSMTPTLSValue(t *testing.T) {
+	host, port, _ := newTestSMTPServer(t)
+
+	_, _, err := execCommand(t, "", "send",
+		"--smtp-host", host, "--smtp-port", strconv.Itoa(port),
+		"--smtp-tls", "bogus",
+		"--from", "sender@example.com", "--to", "rcpt@example.com",
+		"--subject", "x", "--text", "x")
+	if err == nil {
+		t.Fatal("expected an error for an invalid --smtp-tls value")
 	}
 }
 

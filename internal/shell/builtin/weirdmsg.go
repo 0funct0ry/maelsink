@@ -34,6 +34,8 @@ func (WeirdMsg) Flags() *pflag.FlagSet {
 	fs.IntP("smtp-port", "P", 0, "override the session's SMTP port for this invocation")
 	fs.StringP("auth-user", "U", "", "override SMTP AUTH username for this invocation")
 	fs.StringP("auth-pass", "W", "", "override SMTP AUTH password for this invocation")
+	fs.String("smtp-tls", "", "override transport security for this invocation: none|starttls|implicit")
+	fs.Bool("smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification for this invocation")
 	return fs
 }
 
@@ -59,7 +61,7 @@ func (b WeirdMsg) Run(ctx context.Context, s *shell.Session, args []string) erro
 		}
 	}
 
-	addr, auth, err := resolveSMTP(s, fs)
+	addr, auth, tlsOpts, err := resolveSMTP(s, fs)
 	if err != nil {
 		return err
 	}
@@ -84,7 +86,7 @@ func (b WeirdMsg) Run(ctx context.Context, s *shell.Session, args []string) erro
 
 	if kind == "thread" {
 		depth, _ := fs.GetInt("depth")
-		return sendWeirdThread(ctx, s, addr, auth, from, to, depth)
+		return sendWeirdThread(ctx, s, addr, tlsOpts, auth, from, to, depth)
 	}
 
 	envFrom := from
@@ -101,7 +103,7 @@ func (b WeirdMsg) Run(ctx context.Context, s *shell.Session, args []string) erro
 		}
 	}
 
-	if err := cliclient.Send(ctx, addr, auth, envFrom, []string{to}, raw); err != nil {
+	if err := cliclient.SendTLS(ctx, addr, tlsOpts, auth, envFrom, []string{to}, raw); err != nil {
 		return fmt.Errorf("weirdmsg: %w", err)
 	}
 	fmt.Fprintf(s.Out, "sent 1 %s message\n", kind)
@@ -247,7 +249,7 @@ func weirdInvite(s *shell.Session, data map[string]any, from, to string) ([]byte
 
 // sendWeirdThread sends depth messages sharing a Message-ID/References
 // lineage and a common subject ("Re: ..." on replies), sent in order.
-func sendWeirdThread(ctx context.Context, s *shell.Session, addr string, auth *cliclient.Auth, from, to string, depth int) error {
+func sendWeirdThread(ctx context.Context, s *shell.Session, addr string, tlsOpts cliclient.TLSOptions, auth *cliclient.Auth, from, to string, depth int) error {
 	if depth < 1 {
 		depth = 1
 	}
@@ -284,7 +286,7 @@ func sendWeirdThread(ctx context.Context, s *shell.Session, addr string, auth *c
 		headerLines.WriteString(text)
 		headerLines.WriteString("\r\n")
 
-		if err := cliclient.Send(ctx, addr, auth, from, []string{to}, []byte(headerLines.String())); err != nil {
+		if err := cliclient.SendTLS(ctx, addr, tlsOpts, auth, from, []string{to}, []byte(headerLines.String())); err != nil {
 			return fmt.Errorf("weirdmsg thread message %d: %w", i+1, err)
 		}
 		references = append(references, msgID)

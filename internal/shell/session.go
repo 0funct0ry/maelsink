@@ -19,6 +19,7 @@ type Session struct {
 	Client   *cliclient.Client
 	SMTPAddr string
 	SMTPAuth *cliclient.Auth
+	SMTPTLS  cliclient.TLSOptions
 
 	Vars    map[string]string
 	Aliases map[string]string
@@ -90,11 +91,12 @@ func (s *Session) SetHistory(h *History) {
 
 // NewSession constructs a Session ready for use. Vars/Aliases/Abbrs start
 // empty (non-nil).
-func NewSession(cfg config.Shell, client *cliclient.Client, smtpAddr string, smtpAuth *cliclient.Auth, tmplEngine *tmpl.Engine, out, errW io.Writer, in io.Reader) *Session {
+func NewSession(cfg config.Shell, client *cliclient.Client, smtpAddr string, smtpAuth *cliclient.Auth, smtpTLS cliclient.TLSOptions, tmplEngine *tmpl.Engine, out, errW io.Writer, in io.Reader) *Session {
 	s := &Session{
 		Client:        client,
 		SMTPAddr:      smtpAddr,
 		SMTPAuth:      smtpAuth,
+		SMTPTLS:       smtpTLS,
 		Vars:          make(map[string]string),
 		Aliases:       make(map[string]string),
 		Abbrs:         make(map[string]string),

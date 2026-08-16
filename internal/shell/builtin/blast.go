@@ -30,6 +30,8 @@ func (Blast) Flags() *pflag.FlagSet {
 	fs.IntP("smtp-port", "P", 0, "override the session's SMTP port for this invocation")
 	fs.StringP("auth-user", "U", "", "override SMTP AUTH username for this invocation")
 	fs.StringP("auth-pass", "W", "", "override SMTP AUTH password for this invocation")
+	fs.String("smtp-tls", "", "override transport security for this invocation: none|starttls|implicit")
+	fs.Bool("smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification for this invocation")
 	return fs
 }
 
@@ -50,7 +52,7 @@ func (b Blast) Run(ctx context.Context, s *shell.Session, args []string) error {
 		return fmt.Errorf("blast: --split must be to, cc, bcc, or mixed, got %q", split)
 	}
 
-	addr, auth, err := resolveSMTP(s, fs)
+	addr, auth, tlsOpts, err := resolveSMTP(s, fs)
 	if err != nil {
 		return err
 	}
@@ -110,7 +112,7 @@ func (b Blast) Run(ctx context.Context, s *shell.Session, args []string) error {
 		return nil
 	}
 
-	if err := cliclient.Send(ctx, addr, auth, from, to, raw); err != nil {
+	if err := cliclient.SendTLS(ctx, addr, tlsOpts, auth, from, to, raw); err != nil {
 		return fmt.Errorf("blast: %w", err)
 	}
 	fmt.Fprintf(s.Out, "sent 1 message to %d recipients (to=%d cc=%d bcc=%d)\n", n, len(spec.To), len(spec.Cc), len(spec.Bcc))

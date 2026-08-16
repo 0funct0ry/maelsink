@@ -54,6 +54,8 @@ func (IntMsg) Flags() *pflag.FlagSet {
 	fs.IntP("smtp-port", "P", 0, "override the session's SMTP port for this invocation")
 	fs.StringP("auth-user", "U", "", "override SMTP AUTH username for this invocation")
 	fs.StringP("auth-pass", "W", "", "override SMTP AUTH password for this invocation")
+	fs.String("smtp-tls", "", "override transport security for this invocation: none|starttls|implicit")
+	fs.Bool("smtp-tls-insecure-skip-verify", false, "accept a self-signed/dev SMTP TLS certificate without verification for this invocation")
 	return fs
 }
 
@@ -95,7 +97,7 @@ func (b IntMsg) Run(ctx context.Context, s *shell.Session, args []string) error 
 		return fmt.Errorf("intmsg: --profile must be steady, poisson, or bursty, got %q", profile)
 	}
 
-	addr, auth, err := resolveSMTP(s, fs)
+	addr, auth, tlsOpts, err := resolveSMTP(s, fs)
 	if err != nil {
 		return err
 	}
@@ -104,6 +106,7 @@ func (b IntMsg) Run(ctx context.Context, s *shell.Session, args []string) error 
 		fs:            fs,
 		addr:          addr,
 		auth:          auth,
+		tlsOpts:       tlsOpts,
 		sched:         &intervalScheduler{profile: profile, mean: interval, jitter: jitter, tmpl: s.Tmpl},
 		profile:       profile,
 		burstSize:     mustGetInt(fs, "burst-size"),
@@ -194,6 +197,7 @@ type intmsgRunConfig struct {
 	fs            *pflag.FlagSet
 	addr          string
 	auth          *cliclient.Auth
+	tlsOpts       cliclient.TLSOptions
 	sched         *intervalScheduler
 	profile       string
 	burstSize     int
@@ -252,7 +256,7 @@ func runIntMsgLoop(ctx context.Context, s *shell.Session, cfg intmsgRunConfig, s
 			raw, err = spec.Build(time.Now())
 			if err == nil {
 				from, to := spec.Envelope()
-				err = cliclient.Send(ctx, cfg.addr, cfg.auth, from, to, raw)
+				err = cliclient.SendTLS(ctx, cfg.addr, cfg.tlsOpts, cfg.auth, from, to, raw)
 			}
 		}
 		if err != nil {
