@@ -70,6 +70,13 @@ func newSession(srv *Server, conn net.Conn) *session {
 	sess := &session{srv: srv, state: stateGreeted, ID: store.NewID(), StartedAt: time.Now()}
 	sess.ClientIP = clientIP(conn)
 	sess.attach(conn)
+	// In RequireTLS (implicit-TLS) mode, ListenAndServe already wraps every
+	// accepted connection in a completed TLS handshake before handleConn
+	// ever runs — so the session starts protected, with no STARTTLS
+	// upgrade to perform.
+	if srv.cfg.RequireTLS {
+		sess.tlsActive = true
+	}
 	return sess
 }
 

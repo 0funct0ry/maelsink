@@ -13,12 +13,16 @@ func setDefaults(v *viper.Viper, d Config) {
 	v.SetDefault("smtp.port", d.SMTP.Port)
 	v.SetDefault("smtp.domain", d.SMTP.Domain)
 	v.SetDefault("smtp.max_message_size_mb", d.SMTP.MaxMessageSizeMB)
-	v.SetDefault("smtp.starttls", d.SMTP.StartTLS)
+	v.SetDefault("smtp.require_starttls", d.SMTP.RequireStartTLS)
+	v.SetDefault("smtp.require_tls", d.SMTP.RequireTLS)
 	v.SetDefault("smtp.tls_cert", d.SMTP.TLSCert)
 	v.SetDefault("smtp.tls_key", d.SMTP.TLSKey)
 	v.SetDefault("smtp.auth.enabled", d.SMTP.Auth.Enabled)
 	v.SetDefault("smtp.auth.username", d.SMTP.Auth.Username)
 	v.SetDefault("smtp.auth.password", d.SMTP.Auth.Password)
+	v.SetDefault("smtp.auth.file", d.SMTP.Auth.File)
+	v.SetDefault("smtp.auth.allow_insecure", d.SMTP.Auth.AllowInsecure)
+	v.SetDefault("smtp.auth.accept_any", d.SMTP.Auth.AcceptAny)
 
 	v.SetDefault("web.enabled", d.Web.Enabled)
 	v.SetDefault("web.host", d.Web.Host)
@@ -76,8 +80,9 @@ func newEnvReplacer() *strings.Replacer {
 func bindEnv(v *viper.Viper) {
 	keys := []string{
 		"smtp.host", "smtp.port", "smtp.domain", "smtp.max_message_size_mb",
-		"smtp.starttls", "smtp.tls_cert", "smtp.tls_key",
+		"smtp.require_starttls", "smtp.require_tls", "smtp.tls_cert", "smtp.tls_key",
 		"smtp.auth.enabled", "smtp.auth.username", "smtp.auth.password",
+		"smtp.auth.file", "smtp.auth.allow_insecure", "smtp.auth.accept_any",
 
 		"web.enabled", "web.host", "web.port", "web.base_path", "web.cors_origins", "web.auth.file",
 		"web.tls.cert", "web.tls.key",
@@ -119,8 +124,11 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	if f.SMTPMaxMessageSizeMB != nil {
 		cfg.SMTP.MaxMessageSizeMB = *f.SMTPMaxMessageSizeMB
 	}
-	if f.SMTPStartTLS != nil {
-		cfg.SMTP.StartTLS = *f.SMTPStartTLS
+	if f.SMTPRequireStartTLS != nil {
+		cfg.SMTP.RequireStartTLS = *f.SMTPRequireStartTLS
+	}
+	if f.SMTPRequireTLS != nil {
+		cfg.SMTP.RequireTLS = *f.SMTPRequireTLS
 	}
 	if f.SMTPTLSCert != nil {
 		cfg.SMTP.TLSCert = *f.SMTPTLSCert
@@ -136,6 +144,15 @@ func applyFlagOverrides(cfg *Config, f FlagOverrides) {
 	}
 	if f.SMTPAuthPassword != nil {
 		cfg.SMTP.Auth.Password = *f.SMTPAuthPassword
+	}
+	if f.SMTPAuthFile != nil {
+		cfg.SMTP.Auth.File = *f.SMTPAuthFile
+	}
+	if f.SMTPAuthAllowInsecure != nil {
+		cfg.SMTP.Auth.AllowInsecure = *f.SMTPAuthAllowInsecure
+	}
+	if f.SMTPAuthAcceptAny != nil {
+		cfg.SMTP.Auth.AcceptAny = *f.SMTPAuthAcceptAny
 	}
 	if f.WebEnabled != nil {
 		cfg.Web.Enabled = *f.WebEnabled

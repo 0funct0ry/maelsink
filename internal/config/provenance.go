@@ -40,12 +40,16 @@ var keyToFlag = map[string]string{
 	"smtp.port":                       "smtp-port",
 	"smtp.domain":                     "smtp-domain",
 	"smtp.max_message_size_mb":        "smtp-max-message-size-mb",
-	"smtp.starttls":                   "smtp-starttls",
+	"smtp.require_starttls":           "smtp-require-starttls",
+	"smtp.require_tls":                "smtp-require-tls",
 	"smtp.tls_cert":                   "smtp-tls-cert",
 	"smtp.tls_key":                    "smtp-tls-key",
 	"smtp.auth.enabled":               "smtp-auth-enabled",
 	"smtp.auth.username":              "smtp-auth-username",
 	"smtp.auth.password":              "smtp-auth-password",
+	"smtp.auth.file":                  "smtp-auth-file",
+	"smtp.auth.allow_insecure":        "smtp-auth-allow-insecure",
+	"smtp.auth.accept_any":            "smtp-auth-accept-any",
 	"web.enabled":                     "web-enabled",
 	"web.host":                        "web-host",
 	"web.port":                        "web-port",
@@ -79,7 +83,8 @@ var keyToFlag = map[string]string{
 func isPathKey(key string) bool {
 	switch key {
 	case "storage.path", "storage.attachments.disk_path",
-		"web.auth.file", "web.tls.cert", "web.tls.key":
+		"web.auth.file", "web.tls.cert", "web.tls.key",
+		"smtp.auth.file":
 		return true
 	default:
 		return false

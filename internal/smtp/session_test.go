@@ -92,12 +92,18 @@ func (c *testClient) expectCode(want int) []string {
 	return lines
 }
 
+// testConfig returns a baseline SMTP config for tests. AuthAllowInsecure is
+// set so pre-existing AUTH tests exercising credential-matching/redaction
+// mechanics over an in-memory net.Pipe (not real TLS) aren't tripped up by
+// the RFC 4954 plaintext-AUTH guard added in M8.10 — that guard gets its
+// own dedicated tests.
 func testConfig() Config {
 	return Config{
-		Host:           "127.0.0.1",
-		Port:           1025,
-		Domain:         "maelsink.test",
-		MaxMessageSize: 1024,
+		Host:              "127.0.0.1",
+		Port:              1025,
+		Domain:            "maelsink.test",
+		MaxMessageSize:    1024,
+		AuthAllowInsecure: true,
 	}
 }
 
@@ -373,7 +379,6 @@ func TestSession_MalformedMessageStillStored(t *testing.T) {
 func TestSession_StartTLS(t *testing.T) {
 	certPath, keyPath := writeTestCert(t)
 	cfg := testConfig()
-	cfg.StartTLS = true
 	cfg.TLSCert = certPath
 	cfg.TLSKey = keyPath
 

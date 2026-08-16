@@ -75,7 +75,7 @@ func ehloCapabilities(sess *session) []string {
 	}{
 		{"8BITMIME", true},
 		{fmt.Sprintf("SIZE %d", sess.srv.cfg.MaxMessageSize), true},
-		{"STARTTLS", sess.srv.cfg.StartTLS && !sess.tlsActive},
+		{"STARTTLS", sess.srv.cfg.TLSCert != "" && sess.srv.cfg.TLSKey != "" && !sess.srv.cfg.RequireTLS && !sess.tlsActive},
 		{"AUTH PLAIN LOGIN", sess.srv.cfg.AuthEnabled},
 	}
 	var out []string
@@ -90,6 +90,10 @@ func ehloCapabilities(sess *session) []string {
 func handleMAILFROM(sess *session, arg string) bool {
 	if sess.state == stateGreeted {
 		sess.reply(codeBadSequence, msgHeloRequiredFirst)
+		return false
+	}
+	if sess.srv.cfg.RequireStartTLS && !sess.tlsActive {
+		sess.reply(codeAuthRequired, msgMustStartTLS)
 		return false
 	}
 	if sess.srv.cfg.AuthEnabled && !sess.authed {
@@ -229,7 +233,11 @@ func handleVRFY(sess *session, _ string) bool {
 }
 
 func handleSTARTTLS(sess *session, _ string) bool {
-	if !sess.srv.cfg.StartTLS {
+	if sess.srv.cfg.RequireTLS {
+		sess.reply(codeBadSequence, msgTLSNotAvailable)
+		return false
+	}
+	if sess.srv.cfg.TLSCert == "" || sess.srv.cfg.TLSKey == "" {
 		sess.reply(codeCommandNotImplemented, msgTLSNotOffered)
 		return false
 	}

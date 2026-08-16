@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,12 +31,16 @@ var (
 	flagSMTPPort                      int
 	flagSMTPDomain                    string
 	flagSMTPMaxMessageSizeMB          int
-	flagSMTPStartTLS                  bool
+	flagSMTPRequireStartTLS           bool
+	flagSMTPRequireTLS                bool
 	flagSMTPTLSCert                   string
 	flagSMTPTLSKey                    string
 	flagSMTPAuthEnabled               bool
 	flagSMTPAuthUsername              string
 	flagSMTPAuthPassword              string
+	flagSMTPAuthFile                  string
+	flagSMTPAuthAllowInsecure         bool
+	flagSMTPAuthAcceptAny             bool
 	flagWebEnabled                    bool
 	flagHeadless                      bool
 	flagWebHost                       string
@@ -82,12 +87,16 @@ func addServeFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&flagSMTPPort, "smtp-port", "p", d.SMTP.Port, "SMTP listen port")
 	cmd.Flags().StringVarP(&flagSMTPDomain, "smtp-domain", "m", d.SMTP.Domain, "HELO/EHLO advertised domain")
 	cmd.Flags().IntVarP(&flagSMTPMaxMessageSizeMB, "smtp-max-message-size-mb", "s", d.SMTP.MaxMessageSizeMB, "max accepted message size in MB")
-	cmd.Flags().BoolVarP(&flagSMTPStartTLS, "smtp-starttls", "t", d.SMTP.StartTLS, "enable optional STARTTLS")
-	cmd.Flags().StringVarP(&flagSMTPTLSCert, "smtp-tls-cert", "C", d.SMTP.TLSCert, "path to the STARTTLS certificate file")
-	cmd.Flags().StringVarP(&flagSMTPTLSKey, "smtp-tls-key", "K", d.SMTP.TLSKey, "path to the STARTTLS private key file")
+	cmd.Flags().StringVarP(&flagSMTPTLSCert, "smtp-tls-cert", "C", d.SMTP.TLSCert, "path to PEM certificate enabling SMTP STARTTLS (both cert+key required together; disabled if empty)")
+	cmd.Flags().StringVarP(&flagSMTPTLSKey, "smtp-tls-key", "K", d.SMTP.TLSKey, "path to PEM private key enabling SMTP STARTTLS (both cert+key required together; disabled if empty)")
+	cmd.Flags().BoolVarP(&flagSMTPRequireStartTLS, "smtp-require-starttls", "R", d.SMTP.RequireStartTLS, "require STARTTLS before MAIL FROM/AUTH")
+	cmd.Flags().BoolVarP(&flagSMTPRequireTLS, "smtp-require-tls", "S", d.SMTP.RequireTLS, "require implicit TLS from connect (disables STARTTLS on this listener)")
 	cmd.Flags().BoolVarP(&flagSMTPAuthEnabled, "smtp-auth-enabled", "a", d.SMTP.Auth.Enabled, "require AUTH PLAIN/LOGIN on the SMTP server")
 	cmd.Flags().StringVarP(&flagSMTPAuthUsername, "smtp-auth-username", "U", d.SMTP.Auth.Username, "SMTP AUTH username")
 	cmd.Flags().StringVarP(&flagSMTPAuthPassword, "smtp-auth-password", "W", d.SMTP.Auth.Password, "SMTP AUTH password")
+	cmd.Flags().StringVarP(&flagSMTPAuthFile, "smtp-auth-file", "f", d.SMTP.Auth.File, "path to htpasswd-style multi-user credential file for SMTP AUTH (disabled if empty)")
+	cmd.Flags().BoolVarP(&flagSMTPAuthAllowInsecure, "smtp-auth-allow-insecure", "I", d.SMTP.Auth.AllowInsecure, "permit plaintext AUTH PLAIN/LOGIN without STARTTLS/TLS (RFC 4954; local/CI use only)")
+	cmd.Flags().BoolVarP(&flagSMTPAuthAcceptAny, "smtp-auth-accept-any", "Y", d.SMTP.Auth.AcceptAny, "accept any AUTH PLAIN/LOGIN credentials, including none (test/CI use only)")
 	cmd.Flags().BoolVarP(&flagWebEnabled, "web-enabled", "e", d.Web.Enabled, "enable the Web UI server")
 	cmd.Flags().BoolVarP(&flagHeadless, "headless", "u", false, "shorthand for --web-enabled=false (headless mode)")
 	cmd.Flags().StringVarP(&flagWebHost, "web-host", "w", d.Web.Host, "Web UI listen host")
@@ -137,8 +146,11 @@ func resolveConfig(cmd *cobra.Command) (config.Config, config.Provenance, error)
 	if f.Changed("smtp-max-message-size-mb") {
 		overrides.SMTPMaxMessageSizeMB = &flagSMTPMaxMessageSizeMB
 	}
-	if f.Changed("smtp-starttls") {
-		overrides.SMTPStartTLS = &flagSMTPStartTLS
+	if f.Changed("smtp-require-starttls") {
+		overrides.SMTPRequireStartTLS = &flagSMTPRequireStartTLS
+	}
+	if f.Changed("smtp-require-tls") {
+		overrides.SMTPRequireTLS = &flagSMTPRequireTLS
 	}
 	if f.Changed("smtp-tls-cert") {
 		overrides.SMTPTLSCert = &flagSMTPTLSCert
@@ -154,6 +166,15 @@ func resolveConfig(cmd *cobra.Command) (config.Config, config.Provenance, error)
 	}
 	if f.Changed("smtp-auth-password") {
 		overrides.SMTPAuthPassword = &flagSMTPAuthPassword
+	}
+	if f.Changed("smtp-auth-file") {
+		overrides.SMTPAuthFile = &flagSMTPAuthFile
+	}
+	if f.Changed("smtp-auth-allow-insecure") {
+		overrides.SMTPAuthAllowInsecure = &flagSMTPAuthAllowInsecure
+	}
+	if f.Changed("smtp-auth-accept-any") {
+		overrides.SMTPAuthAcceptAny = &flagSMTPAuthAcceptAny
 	}
 	webEnabled := flagWebEnabled && !flagHeadless
 	if f.Changed("web-enabled") || f.Changed("headless") {
@@ -253,6 +274,30 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("web-tls: %w", err)
 		}
 	}
+	if cfg.SMTP.TLSCert != "" || cfg.SMTP.TLSKey != "" {
+		if cfg.SMTP.TLSCert == "" || cfg.SMTP.TLSKey == "" {
+			return fmt.Errorf("smtp-tls-cert and smtp-tls-key must both be set")
+		}
+		if _, err := tls.LoadX509KeyPair(cfg.SMTP.TLSCert, cfg.SMTP.TLSKey); err != nil {
+			return fmt.Errorf("smtp-tls: %w", err)
+		}
+	}
+	if cfg.SMTP.RequireStartTLS && cfg.SMTP.RequireTLS {
+		return fmt.Errorf("smtp-require-starttls and smtp-require-tls are mutually exclusive")
+	}
+	if (cfg.SMTP.RequireStartTLS || cfg.SMTP.RequireTLS) && (cfg.SMTP.TLSCert == "" || cfg.SMTP.TLSKey == "") {
+		return fmt.Errorf("smtp-require-starttls/smtp-require-tls: smtp-tls-cert and smtp-tls-key are both required")
+	}
+	if cfg.SMTP.Auth.File != "" {
+		if err := webauth.ValidateFile(cfg.SMTP.Auth.File); err != nil {
+			return fmt.Errorf("smtp-auth-file: %w", err)
+		}
+	}
+	smtpAuthExtra := parseSMTPAuthEnv(os.Getenv("MAELSINK_SMTP_AUTH"))
+	if cfg.SMTP.Auth.Enabled && cfg.SMTP.Auth.Username == "" && cfg.SMTP.Auth.File == "" &&
+		!cfg.SMTP.Auth.AcceptAny && len(smtpAuthExtra) == 0 {
+		return fmt.Errorf("smtp-auth-enabled: requires at least one credential source (username/password, smtp-auth-file, smtp-auth-accept-any, or MAELSINK_SMTP_AUTH)")
+	}
 
 	logger, err := logging.New(cfg.Logging.Level, cfg.Logging.Format, cfg.Logging.File)
 	if err != nil {
@@ -289,16 +334,21 @@ func runServe(cmd *cobra.Command, args []string) error {
 	go sweeper.Run(ctx)
 
 	smtpSrv, err := smtp.New(smtp.Config{
-		Host:           cfg.SMTP.Host,
-		Port:           cfg.SMTP.Port,
-		Domain:         cfg.SMTP.Domain,
-		MaxMessageSize: int64(cfg.SMTP.MaxMessageSizeMB) * 1024 * 1024,
-		StartTLS:       cfg.SMTP.StartTLS,
-		TLSCert:        cfg.SMTP.TLSCert,
-		TLSKey:         cfg.SMTP.TLSKey,
-		AuthEnabled:    cfg.SMTP.Auth.Enabled,
-		AuthUsername:   cfg.SMTP.Auth.Username,
-		AuthPassword:   cfg.SMTP.Auth.Password,
+		Host:                 cfg.SMTP.Host,
+		Port:                 cfg.SMTP.Port,
+		Domain:               cfg.SMTP.Domain,
+		MaxMessageSize:       int64(cfg.SMTP.MaxMessageSizeMB) * 1024 * 1024,
+		RequireStartTLS:      cfg.SMTP.RequireStartTLS,
+		RequireTLS:           cfg.SMTP.RequireTLS,
+		TLSCert:              cfg.SMTP.TLSCert,
+		TLSKey:               cfg.SMTP.TLSKey,
+		AuthEnabled:          cfg.SMTP.Auth.Enabled,
+		AuthUsername:         cfg.SMTP.Auth.Username,
+		AuthPassword:         cfg.SMTP.Auth.Password,
+		AuthFile:             cfg.SMTP.Auth.File,
+		AuthAllowInsecure:    cfg.SMTP.Auth.AllowInsecure,
+		AuthAcceptAny:        cfg.SMTP.Auth.AcceptAny,
+		AuthExtraCredentials: smtpAuthExtra,
 	}, messageStore, bus, logger)
 	if err != nil {
 		return fmt.Errorf("smtp: %w", err)
@@ -399,4 +449,26 @@ func runServe(cmd *cobra.Command, args []string) error {
 		_ = smtpSrv.Close()
 		return err
 	}
+}
+
+// parseSMTPAuthEnv parses MAELSINK_SMTP_AUTH's space-separated "user:pass"
+// list (e.g. "user1:password1 user2:password2") into a credentials map.
+// This is read directly from the environment rather than through
+// viper/config.go, per CLAUDE.md's "passwords via environment" note: a flag
+// or config file entry would put the plaintext credential list in shell
+// history / ps / maelsink.yaml, which the env var avoids for container
+// secret-injection patterns.
+func parseSMTPAuthEnv(raw string) map[string]string {
+	if raw == "" {
+		return nil
+	}
+	creds := make(map[string]string)
+	for _, pair := range strings.Fields(raw) {
+		user, pass, ok := strings.Cut(pair, ":")
+		if !ok {
+			continue
+		}
+		creds[user] = pass
+	}
+	return creds
 }

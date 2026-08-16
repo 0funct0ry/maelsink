@@ -37,6 +37,9 @@ const (
 	codeAuthRequired = 530
 	// codeAuthFailed: the presented AUTH credentials did not match.
 	codeAuthFailed = 535
+	// codeEncryptionRequired (RFC 4954): a plaintext AUTH mechanism (PLAIN,
+	// LOGIN) was attempted over an unprotected connection.
+	codeEncryptionRequired = 538
 	// codeExceededStorage: the message (or its declared SIZE) exceeds
 	// smtp.max_message_size_mb.
 	codeExceededStorage = 552
@@ -76,6 +79,9 @@ const (
 	msgSizeExceeded          = "5.3.4 Message size exceeds fixed limit"
 	msgTLSAlreadyActive      = "5.5.1 TLS already active"
 	msgTLSNotOffered         = "5.5.1 STARTTLS not offered"
+	msgTLSNotAvailable       = "5.5.1 STARTTLS not available"
 	msgTLSHandshakeFailed    = "5.7.0 TLS handshake failed"
+	msgMustStartTLS          = "5.7.0 Must issue a STARTTLS command first"
+	msgEncryptionRequired    = "5.7.11 Encryption required for requested authentication mechanism"
 	msgLocalError            = "4.3.0 Requested action aborted: local error in processing"
 )

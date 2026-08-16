@@ -14,9 +14,12 @@ import (
 )
 
 type SMTPAuth struct {
-	Enabled  bool   `yaml:"enabled" mapstructure:"enabled"`
-	Username string `yaml:"username" mapstructure:"username"`
-	Password string `yaml:"password" mapstructure:"password"`
+	Enabled       bool   `yaml:"enabled" mapstructure:"enabled"`
+	Username      string `yaml:"username" mapstructure:"username"`
+	Password      string `yaml:"password" mapstructure:"password"`
+	File          string `yaml:"file" mapstructure:"file"`
+	AllowInsecure bool   `yaml:"allow_insecure" mapstructure:"allow_insecure"`
+	AcceptAny     bool   `yaml:"accept_any" mapstructure:"accept_any"`
 }
 
 type SMTP struct {
@@ -24,7 +27,8 @@ type SMTP struct {
 	Port             int      `yaml:"port" mapstructure:"port"`
 	Domain           string   `yaml:"domain" mapstructure:"domain"`
 	MaxMessageSizeMB int      `yaml:"max_message_size_mb" mapstructure:"max_message_size_mb"`
-	StartTLS         bool     `yaml:"starttls" mapstructure:"starttls"`
+	RequireStartTLS  bool     `yaml:"require_starttls" mapstructure:"require_starttls"`
+	RequireTLS       bool     `yaml:"require_tls" mapstructure:"require_tls"`
 	TLSCert          string   `yaml:"tls_cert" mapstructure:"tls_cert"`
 	TLSKey           string   `yaml:"tls_key" mapstructure:"tls_key"`
 	Auth             SMTPAuth `yaml:"auth" mapstructure:"auth"`
@@ -130,7 +134,6 @@ func Defaults() Config {
 			Port:             1025,
 			Domain:           "maelsink.local",
 			MaxMessageSizeMB: 25,
-			StartTLS:         false,
 		},
 		Web: Web{
 			Enabled:     true,
@@ -182,12 +185,16 @@ type FlagOverrides struct {
 	SMTPPort                      *int
 	SMTPDomain                    *string
 	SMTPMaxMessageSizeMB          *int
-	SMTPStartTLS                  *bool
+	SMTPRequireStartTLS           *bool
+	SMTPRequireTLS                *bool
 	SMTPTLSCert                   *string
 	SMTPTLSKey                    *string
 	SMTPAuthEnabled               *bool
 	SMTPAuthUsername              *string
 	SMTPAuthPassword              *string
+	SMTPAuthFile                  *string
+	SMTPAuthAllowInsecure         *bool
+	SMTPAuthAcceptAny             *bool
 	WebEnabled                    *bool
 	WebHost                       *string
 	WebPort                       *int
@@ -322,18 +329,26 @@ func (c Config) Validate() error {
 	if c.SMTP.MaxMessageSizeMB <= 0 {
 		return fmt.Errorf("smtp.max_message_size_mb: must be > 0, got %d", c.SMTP.MaxMessageSizeMB)
 	}
-	if c.SMTP.StartTLS {
-		if c.SMTP.TLSCert == "" || c.SMTP.TLSKey == "" {
-			return fmt.Errorf("smtp.starttls: tls_cert and tls_key are both required when starttls is enabled")
-		}
+	if (c.SMTP.TLSCert == "") != (c.SMTP.TLSKey == "") {
+		return fmt.Errorf("smtp.tls: tls_cert and tls_key must both be set or both be empty")
+	}
+	if c.SMTP.RequireStartTLS && c.SMTP.RequireTLS {
+		return fmt.Errorf("smtp.require_starttls and smtp.require_tls are mutually exclusive")
+	}
+	if (c.SMTP.RequireStartTLS || c.SMTP.RequireTLS) && (c.SMTP.TLSCert == "" || c.SMTP.TLSKey == "") {
+		return fmt.Errorf("smtp.require_starttls/smtp.require_tls: tls_cert and tls_key are both required")
 	}
 	if (c.Web.Tls.Cert == "") != (c.Web.Tls.Key == "") {
 		return fmt.Errorf("web.tls: cert and key must both be set or both be empty")
 	}
 	if c.SMTP.Auth.Enabled {
-		if c.SMTP.Auth.Username == "" || c.SMTP.Auth.Password == "" {
-			return fmt.Errorf("smtp.auth: username and password are both required when auth.enabled is true")
+		if (c.SMTP.Auth.Username == "") != (c.SMTP.Auth.Password == "") {
+			return fmt.Errorf("smtp.auth: username and password must both be set or both be empty")
 		}
+		// Whether at least one credential source is configured (username/
+		// password, auth.file, accept_any, or MAELSINK_SMTP_AUTH) is
+		// checked in cmd/serve.go's runServe instead of here: the env var
+		// is parsed outside Config and isn't visible to Validate.
 	}
 	switch c.Shell.Color {
 	case "auto", "always", "never":

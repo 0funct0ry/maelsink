@@ -211,3 +211,69 @@ func TestServe_WebTLS(t *testing.T) {
 		}
 	}
 }
+
+// TestServe_SMTPAuthEnabledRequiresACredentialSource verifies M8.10's
+// fail-fast check: --smtp-auth-enabled with none of username/password,
+// --smtp-auth-file, --smtp-auth-accept-any, or MAELSINK_SMTP_AUTH configured
+// is rejected at startup rather than starting an AUTH mechanism nothing can
+// ever satisfy.
+func TestServe_SMTPAuthEnabledRequiresACredentialSource(t *testing.T) {
+	resetFlags(rootCmd)
+	t.Cleanup(func() { resetFlags(rootCmd) })
+
+	dbPath := filepath.Join(t.TempDir(), "maelsink.db")
+
+	rootCmd.SetArgs([]string{
+		"serve",
+		"--headless",
+		"--smtp-host", "127.0.0.1",
+		"--smtp-port", strconv.Itoa(freePort(t)),
+		"--api-host", "127.0.0.1",
+		"--api-port", strconv.Itoa(freePort(t)),
+		"--smtp-auth-enabled",
+		"--db", dbPath,
+	})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+
+	if err := rootCmd.Execute(); err == nil {
+		t.Error("Execute() with smtp-auth-enabled and no credential source = nil, want error")
+	}
+}
+
+// MAELSINK_SMTP_AUTH alone (with no username/password/file/accept_any) is a
+// valid credential source and must not be rejected by the same check.
+func TestServe_SMTPAuthEnabledAcceptsEnvOnlyCredentials(t *testing.T) {
+	resetFlags(rootCmd)
+	t.Cleanup(func() { resetFlags(rootCmd) })
+
+	t.Setenv("MAELSINK_SMTP_AUTH", "envuser:envpass")
+
+	smtpPort := freePort(t)
+	apiPort := freePort(t)
+	dbPath := filepath.Join(t.TempDir(), "maelsink.db")
+
+	rootCmd.SetArgs([]string{
+		"serve",
+		"--headless",
+		"--smtp-host", "127.0.0.1",
+		"--smtp-port", strconv.Itoa(smtpPort),
+		"--api-host", "127.0.0.1",
+		"--api-port", strconv.Itoa(apiPort),
+		"--smtp-auth-enabled",
+		"--db", dbPath,
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- rootCmd.Execute() }()
+	t.Cleanup(func() {
+		_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("serve did not shut down in time")
+		}
+		rootCmd.SetArgs(nil)
+	})
+
+	waitForListen(t, fmt.Sprintf("127.0.0.1:%d", apiPort), 3*time.Second)
+}

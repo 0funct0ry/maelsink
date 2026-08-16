@@ -223,7 +223,6 @@ func TestSession_FinalizeStatusAborted(t *testing.T) {
 // "rejected".
 func TestSession_FinalizeStatusRejected(t *testing.T) {
 	cfg := testConfig()
-	cfg.StartTLS = true
 	cfg.TLSCert = "/nonexistent/cert.pem"
 	cfg.TLSKey = "/nonexistent/key.pem"
 

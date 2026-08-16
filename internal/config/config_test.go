@@ -128,17 +128,61 @@ func TestValidate_SMTPMaxMessageSize(t *testing.T) {
 	}
 }
 
-func TestValidate_SMTPStartTLSRequiresCertAndKey(t *testing.T) {
+func TestValidate_SMTPTLSCertAndKeyMustBothBeSet(t *testing.T) {
 	cfg := Defaults()
-	cfg.SMTP.StartTLS = true
+	cfg.SMTP.TLSCert = "cert.pem"
 	if err := cfg.Validate(); err == nil {
-		t.Error("Validate() with starttls enabled and no cert/key = nil, want error")
+		t.Error("Validate() with only tls_cert set = nil, want error")
+	}
+}
+
+// Setting both smtp.tls_cert and smtp.tls_key implicitly enables STARTTLS
+// with no separate toggle needed (M8.10, mirroring web.tls's convention).
+func TestValidate_SMTPTLSCertAndKeyEnableSTARTTLSImplicitly(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.TLSCert = "cert.pem"
+	cfg.SMTP.TLSKey = "key.pem"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() with tls_cert/tls_key set = %v, want nil", err)
+	}
+}
+
+func TestValidate_SMTPRequireStartTLSRequiresCertAndKey(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.RequireStartTLS = true
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with require_starttls and no cert/key = nil, want error")
 	}
 
 	cfg.SMTP.TLSCert = "cert.pem"
 	cfg.SMTP.TLSKey = "key.pem"
 	if err := cfg.Validate(); err != nil {
-		t.Errorf("Validate() with starttls enabled and cert/key set = %v, want nil", err)
+		t.Errorf("Validate() with require_starttls and cert/key set = %v, want nil", err)
+	}
+}
+
+func TestValidate_SMTPRequireTLSRequiresCertAndKey(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.RequireTLS = true
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with require_tls and no cert/key = nil, want error")
+	}
+
+	cfg.SMTP.TLSCert = "cert.pem"
+	cfg.SMTP.TLSKey = "key.pem"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() with require_tls and cert/key set = %v, want nil", err)
+	}
+}
+
+func TestValidate_SMTPRequireStartTLSAndRequireTLSMutuallyExclusive(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.TLSCert = "cert.pem"
+	cfg.SMTP.TLSKey = "key.pem"
+	cfg.SMTP.RequireStartTLS = true
+	cfg.SMTP.RequireTLS = true
+	if err := cfg.Validate(); err == nil {
+		t.Error("Validate() with both require_starttls and require_tls = nil, want error")
 	}
 }
 
@@ -165,17 +209,29 @@ func TestValidate_WebTLSRequiresBothCertAndKey(t *testing.T) {
 	}
 }
 
-func TestValidate_SMTPAuthRequiresUsernameAndPassword(t *testing.T) {
+func TestValidate_SMTPAuthUsernameAndPasswordMustBothBeSetOrBothEmpty(t *testing.T) {
 	cfg := Defaults()
 	cfg.SMTP.Auth.Enabled = true
+	cfg.SMTP.Auth.Username = "user"
 	if err := cfg.Validate(); err == nil {
-		t.Error("Validate() with auth enabled and no credentials = nil, want error")
+		t.Error("Validate() with only username set = nil, want error")
 	}
 
-	cfg.SMTP.Auth.Username = "user"
 	cfg.SMTP.Auth.Password = "pass"
 	if err := cfg.Validate(); err != nil {
-		t.Errorf("Validate() with auth enabled and credentials set = %v, want nil", err)
+		t.Errorf("Validate() with auth enabled and both username/password set = %v, want nil", err)
+	}
+}
+
+// Validate() alone permits smtp.auth.enabled with no credential source at
+// all (username/password, auth.file, accept_any) — cmd/serve.go's runServe
+// is where that's rejected (M8.10), since MAELSINK_SMTP_AUTH is a fourth
+// valid source that's parsed outside Config and isn't visible here.
+func TestValidate_SMTPAuthEnabledWithNoCredentialsIsNotRejectedHere(t *testing.T) {
+	cfg := Defaults()
+	cfg.SMTP.Auth.Enabled = true
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() with auth enabled and no credential fields set = %v, want nil (checked in runServe instead)", err)
 	}
 }
 

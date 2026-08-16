@@ -8,6 +8,7 @@ package smtp
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -30,13 +31,18 @@ type Config struct {
 
 	MaxMessageSize int64 // bytes
 
-	StartTLS bool
-	TLSCert  string
-	TLSKey   string
+	RequireStartTLS bool
+	RequireTLS      bool
+	TLSCert         string
+	TLSKey          string
 
-	AuthEnabled  bool
-	AuthUsername string
-	AuthPassword string
+	AuthEnabled          bool
+	AuthUsername         string
+	AuthPassword         string
+	AuthFile             string
+	AuthAllowInsecure    bool
+	AuthAcceptAny        bool
+	AuthExtraCredentials map[string]string
 }
 
 // Server accepts SMTP connections and stores parsed messages via the
@@ -47,6 +53,13 @@ type Server struct {
 	store  store.MessageStore
 	bus    *events.Bus
 	logger *slog.Logger
+
+	// tlsConfig is non-nil only when cfg.RequireTLS is set: ListenAndServe
+	// wraps every accepted connection in tls.Server(conn, tlsConfig)
+	// immediately (implicit TLS, like SMTPS on port 465) before handing it
+	// off to a session, so the certificate is loaded once at construction
+	// time rather than failing per-connection.
+	tlsConfig *tls.Config
 
 	listenerMu sync.RWMutex
 	listener   net.Listener
@@ -66,7 +79,15 @@ func New(cfg Config, st store.MessageStore, bus *events.Bus, logger *slog.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{cfg: cfg, store: st, bus: bus, logger: logger}, nil
+	srv := &Server{cfg: cfg, store: st, bus: bus, logger: logger}
+	if cfg.RequireTLS {
+		cert, err := tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+		if err != nil {
+			return nil, fmt.Errorf("smtp: loading tls cert/key: %w", err)
+		}
+		srv.tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
+	}
+	return srv, nil
 }
 
 // ListenAndServe binds the configured host:port and accepts connections
@@ -101,6 +122,16 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 				return nil
 			}
 			return fmt.Errorf("smtp: accept: %w", err)
+		}
+
+		if s.tlsConfig != nil {
+			tlsConn := tls.Server(conn, s.tlsConfig)
+			if err := tlsConn.Handshake(); err != nil {
+				s.logger.Warn("smtp: implicit tls handshake failed", "err", err)
+				_ = conn.Close()
+				continue
+			}
+			conn = tlsConn
 		}
 
 		s.track(conn)

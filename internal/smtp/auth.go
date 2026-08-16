@@ -4,6 +4,8 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"strings"
+
+	"github.com/0funct0ry/maelsink/internal/webauth"
 )
 
 // authMechanismFunc implements one SASL mechanism for AUTH. initial is the
@@ -28,6 +30,18 @@ func handleAUTH(sess *session, arg string) bool {
 	}
 	if sess.authed {
 		sess.reply(codeBadSequence, msgAuthAlreadyDone)
+		return false
+	}
+	if sess.srv.cfg.RequireStartTLS && !sess.tlsActive {
+		sess.reply(codeAuthRequired, msgMustStartTLS)
+		return false
+	}
+	// RFC 4954's closing MUST: plaintext AUTH mechanisms (PLAIN, LOGIN —
+	// the only two supported) are refused unless the session is already
+	// protected by STARTTLS, implicit TLS (RequireTLS), or the operator has
+	// explicitly opted into insecure local/CI auth.
+	if !sess.tlsActive && !sess.srv.cfg.RequireTLS && !sess.srv.cfg.AuthAllowInsecure {
+		sess.reply(codeEncryptionRequired, msgEncryptionRequired)
 		return false
 	}
 
@@ -130,10 +144,48 @@ func (sess *session) readAuthPrompt(prompt, initial string) (value string, ok bo
 	return string(decoded), true
 }
 
-// credentialsMatch compares against the single configured username/password
-// in constant time, avoiding a timing side channel on credential checks.
+// credentialsMatch resolves an AUTH PLAIN/LOGIN attempt against every
+// configured credential source, in this order, short-circuiting on first
+// match: (1) accept_any, a pure test/CI escape hatch; (2) the single
+// configured username/password pair; (3) MAELSINK_SMTP_AUTH's in-memory
+// map; (4) the smtp.auth.file htpasswd-style store. All comparisons stay
+// constant-time to avoid timing-based username enumeration.
 func credentialsMatch(sess *session, username, password string) bool {
-	userOK := subtle.ConstantTimeCompare([]byte(username), []byte(sess.srv.cfg.AuthUsername)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(sess.srv.cfg.AuthPassword)) == 1
-	return userOK && passOK
+	cfg := sess.srv.cfg
+
+	if cfg.AuthAcceptAny {
+		return true
+	}
+
+	userOK := subtle.ConstantTimeCompare([]byte(username), []byte(cfg.AuthUsername)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(cfg.AuthPassword)) == 1
+	if userOK && passOK {
+		return true
+	}
+
+	if extraMatch(cfg.AuthExtraCredentials, username, password) {
+		return true
+	}
+
+	if cfg.AuthFile != "" && webauth.Verify(cfg.AuthFile, username, password) {
+		return true
+	}
+
+	return false
+}
+
+// extraMatch checks username/password against MAELSINK_SMTP_AUTH's parsed
+// map in constant time: every entry is compared (not just a map lookup by
+// username first) so the number of configured users, and which usernames
+// exist, isn't leaked via response timing.
+func extraMatch(creds map[string]string, username, password string) bool {
+	matched := false
+	for u, p := range creds {
+		userOK := subtle.ConstantTimeCompare([]byte(username), []byte(u)) == 1
+		passOK := subtle.ConstantTimeCompare([]byte(password), []byte(p)) == 1
+		if userOK && passOK {
+			matched = true
+		}
+	}
+	return matched
 }
