@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
+	"github.com/0funct0ry/maelsink/internal/compose/job"
 )
 
 // Config configures the router returned by New. Left intentionally minimal
@@ -27,9 +28,11 @@ type Config struct{}
 // New builds compose's router: the /compose-api/v1/* target-proxy handlers
 // plus the embedded SPA, served at the root (no BasePath support yet).
 // target carries the SMTP credentials the Composer's stateless /send
-// handler dials with (SPEC.md §7.7.4.1) — separate from client, which only
-// talks to the target's REST API.
-func New(client *cliclient.Client, logger *slog.Logger, target TargetConfig, cfg Config) *gin.Engine {
+// handler (and the Jobs Panel's job runners, M13.3) dial with (SPEC.md
+// §7.7.4.1) — separate from client, which only talks to the target's REST
+// API. mgr is compose's job manager (SPEC.md §7.7.4.3): the one piece of
+// real server-side state compose owns, lost on process restart by design.
+func New(client *cliclient.Client, logger *slog.Logger, target TargetConfig, mgr *job.Manager, cfg Config) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(requestLoggingMiddleware(logger), gin.CustomRecovery(recoveryHandler(logger)))
@@ -47,6 +50,10 @@ func New(client *cliclient.Client, logger *slog.Logger, target TargetConfig, cfg
 	rg.GET("/version", versionHandler(client))
 	rg.GET("/export", exportHandler(client))
 	rg.GET("/messages/:id/attachments/:attachmentId", attachmentHandler(client))
+	rg.GET("/jobs", listJobsHandler(mgr))
+	rg.POST("/jobs/:kind", startJobHandler(mgr, target))
+	rg.GET("/jobs/:kind/stream", jobStreamHandler(mgr))
+	rg.POST("/jobs/:kind/cancel", cancelJobHandler(mgr))
 
 	assets, err := fs.Sub(distFS, "dist")
 	if err != nil {

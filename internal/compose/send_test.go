@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
+	"github.com/0funct0ry/maelsink/internal/compose/job"
 )
 
 // fakeSMTPServer accepts one SMTP transaction over a raw TCP listener,
@@ -102,7 +103,7 @@ func TestSendHandler(t *testing.T) {
 
 	t.Run("eml success", func(t *testing.T) {
 		smtpAddr, dataCh := fakeSMTPServer(t)
-		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, Config{})
+		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, job.NewManager(), Config{})
 
 		rec := postRequest(t, engine, "/compose-api/v1/send", renderRequest{
 			Format:   "eml",
@@ -124,7 +125,7 @@ func TestSendHandler(t *testing.T) {
 
 	t.Run("json success", func(t *testing.T) {
 		smtpAddr, dataCh := fakeSMTPServer(t)
-		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, Config{})
+		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, job.NewManager(), Config{})
 
 		rec := postRequest(t, engine, "/compose-api/v1/send", renderRequest{
 			Format:   "json",
@@ -146,7 +147,7 @@ func TestSendHandler(t *testing.T) {
 
 	t.Run("smtp error surfaces raw text", func(t *testing.T) {
 		smtpAddr := fakeSMTPServerReject(t)
-		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, Config{})
+		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, job.NewManager(), Config{})
 
 		rec := postRequest(t, engine, "/compose-api/v1/send", renderRequest{
 			Format:   "eml",
@@ -166,7 +167,7 @@ func TestSendHandler(t *testing.T) {
 
 	t.Run("json with a generated attachment", func(t *testing.T) {
 		smtpAddr, dataCh := fakeSMTPServer(t)
-		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, Config{})
+		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, job.NewManager(), Config{})
 
 		rec := postRequest(t, engine, "/compose-api/v1/send", renderRequest{
 			Format:   "json",
@@ -190,7 +191,7 @@ func TestSendHandler(t *testing.T) {
 
 	t.Run("eml with a generated attachment", func(t *testing.T) {
 		smtpAddr, dataCh := fakeSMTPServer(t)
-		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, Config{})
+		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, job.NewManager(), Config{})
 
 		rec := postRequest(t, engine, "/compose-api/v1/send", renderRequest{
 			Format:   "eml",
@@ -223,7 +224,7 @@ func TestSendHandler(t *testing.T) {
 
 	t.Run("eml with no attachments is sent byte-identical to the rendered template", func(t *testing.T) {
 		smtpAddr, dataCh := fakeSMTPServer(t)
-		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, Config{})
+		engine := New(client, testLogger(), TargetConfig{SMTPAddr: smtpAddr}, job.NewManager(), Config{})
 
 		rec := postRequest(t, engine, "/compose-api/v1/send", renderRequest{
 			Format:   "eml",
@@ -243,7 +244,7 @@ func TestSendHandler(t *testing.T) {
 	})
 
 	t.Run("render error short-circuits before dialing SMTP", func(t *testing.T) {
-		engine := New(client, testLogger(), TargetConfig{SMTPAddr: "127.0.0.1:1"}, Config{})
+		engine := New(client, testLogger(), TargetConfig{SMTPAddr: "127.0.0.1:1"}, job.NewManager(), Config{})
 
 		rec := postRequest(t, engine, "/compose-api/v1/send", renderRequest{
 			Format:   "eml",

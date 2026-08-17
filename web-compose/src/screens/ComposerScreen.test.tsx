@@ -96,6 +96,20 @@ describe('ComposerScreen', () => {
     await waitFor(() => expect(screen.getByText(/Sent to b@example.com/)).toBeInTheDocument())
   })
 
+  it('clears recent sends via the trash button', async () => {
+    vi.mocked(composeApi.sendTemplate).mockResolvedValue({ from: 'a@example.com', to: ['b@example.com'] })
+    render(<ComposerScreen />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText(/Sent to b@example.com/)).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Clear recent sends'))
+
+    expect(screen.queryByText(/Sent to b@example.com/)).not.toBeInTheDocument()
+    expect(screen.getByText('Nothing sent yet this session.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Clear recent sends')).not.toBeInTheDocument()
+  })
+
   it('adds an eml attachment and includes it in render/send calls, but not in json mode', async () => {
     vi.mocked(composeApi.sendTemplate).mockResolvedValue({ from: 'a@example.com', to: ['b@example.com'] })
     render(<ComposerScreen />)

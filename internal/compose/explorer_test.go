@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
+	"github.com/0funct0ry/maelsink/internal/compose/job"
 )
 
 func TestStatsHandler(t *testing.T) {
@@ -17,7 +18,7 @@ func TestStatsHandler(t *testing.T) {
 	defer target.Close()
 
 	client := newTestClient(t, target)
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/stats")
 	if rec.Code != http.StatusOK {
@@ -46,7 +47,7 @@ func TestVersionHandler(t *testing.T) {
 	defer target.Close()
 
 	client := newTestClient(t, target)
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/version")
 	if rec.Code != http.StatusOK {
@@ -80,7 +81,7 @@ func TestExportHandler(t *testing.T) {
 	defer target.Close()
 
 	client := newTestClient(t, target)
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/export?subject=hi")
 	if rec.Code != http.StatusOK {
@@ -116,7 +117,7 @@ func TestAttachmentHandler(t *testing.T) {
 	defer target.Close()
 
 	client := newTestClient(t, target)
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/messages/abc/attachments/att1")
 	if rec.Code != http.StatusOK {

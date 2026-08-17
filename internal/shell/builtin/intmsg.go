@@ -5,15 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
+	"github.com/0funct0ry/maelsink/internal/msgspec"
 	"github.com/0funct0ry/maelsink/internal/shell"
-	"github.com/0funct0ry/maelsink/internal/shell/tmpl"
 )
 
 // IntMsg implements the "intmsg" builtin (SPEC.md §7.6.3): sends
@@ -85,7 +83,7 @@ func (b IntMsg) Run(ctx context.Context, s *shell.Session, args []string) error 
 	}
 
 	jitterStr, _ := fs.GetString("jitter")
-	jitter, err := parseJitter(jitterStr, interval)
+	jitter, err := msgspec.ParseJitter(jitterStr, interval)
 	if err != nil {
 		return err
 	}
@@ -107,7 +105,7 @@ func (b IntMsg) Run(ctx context.Context, s *shell.Session, args []string) error 
 		addr:          addr,
 		auth:          auth,
 		tlsOpts:       tlsOpts,
-		sched:         &intervalScheduler{profile: profile, mean: interval, jitter: jitter, tmpl: s.Tmpl},
+		sched:         &msgspec.IntervalScheduler{Profile: profile, Mean: interval, Jitter: jitter, Tmpl: s.Tmpl},
 		profile:       profile,
 		burstSize:     mustGetInt(fs, "burst-size"),
 		burstInterval: mustGetDuration(fs, "burst-interval"),
@@ -198,7 +196,7 @@ type intmsgRunConfig struct {
 	addr          string
 	auth          *cliclient.Auth
 	tlsOpts       cliclient.TLSOptions
-	sched         *intervalScheduler
+	sched         *msgspec.IntervalScheduler
 	profile       string
 	burstSize     int
 	burstInterval time.Duration
@@ -325,7 +323,7 @@ runLoop:
 			break
 		}
 
-		wait := cfg.sched.next()
+		wait := cfg.sched.Next()
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
@@ -379,58 +377,4 @@ func mustGetDuration(fs *pflag.FlagSet, name string) time.Duration {
 func mustGetBool(fs *pflag.FlagSet, name string) bool {
 	v, _ := fs.GetBool(name)
 	return v
-}
-
-// intervalScheduler draws the next inter-message gap per SPEC.md §7.6.3's
-// three profiles, from the session's seeded tmpl.Engine so --seed
-// reproduces both message content and timing.
-type intervalScheduler struct {
-	profile string
-	mean    time.Duration
-	jitter  time.Duration
-	tmpl    *tmpl.Engine
-}
-
-func (sc *intervalScheduler) next() time.Duration {
-	switch sc.profile {
-	case "poisson":
-		d := time.Duration(sc.tmpl.ExpFloat64() * float64(sc.mean))
-		if d < 0 {
-			d = 0
-		}
-		return d
-	default: // steady, and bursty's quiet-period gap
-		if sc.jitter <= 0 {
-			return sc.mean
-		}
-		delta := time.Duration(sc.tmpl.Float64()*2*float64(sc.jitter)) - sc.jitter
-		d := sc.mean + delta
-		if d < 0 {
-			d = 0
-		}
-		return d
-	}
-}
-
-// parseJitter accepts either a bare duration string (e.g. "200ms") or a
-// percentage string (e.g. "20%"), the latter resolved against mean per
-// SPEC.md §7.6.3.
-func parseJitter(s string, mean time.Duration) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" || s == "0" {
-		return 0, nil
-	}
-	if strings.HasSuffix(s, "%") {
-		pctStr := strings.TrimSuffix(s, "%")
-		pct, err := strconv.ParseFloat(pctStr, 64)
-		if err != nil {
-			return 0, fmt.Errorf("intmsg: invalid --jitter percentage %q: %w", s, err)
-		}
-		return time.Duration(float64(mean) * pct / 100), nil
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 0, fmt.Errorf("intmsg: invalid --jitter %q: %w", s, err)
-	}
-	return d, nil
 }

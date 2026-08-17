@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/0funct0ry/maelsink/internal/compose"
+	"github.com/0funct0ry/maelsink/internal/compose/job"
 	"github.com/0funct0ry/maelsink/internal/config"
 	"github.com/0funct0ry/maelsink/internal/logging"
 )
@@ -147,7 +148,8 @@ func runCompose(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("compose: building target client: %w", err)
 	}
 
-	router := compose.New(client, logger, target, compose.Config{})
+	jobManager := job.NewManager()
+	router := compose.New(client, logger, target, jobManager, compose.Config{})
 
 	srv := &http.Server{Addr: composeCfg.Listen, Handler: router}
 

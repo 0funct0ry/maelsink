@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
+	"github.com/0funct0ry/maelsink/internal/compose/job"
 )
 
 func postRequest(t *testing.T, engine http.Handler, path string, body any) *httptest.ResponseRecorder {
@@ -26,7 +27,7 @@ func postRequest(t *testing.T, engine http.Handler, path string, body any) *http
 
 func TestRenderHandler(t *testing.T) {
 	client := newTestClient(t, httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	t.Run("eml with var substitution", func(t *testing.T) {
 		rec := postRequest(t, engine, "/compose-api/v1/render", renderRequest{
@@ -138,7 +139,7 @@ func TestRenderHandler(t *testing.T) {
 
 func TestFunctionsHandler(t *testing.T) {
 	client := newTestClient(t, httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/functions")
 	if rec.Code != http.StatusOK {

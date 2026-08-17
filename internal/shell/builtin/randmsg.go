@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
+	"github.com/0funct0ry/maelsink/internal/msgspec"
 	"github.com/0funct0ry/maelsink/internal/shell"
 )
 
@@ -29,143 +30,37 @@ func addRandContentFlags(fs *pflag.FlagSet) {
 }
 
 // buildRandomSpec builds one cliclient.MessageSpec per SPEC.md §7.6.2's
-// default table: every field defaults to a template-function call when its
-// flag is omitted, so repeated calls (e.g. across a bulk send) each produce
-// distinct fake content from the session's seeded Engine.
+// default table from fs's shared content flags (addRandContentFlags), via
+// internal/msgspec.BuildRandomSpec — the Session-independent implementation
+// shared with compose's job kinds (M13.3).
 func buildRandomSpec(fs *pflag.FlagSet, s *shell.Session, data map[string]any) (cliclient.MessageSpec, error) {
-	render := func(expr string) (string, error) { return s.Tmpl.Render(expr, data) }
-
-	var spec cliclient.MessageSpec
-	var err error
-
 	to, _ := fs.GetString("to")
-	if to == "" {
-		to = "{{ fEmail }}"
-	}
-	if spec.To, err = renderAll(render, []string{to}); err != nil {
-		return spec, err
-	}
-
 	from, _ := fs.GetString("from")
-	if from == "" {
-		from = "{{ fEmail }}"
-	}
-	if spec.From, err = render(from); err != nil {
-		return spec, err
-	}
-
 	cc, _ := fs.GetStringArray("cc")
-	if spec.Cc, err = renderAll(render, cc); err != nil {
-		return spec, err
-	}
 	bcc, _ := fs.GetStringArray("bcc")
-	if spec.Bcc, err = renderAll(render, bcc); err != nil {
-		return spec, err
-	}
-
-	scenarioName, _ := fs.GetString("scenario")
-	var scenario exampleTemplate
-	haveScenario := false
-	if scenarioName != "" {
-		scenario, haveScenario = findScenario(scenarioName)
-		if !haveScenario {
-			return spec, fmt.Errorf("randmsg: unknown --scenario %q (see: example --list)", scenarioName)
-		}
-	}
-
 	subject, _ := fs.GetString("subject")
-	if subject == "" {
-		if haveScenario {
-			subject = scenario.Subject
-		} else {
-			subject = "{{ fSubject }}"
-		}
-	}
-	if spec.Subject, err = render(subject); err != nil {
-		return spec, err
-	}
+	body, _ := fs.GetString("body")
+	attachments, _ := fs.GetInt("attachments")
+	attachmentSize, _ := fs.GetString("attachment-size")
+	tags, _ := fs.GetStringArray("tags")
+	scenario, _ := fs.GetString("scenario")
 
-	if err := renderRandomBody(fs, s, data, haveScenario, scenario, &spec); err != nil {
-		return spec, err
+	spec, err := msgspec.BuildRandomSpec(s.Tmpl, data, msgspec.ContentParams{
+		To:             to,
+		From:           from,
+		Cc:             cc,
+		Bcc:            bcc,
+		Subject:        subject,
+		Body:           body,
+		Attachments:    attachments,
+		AttachmentSize: attachmentSize,
+		Tags:           tags,
+		Scenario:       scenario,
+	})
+	if err != nil {
+		return spec, fmt.Errorf("randmsg: %w", err)
 	}
-
-	if n, _ := fs.GetInt("attachments"); n > 0 {
-		size, _ := fs.GetString("attachment-size")
-		specs, err := randomAttachments(s, data, n, size)
-		if err != nil {
-			return spec, err
-		}
-		spec.Attachments = specs
-	}
-
-	spec.Tags, _ = fs.GetStringArray("tags")
-
 	return spec, nil
-}
-
-// renderRandomBody fills spec.Text/HTML per --body (text|html|both|random),
-// preferring the scenario's own Text/HTML when --scenario is set (falling
-// back to fake-generated bodies for whichever of Text/HTML the scenario
-// left empty, matching --body's mode for that field).
-func renderRandomBody(fs *pflag.FlagSet, s *shell.Session, data map[string]any, haveScenario bool, scenario exampleTemplate, spec *cliclient.MessageSpec) error {
-	render := func(expr string) (string, error) { return s.Tmpl.Render(expr, data) }
-
-	mode, _ := fs.GetString("body")
-	switch mode {
-	case "text", "html", "both", "random":
-	default:
-		return fmt.Errorf("randmsg: --body must be text, html, both, or random, got %q", mode)
-	}
-	if mode == "random" {
-		switch s.Tmpl.Intn(3) {
-		case 0:
-			mode = "text"
-		case 1:
-			mode = "html"
-		default:
-			mode = "both"
-		}
-	}
-
-	wantText := mode == "text" || mode == "both"
-	wantHTML := mode == "html" || mode == "both"
-
-	var err error
-	if wantText {
-		src := "{{ fTextBody }}"
-		if haveScenario && scenario.Text != "" {
-			src = scenario.Text
-		}
-		if spec.Text, err = render(src); err != nil {
-			return err
-		}
-	}
-	if wantHTML {
-		src := "{{ fHTMLBody }}"
-		if haveScenario && scenario.HTML != "" {
-			src = scenario.HTML
-		}
-		if spec.HTML, err = render(src); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// randomAttachments generates n files of the given size via the template
-// engine's fBinary function (through Render, since Engine's
-// file-generating methods are private to the tmpl package) and returns them
-// as AttachmentSpecs.
-func randomAttachments(s *shell.Session, data map[string]any, n int, size string) ([]cliclient.AttachmentSpec, error) {
-	specs := make([]cliclient.AttachmentSpec, 0, n)
-	for i := 0; i < n; i++ {
-		path, err := s.Tmpl.Render(fmt.Sprintf("{{ fBinary %q }}", size), data)
-		if err != nil {
-			return nil, fmt.Errorf("randmsg: generating attachment: %w", err)
-		}
-		specs = append(specs, cliclient.AttachmentSpec{Path: path})
-	}
-	return specs, nil
 }
 
 // runBulkRandom re-renders and sends count messages built by buildRandomSpec

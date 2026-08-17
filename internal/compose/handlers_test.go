@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/0funct0ry/maelsink/internal/cliclient"
+	"github.com/0funct0ry/maelsink/internal/compose/job"
 )
 
 func testLogger() *slog.Logger {
@@ -67,7 +68,7 @@ func TestListMessagesHandler(t *testing.T) {
 			defer target.Close()
 
 			client := newTestClient(t, target)
-			engine := New(client, testLogger(), TargetConfig{}, Config{})
+			engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 			rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/messages")
 			if rec.Code != tc.wantStatus {
@@ -89,7 +90,7 @@ func TestListMessagesHandler(t *testing.T) {
 		target.Close() // closed before use: connection refused
 
 		client := newTestClient(t, target)
-		engine := New(client, testLogger(), TargetConfig{}, Config{})
+		engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 		rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/messages")
 		if rec.Code != http.StatusBadGateway {
@@ -117,7 +118,7 @@ func TestGetMessageHandler(t *testing.T) {
 	defer target.Close()
 
 	client := newTestClient(t, target)
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/messages/abc")
 	if rec.Code != http.StatusOK {
@@ -142,7 +143,7 @@ func TestDeleteMessageHandler(t *testing.T) {
 	defer target.Close()
 
 	client := newTestClient(t, target)
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodDelete, "/compose-api/v1/messages/abc")
 	if rec.Code != http.StatusNoContent {
@@ -162,7 +163,7 @@ func TestClearMessagesHandler(t *testing.T) {
 	defer target.Close()
 
 	client := newTestClient(t, target)
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	rec := doRequest(t, engine, http.MethodDelete, "/compose-api/v1/messages")
 	if rec.Code != http.StatusNoContent {
@@ -185,7 +186,7 @@ func TestHealthHandler(t *testing.T) {
 		defer target.Close()
 
 		client := newTestClient(t, target)
-		engine := New(client, testLogger(), TargetConfig{}, Config{})
+		engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 		rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/health")
 		if rec.Code != http.StatusOK {
@@ -205,7 +206,7 @@ func TestHealthHandler(t *testing.T) {
 		defer target.Close()
 
 		client := newTestClient(t, target)
-		engine := New(client, testLogger(), TargetConfig{}, Config{})
+		engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 		rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/health")
 		if rec.Code != http.StatusOK {
@@ -223,7 +224,7 @@ func TestHealthHandler(t *testing.T) {
 		target.Close()
 
 		client := newTestClient(t, target)
-		engine := New(client, testLogger(), TargetConfig{}, Config{})
+		engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 		rec := doRequest(t, engine, http.MethodGet, "/compose-api/v1/health")
 		if rec.Code != http.StatusOK {
@@ -245,7 +246,7 @@ func TestStartsEvenWhenTargetDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTargetClient: %v", err)
 	}
-	engine := New(client, testLogger(), TargetConfig{}, Config{})
+	engine := New(client, testLogger(), TargetConfig{}, job.NewManager(), Config{})
 
 	srv := httptest.NewServer(engine)
 	defer srv.Close()

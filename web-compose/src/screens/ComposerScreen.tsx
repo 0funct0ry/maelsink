@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { json as jsonLang } from '@codemirror/lang-json'
-import { Paperclip } from 'lucide-react'
+import { Paperclip, Trash2 } from 'lucide-react'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import { useVarsStore } from '../stores/useVarsStore'
@@ -440,7 +440,20 @@ export default function ComposerScreen() {
             </div>
           )}
 
-          <h2 className="mb-2 mt-2 text-xs font-semibold uppercase text-text-tertiary">Recent sends</h2>
+          <div className="mb-2 mt-2 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase text-text-tertiary">Recent sends</h2>
+            {recentSends.length > 0 && (
+              <button
+                type="button"
+                aria-label="Clear recent sends"
+                title="Clear recent sends"
+                onClick={() => setRecentSends([])}
+                className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-2 hover:text-danger"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
           {recentSends.length === 0 ? (
             <p className="text-xs text-text-secondary">Nothing sent yet this session.</p>
           ) : (

@@ -8,7 +8,7 @@ import MessageDetailView from './screens/MessageDetailView'
 import VarsScreen from './screens/VarsScreen'
 import ComposerScreen from './screens/ComposerScreen'
 import ApiExplorerScreen from './screens/ApiExplorerScreen'
-import JobsPanelPlaceholder from './screens/JobsPanelPlaceholder'
+import JobsPanelScreen from './screens/JobsPanelScreen'
 
 export default function App() {
   const startPolling = useConnectionStore((s) => s.startPolling)
@@ -31,7 +31,7 @@ export default function App() {
             <Route path="/vars" element={<VarsScreen />} />
             <Route path="/composer" element={<ComposerScreen />} />
             <Route path="/api-explorer" element={<ApiExplorerScreen />} />
-            <Route path="/jobs" element={<JobsPanelPlaceholder />} />
+            <Route path="/jobs" element={<JobsPanelScreen />} />
           </Routes>
         </main>
       </div>
