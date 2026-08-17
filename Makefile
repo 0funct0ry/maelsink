@@ -38,7 +38,7 @@ GREEN=\033[0;32m
 CYAN=\033[0;36m
 NC=\033[0m # No Color
 
-.PHONY: all help build build-go build-web build-web-compose build-docker ensure-web-embed ensure-web-compose-embed fmt vet test test-leak check lint clean run dev-go dev-web dev-web-compose site-dev site-build vhs
+.PHONY: all help build build-go build-web build-web-compose build-docker ensure-web-embed ensure-web-compose-embed fmt vet test test-leak check lint ci clean run dev-go dev-web dev-web-compose site-dev site-build vhs
 
 all: build ## Build everything (frontend and backend)
 
@@ -136,6 +136,23 @@ lint: ## Run golangci-lint
 	@echo "$(BLUE)Running linter...$(NC)"
 	@command -v golangci-lint > /dev/null || (echo "golangci-lint not found" && exit 1)
 	golangci-lint run
+
+ci: ## Run the exact steps .github/workflows/ci.yml runs, in order, so you can verify locally before pushing
+	@echo "$(BLUE)Building web assets...$(NC)"
+	cd $(WEB_DIR) && npm ci && npm run build
+	@echo "$(BLUE)Building web-compose assets...$(NC)"
+	cd $(WEB_COMPOSE_DIR) && npm ci && npm run build
+	@echo "$(BLUE)Running web UI tests (with coverage)...$(NC)"
+	cd $(WEB_DIR) && npm run test:coverage
+	@echo "$(BLUE)Running web-compose UI tests (with coverage)...$(NC)"
+	cd $(WEB_COMPOSE_DIR) && npm run test:coverage
+	@echo "$(BLUE)Building Go...$(NC)"
+	go build ./...
+	@echo "$(BLUE)Running vet...$(NC)"
+	go vet ./...
+	@echo "$(BLUE)Running tests...$(NC)"
+	go test ./...
+	@echo "$(GREEN)All CI checks passed.$(NC)"
 
 # --- Documentation & Marketing Site ---
 

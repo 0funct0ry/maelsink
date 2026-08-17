@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            web-compose/package-lock.json
 
       - name: Build web assets
         working-directory: web
@@ -27,8 +29,18 @@ jobs:
           npm ci
           npm run build
 
+      - name: Build web-compose assets
+        working-directory: web-compose
+        run: |
+          npm ci
+          npm run build
+
       - name: Web UI tests (with coverage)
         working-directory: web
+        run: npm run test:coverage
+
+      - name: Web Compose UI tests (with coverage)
+        working-directory: web-compose
         run: npm run test:coverage
 
       - name: Build
