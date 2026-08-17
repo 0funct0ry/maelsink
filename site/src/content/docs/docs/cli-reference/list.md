@@ -5,7 +5,7 @@ description: "List messages via the REST API."
 
 List messages via the REST API.
 
-This page is generated directly from `maelsink list --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink list --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Thin REST API client: lists stored messages in table or JSON format.

@@ -1,10 +1,10 @@
 ---
 title: Getting Started
-description: Install maelsink, run it, send a test email, and see it appear — in under two minutes.
+description: A guide to installing maelsink, sending a test email, and viewing it in the inbox.
 ---
 
-This page is the fastest path from "never used maelsink" to "watching a real email land
-in the inbox." Every command below has been run against a real build.
+This page describes the fastest path to a running maelsink instance and a captured test
+email. Every command below has been run against a real build.
 
 ![Running `maelsink serve`, sending a test message, and listing it](/maelsink/recordings/quickstart.gif)
 

@@ -81,7 +81,7 @@ function main() {
     const body =
       frontmatter(cmd.title, cmd.summary) +
       `${cmd.summary}\n\n` +
-      `This page is generated directly from \`${invocation} --help\` — the flag list below is always in sync with the binary; it is never hand-maintained.\n\n` +
+      `This page is generated directly from \`${invocation} --help\`. The flag list below is always in sync with the binary and is never hand-maintained.\n\n` +
       "```\n" +
       help +
       "\n```\n";

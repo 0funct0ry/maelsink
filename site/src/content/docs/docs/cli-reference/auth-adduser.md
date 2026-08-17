@@ -5,7 +5,7 @@ description: "Add (or update) a Web UI Basic Auth user in an htpasswd-style cred
 
 Add (or update) a Web UI Basic Auth user in an htpasswd-style credential file.
 
-This page is generated directly from `maelsink auth adduser --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink auth adduser --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Adds a new user to the --web-auth-file htpasswd-style credential file, or

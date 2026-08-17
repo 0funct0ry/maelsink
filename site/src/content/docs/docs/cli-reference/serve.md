@@ -5,7 +5,7 @@ description: "Start the SMTP, Web UI, and REST API servers. Running `maelsink` w
 
 Start the SMTP, Web UI, and REST API servers. Running `maelsink` with no subcommand is equivalent to `maelsink serve`.
 
-This page is generated directly from `maelsink serve --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink serve --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Starts maelsink's SMTP server, embedded Web UI, and REST API concurrently,

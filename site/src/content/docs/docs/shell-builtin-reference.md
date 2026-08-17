@@ -3,7 +3,7 @@ title: "Shell Builtin Reference"
 description: "Every builtin command in the maelsink interactive shell, generated from the builtin registry."
 ---
 
-This page is generated from `internal/shell/builtin`'s registry (`go run ./tools/docgen`) — the flag list for each builtin is always in sync with the shell binary; it is never hand-maintained.
+This page is generated from `internal/shell/builtin`'s registry (`go run ./tools/docgen`). The flag list for each builtin is always in sync with the shell binary and is never hand-maintained.
 
 ## abbr
 

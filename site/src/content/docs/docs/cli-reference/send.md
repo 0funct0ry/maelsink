@@ -5,7 +5,7 @@ description: "Compose and send a test message to a maelsink instance over SMTP."
 
 Compose and send a test message to a maelsink instance over SMTP.
 
-This page is generated directly from `maelsink send --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink send --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 A sendmail-equivalent SMTP client for scripting/CI: send via flags, a raw RFC 5322 message on stdin (--raw), or a JSON message spec (--file).

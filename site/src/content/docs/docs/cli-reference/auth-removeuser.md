@@ -5,7 +5,7 @@ description: "Remove a Web UI Basic Auth user from an htpasswd-style credential 
 
 Remove a Web UI Basic Auth user from an htpasswd-style credential file.
 
-This page is generated directly from `maelsink auth removeuser --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink auth removeuser --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Removes a user's entry from the --web-auth-file htpasswd-style credential

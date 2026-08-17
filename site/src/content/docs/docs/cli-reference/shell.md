@@ -5,7 +5,7 @@ description: "Start an interactive maelsink shell — a REPL client of the REST 
 
 Start an interactive maelsink shell — a REPL client of the REST API and SMTP port.
 
-This page is generated directly from `maelsink shell --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink shell --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Starts maelsink's interactive shell: a readline-style REPL with alias/

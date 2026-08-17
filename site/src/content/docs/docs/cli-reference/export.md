@@ -5,7 +5,7 @@ description: "Download a message as a .eml file via the REST API."
 
 Download a message as a .eml file via the REST API.
 
-This page is generated directly from `maelsink export --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink export --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Thin REST API client: writes a message's raw source to -o <path>, or ./<id>.eml if omitted.

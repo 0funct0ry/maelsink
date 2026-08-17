@@ -1,12 +1,12 @@
 ---
 title: Testing maelsink
-description: Verify your maelsink install or build actually works.
+description: Verify that a maelsink install or build works correctly.
 ---
 
-Once you've installed or built maelsink, use these checks to confirm it's working before
-you build anything on top of it. (This page is about verifying *your* install — see
+After installing or building maelsink, these checks confirm that it is working correctly.
+This page covers verifying a local install; see
 [Integration testing](/maelsink/docs/integration-testing/) for using maelsink as a sink inside
-someone else's CI pipeline.)
+a CI pipeline.
 
 ## Check the version
 

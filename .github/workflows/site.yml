@@ -36,9 +36,6 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
-      - name: Set up VHS
-        uses: charmbracelet/vhs-action@v2
-
       - name: Build maelsink binary (for doc generators)
         run: make build-go
 
@@ -50,9 +47,9 @@ jobs:
         working-directory: site
         run: npm run gen-docs
 
-      - name: Render VHS terminal recordings
-        working-directory: site/vhs
-        run: vhs *.tape
+      # VHS rendering is disabled for now (see site/vhs/*.tape) — the GIFs in
+      # site/public/recordings/ are committed and used as-is. Regenerate them
+      # locally with `make vhs` and commit the results when they need updating.
 
       - name: Build site
         working-directory: site

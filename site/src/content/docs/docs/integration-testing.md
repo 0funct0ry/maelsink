@@ -3,9 +3,9 @@ title: Integration Testing
 description: Running maelsink as an ephemeral SMTP sink in CI, with health-check readiness and REST assertions.
 ---
 
-maelsink is well suited to running as a short-lived SMTP sink inside CI: start it, run
-your app's test suite against it, assert on what got captured via the REST API, then
-tear it down.
+maelsink is well suited to running as a short-lived SMTP sink inside CI. A typical run
+starts the process, runs the test suite against it, asserts on the captured messages
+through the REST API, and then tears it down.
 
 ![Headless health check, sending a signup-confirmation message, and asserting on it via the REST API](/maelsink/recordings/ci-smoke-test.gif)
 
@@ -48,7 +48,7 @@ on what arrived:
 curl -s "http://127.0.0.1:9091/api/v1/messages?subject=Welcome&to=newuser@example.com"
 ```
 
-See [Filters and Search](/maelsink/docs/usage/filters-and-search/) for the full query parameter
+See [Using CLI](/maelsink/docs/usage/using-cli/) for the full query parameter
 reference, and the [REST API Reference](/maelsink/docs/rest-api-reference/) for response shapes.
 
 ## Worked example: a CI job

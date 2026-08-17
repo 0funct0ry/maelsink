@@ -180,7 +180,7 @@ site-build: ## Build the static documentation site (Astro/Starlight)
 vhs: ## Regenerate terminal GIFs using VHS
 	@echo "$(BLUE)Generating VHS terminal recordings...$(NC)"
 	@if [ -d "$(SITE_DIR)/vhs" ]; then \
-		cd $(SITE_DIR)/vhs && vhs *.tape; \
+		cd $(SITE_DIR)/vhs && for f in *.tape; do vhs "$$f"; done; \
 	else \
 		echo "Error: $(SITE_DIR)/vhs directory not found."; exit 1; \
 	fi

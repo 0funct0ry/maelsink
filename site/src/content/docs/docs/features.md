@@ -3,8 +3,8 @@ title: Features
 description: A map of everything maelsink can do, with links into the guide for each capability.
 ---
 
-maelsink combines an SMTP sink, a web UI, and a REST API in one binary. This page is a
-map — every bullet links to the guide that covers it in depth.
+maelsink combines an SMTP sink, a web UI, and a REST API in one binary. This page lists
+every capability, with each bullet linking to the guide that covers it in depth.
 
 ## Core sink
 
@@ -25,7 +25,8 @@ map — every bullet links to the guide that covers it in depth.
   [REST API Reference](/maelsink/docs/rest-api-reference/).
 - **Filters and search** — filter messages by sender, recipient, subject, date range, and
   full-text query. See [Usage → Filters and Search](/maelsink/docs/usage/filters-and-search/) and
-  [Usage → Advanced Search Patterns](/maelsink/docs/usage/advanced-search-patterns/).
+  [Usage → Advanced Search Patterns](/maelsink/docs/usage/advanced-search-patterns/) for the Web UI,
+  or [Usage → Using CLI](/maelsink/docs/usage/using-cli/) for the CLI and REST API.
 - **Tagging** — organize captured messages with tags. See
   [Usage → Tagging Messages](/maelsink/docs/usage/tagging-messages/).
 - **Deleting messages** — remove one message or clear the whole inbox. See

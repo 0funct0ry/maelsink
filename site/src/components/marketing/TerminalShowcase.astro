@@ -1,8 +1,8 @@
 ---
 const checklist = [
-  'No config beyond an SMTP host/port — works with any mail library',
-  'Sensible defaults, fully overridable via flags, env vars, or a config file',
-  'Ship a maelsink send smoke test straight into CI',
+  'It requires no configuration beyond an SMTP host and port, and works with any mail library.',
+  'Defaults are sensible and can be overridden through flags, environment variables, or a config file.',
+  'A maelsink send smoke test can be added directly to a CI pipeline.',
 ];
 ---
 
@@ -11,13 +11,13 @@ const checklist = [
     <div>
       <div class="mb-3 text-[12.5px] font-bold uppercase tracking-wider" style="color: var(--ms-accent);">How it works</div>
       <h2 class="mb-3.5 text-2xl font-bold tracking-tight sm:text-[30px]" style="color: var(--ms-text); letter-spacing: -0.02em;">
-        Point, send, inspect. That's it.
+        Point, send, and inspect
       </h2>
       <p class="mb-5 text-[15px] leading-relaxed" style="color: var(--ms-text-soft);">
-        Configure your app's SMTP settings to localhost:1025 (or wherever you run
-        maelsink), and every message it sends shows up captured — headers, MIME
-        parts, attachments, raw source — ready to inspect in the UI or pull via
-        the API.
+        An application's SMTP settings can be pointed at localhost:1025, or wherever
+        maelsink is running. Every message it sends is captured in full, including
+        headers, MIME parts, attachments, and raw source, and can be inspected in
+        the UI or retrieved through the API.
       </p>
       <div class="flex flex-col gap-2.5">
         {checklist.map((item) => (

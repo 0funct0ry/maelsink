@@ -5,7 +5,7 @@ description: "Start the maelsink compose browser-based playground."
 
 Start the maelsink compose browser-based playground.
 
-This page is generated directly from `maelsink compose --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink compose --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Starts maelsink compose: a small local web server serving a standalone

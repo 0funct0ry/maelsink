@@ -2,32 +2,32 @@
 const features = [
   {
     title: 'Real SMTP, zero delivery',
-    desc: 'Speaks HELO/EHLO, STARTTLS, and AUTH — accepts mail for any recipient and never relays a single message out.',
+    desc: 'It supports HELO/EHLO, STARTTLS, and AUTH, and accepts mail for any recipient without relaying a single message to a real server.',
     icon: 'M3 6.5L12 13L21 6.5M3 6.5C3 5.4 3.9 4.5 5 4.5H19C20.1 4.5 21 5.4 21 6.5V15C21 17.5 18.5 20 15 20H9C5.5 20 3 17.5 3 15V6.5Z',
   },
   {
     title: 'Realtime by default',
-    desc: "Mail lands in the UI over WebSockets the instant it's captured. No polling, no manual refresh, no delay.",
+    desc: 'Mail appears in the UI over WebSockets as soon as it is captured, with no polling and no manual refresh required.',
     icon: 'M13 2L3 14h7l-1 8 10-12h-7l1-8z',
   },
   {
     title: 'Single embedded binary',
-    desc: 'The web UI ships baked into the Go binary. No separate frontend deploy, no node_modules in production.',
+    desc: 'The web UI is embedded directly into the Go binary, so no separate frontend deployment or Node.js dependency is needed in production.',
     icon: 'M4 17V7a2 2 0 012-2h9l5 5v7a2 2 0 01-2 2H6a2 2 0 01-2-2z',
   },
   {
     title: 'Full REST API',
-    desc: 'Every message, header, and attachment is reachable over a stable, documented API — perfect for assertions in your test suite.',
+    desc: 'Every message, header, and attachment is reachable through a stable, documented API suitable for assertions in a test suite.',
     icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 21H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4',
   },
   {
     title: 'CI-friendly by design',
-    desc: 'Run headless, script against it with maelsink send, and tear it down clean every run.',
+    desc: 'It runs headless, can be scripted against with maelsink send, and tears down cleanly on every run.',
     icon: 'M8 9l-5 5 5 5M16 5l5 5-5 5',
   },
   {
     title: 'Reverse-proxy ready',
-    desc: 'Deploy behind HAProxy or nginx under a subpath for the whole team, with realtime WebSocket support included.',
+    desc: 'It can be deployed behind HAProxy or nginx under a subpath for a whole team, with realtime WebSocket support included.',
     icon: 'M12 3a9 9 0 100 18 9 9 0 000-18z',
   },
 ];
@@ -38,11 +38,12 @@ const features = [
     <div class="mx-auto mb-12 max-w-xl text-center">
       <div class="mb-3 text-[12.5px] font-bold uppercase tracking-wider" style="color: var(--ms-accent);">Why maelsink</div>
       <h2 class="mb-3 text-2xl font-bold tracking-tight sm:text-[34px]" style="color: var(--ms-text); letter-spacing: -0.02em;">
-        Built for how you actually test email
+        Built for testing outgoing email
       </h2>
       <p class="text-base leading-relaxed" style="color: var(--ms-text-soft);">
-        Not a hosted inbox service, not a mail-log-scraper — a purpose-built sink that
-        speaks SMTP, so anything you can already send mail to, you can point at maelsink.
+        Maelsink is a purpose-built sink that speaks SMTP directly, rather than a hosted
+        inbox service or a mail-log scraper. Any application that can send mail can be
+        pointed at it without additional integration work.
       </p>
     </div>
 

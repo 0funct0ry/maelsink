@@ -4,8 +4,8 @@ description: Configuring web.tls.cert/key and smtp.tls_cert/tls_key for local de
 ---
 
 maelsink can terminate TLS itself on either the Web UI port or the SMTP port, using a
-PEM certificate/key pair you provide. There's no built-in CA or auto-generated cert —
-you supply the files.
+supplied PEM certificate/key pair. There is no built-in CA or auto-generated certificate;
+the files must be supplied.
 
 ## Generating a local dev cert
 

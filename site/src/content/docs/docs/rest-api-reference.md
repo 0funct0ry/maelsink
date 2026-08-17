@@ -1,11 +1,11 @@
 ---
 title: REST API Reference
-description: The full maelsink /api/v1 REST surface — every endpoint, its parameters, and example request/response payloads.
+description: The full maelsink /api/v1 REST surface, including every endpoint, its parameters, and example request/response payloads.
 ---
 
 maelsink exposes a stable REST API under `/api/v1`, mounted on the dedicated
 REST API port (default `9090`) and read-through on the Web UI port (default
-`8080`). It never relays mail — this API only reads and manages messages,
+`8080`). It never relays mail; this API only reads and manages messages,
 tags, and sessions that maelsink's SMTP listener has already stored.
 
 The full machine-readable definition lives in `site/openapi.yaml` in this
@@ -267,13 +267,13 @@ List SMTP/shell sessions.
 {
   "sessions": [
     {
-      "id": "sess_01hz3k5xj8y3n1p9t3q7r0abcd",
+      "id": "5c02cbc79b40326a4aca5376",
       "client_ip": "127.0.0.1",
       "client_helo": "client.example.com",
       "started_at": "2026-08-17T09:14:58Z",
       "ended_at": "2026-08-17T09:15:00Z",
       "status": "completed",
-      "message_id": "msg_01hz3k5xj8y3n1p9t3q7r0abcd"
+      "message_id": "bed302ae42d8d1b913c1c999"
     }
   ],
   "total": 1,
@@ -281,6 +281,8 @@ List SMTP/shell sessions.
   "offset": 0
 }
 ```
+
+`status` is empty while the session is still open, and one of `completed`, `rejected`, `aborted`, or `timeout` once it ends. See [SMTP Sessions](/maelsink/docs/usage/smtp-sessions/) for a full description of the feature.
 
 ### `DELETE /api/v1/sessions`
 
@@ -293,18 +295,20 @@ Get a session with its full transcript. `{id}` may be an unambiguous prefix.
 
 ```json
 {
-  "id": "sess_01hz3k5xj8y3n1p9t3q7r0abcd",
+  "id": "5c02cbc79b40326a4aca5376",
   "client_ip": "127.0.0.1",
   "client_helo": "client.example.com",
   "started_at": "2026-08-17T09:14:58Z",
   "ended_at": "2026-08-17T09:15:00Z",
   "status": "completed",
-  "message_id": "msg_01hz3k5xj8y3n1p9t3q7r0abcd",
+  "message_id": "bed302ae42d8d1b913c1c999",
   "transcript": [
-    { "direction": "recv", "line": "MAIL FROM:<alice@example.com>", "position": 3 }
+    { "direction": "C", "line": "MAIL FROM:<alice@example.com>", "position": 3 }
   ]
 }
 ```
+
+`direction` is `C` for a line sent by the client, or `S` for a line sent by the server.
 
 ### `DELETE /api/v1/sessions/{id}`
 

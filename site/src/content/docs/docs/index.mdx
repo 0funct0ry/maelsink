@@ -1,14 +1,14 @@
 ---
 title: maelsink docs
-description: Documentation for maelsink, a single-binary fake SMTP server for local dev and CI.
+description: Documentation for maelsink, a single-binary local SMTP server for development and CI.
 ---
 
-**maelsink** is a single-binary fake SMTP server for local development and CI. It accepts
+**maelsink** is a single-binary local SMTP server for development and CI. It accepts
 any mail sent to it over SMTP, stores every message in SQLite, and exposes those messages
-through a web UI and a REST API. It never relays mail anywhere — it's a sink, not an MTA.
+through a web UI and a REST API. It never relays mail anywhere; it is a sink, not an MTA.
 
-Point your application's SMTP settings at a local maelsink instance, send mail as normal,
-and watch every message land in the inbox instead of a real mailbox.
+An application's SMTP settings can be pointed at a local maelsink instance. Mail sent as
+normal arrives in the inbox instead of a real mailbox.
 
 ## Where to start
 

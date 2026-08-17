@@ -3,9 +3,9 @@ title: Building from Source
 description: Build maelsink from source with Go 1.26.4, for readers who need a non-release build.
 ---
 
-If you need a build that isn't covered by [Installation](/maelsink/docs/installation/)'s four
-release paths — a specific commit, a local patch, or a platform without a published
-release — build from source.
+Building from source is the appropriate option when [Installation](/maelsink/docs/installation/)'s
+four release paths do not cover the target case, such as a specific commit, a local patch,
+or a platform without a published release.
 
 ## Prerequisites
 

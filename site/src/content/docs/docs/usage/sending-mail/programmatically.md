@@ -3,7 +3,7 @@ title: Sending Mail Programmatically
 description: Fully worked SMTP examples for popular languages and frameworks, all pointed at a local maelsink serve instance.
 ---
 
-`maelsink serve` accepts mail on a plain SMTP listener (default `127.0.0.1:1025`, no auth, no TLS) from any client library that speaks SMTP. Point your app's mail configuration at that host:port during local development or CI, and every message it sends shows up in maelsink instead of leaving the machine.
+`maelsink serve` accepts mail on a plain SMTP listener (default `127.0.0.1:1025`, no auth, no TLS) from any client library that supports SMTP. An application's mail configuration can be pointed at that host:port during local development or CI; every message it sends is captured by maelsink instead of leaving the machine.
 
 :::note
 The Node/Nodemailer, Python/`smtplib`, and Go/`net/smtp` examples below were run against a real local `maelsink serve` instance while writing this page, and confirmed to arrive via `GET /api/v1/messages`. The remaining examples (Ruby, PHP, Java, .NET, Django) are written to match each library's documented API but weren't executed in this build's sandbox.

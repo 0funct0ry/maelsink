@@ -5,7 +5,7 @@ description: "Validate a maelsink.yaml (and the layered config it produces) with
 
 Validate a maelsink.yaml (and the layered config it produces) without starting any server.
 
-This page is generated directly from `maelsink config validate --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink config validate --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Loads and validates a config file (--config, defaults to ./maelsink.yaml), reporting any errors, without starting the server.

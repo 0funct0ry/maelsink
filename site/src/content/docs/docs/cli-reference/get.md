@@ -5,7 +5,7 @@ description: "Show full message detail via the REST API."
 
 Show full message detail via the REST API.
 
-This page is generated directly from `maelsink get --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink get --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Thin REST API client: fetches and prints one message by id.

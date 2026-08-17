@@ -1,87 +1,107 @@
 ---
 title: Advanced Search Patterns
-description: Field-scoped queries, combining filters, date-range searches, and attachment-presence filtering against maelsink's message store.
+description: The full SQLite FTS5 query syntax supported by the Web UI's search bar, including boolean operators, column scoping, and proximity search.
 ---
 
-Beyond a single `--from` or `--q`, the REST API (and by extension `maelsink list`, `maelsink shell`'s `list` builtin, and the Web UI/Composer) support combining filters and a couple of query parameters that aren't yet surfaced as `list`/`show` flags.
+The Web UI's search bar transparently exposes SQLite's FTS5 query grammar. Every pattern on this page is real FTS5 syntax, not a maelsink-specific extension, and works identically whether typed into the search bar or passed as the `q` query parameter to `GET /api/v1/messages`.
 
-## Combining multiple filters
+The indexed columns are `subject`, `from_addr`, `to_addrs`, and `text_body`. See [Filters and Search](/maelsink/docs/usage/filters-and-search/) for basic keyword and phrase search.
 
-Every filter on `GET /api/v1/messages` is AND-combined. Narrow a search by stacking flags:
+An optional fixture-data generator (`scripts/search.py`) can populate a local `maelsink serve` instance with sample messages for experimenting with these patterns:
 
-```
-maelsink list --from=bob --subject=digest --sort=received_at_asc
-```
-
-is equivalent to:
-
-```
-curl "http://127.0.0.1:9090/api/v1/messages?from=bob&subject=digest&sort=received_at_asc"
+```bash
+maelsink serve                       # in one terminal
+python3 scripts/search.py            # in another; sends sample emails via SMTP
 ```
 
-Because `--from`/`--to`/`--subject`/`--cc`/`--bcc` are substring matches (not exact-match or field-prefixed query syntax like `from:bob`), each one scopes the search to that specific header rather than searching everywhere — that's the "field-scoped" part. `--q` is the odd one out: it's a full-text search across subject/body content, not a specific header.
+## Boolean operators: AND, OR, NOT
 
-## Date-range searches
-
-`--since` / `--until` (and the REST `since`/`until` params) take RFC3339 timestamps and are inclusive at both ends:
+FTS5 supports explicit, uppercase boolean operators between terms:
 
 ```
-maelsink list --since=2026-08-01T00:00:00Z --until=2026-08-17T23:59:59Z
+invoice AND acme             matches messages mentioning both terms
+acme OR globex                matches messages mentioning either term
+certificate NOT urgent        matches messages mentioning the first term but not the second
 ```
 
-```
-curl "http://127.0.0.1:9090/api/v1/messages?since=2026-08-01T00:00:00Z&until=2026-08-17T23:59:59Z"
-```
+FTS5 does not support a `-token` shorthand for exclusion. A bare `-word` is interpreted as column-filter syntax and fails to parse. maelsink's API classifies any FTS5 syntax failure as a search-query error and returns a `400 invalid_query` response with a generic message rather than the underlying SQLite error text. `NOT` must always be spelled out.
 
-Combine with other filters the same way:
+## Column-scoped search
 
-```
-maelsink list --from=bob --since=2026-08-17T00:00:00Z
-```
-
-## Attachment-presence searches
-
-The REST endpoint supports a real `has_attachments` boolean filter — this is a REST-only parameter (checked directly against `internal/api/handlers.go`, which parses it via `parseOptionalBoolQuery`), not currently exposed as a `maelsink list` flag:
+Prefixing a term with one of the four indexed column names and a colon scopes the match to that field:
 
 ```
-curl "http://127.0.0.1:9090/api/v1/messages?has_attachments=true"
+subject:migration
+from_addr:globex
+to_addrs:pixelforge
+text_body:configuration
 ```
 
-```json
-{
-  "messages": [
-    {
-      "id": "627751956cc6fe4055a6bccb",
-      "from": "app@example.com",
-      "to": ["dev@example.com"],
-      "subject": "With attachment",
-      "has_attachments": true,
-      "attachment_count": 1,
-      "...": "..."
-    }
-  ],
-  "total": 1,
-  "limit": 50,
-  "offset": 0
-}
-```
+`from_addr` and `to_addrs` are tokenized on punctuation such as `.` and `@`, so `globex` matches `globex.io` (tokenized as `globex` plus `io`), while `acme` does not match `acmecorp.com` (tokenized as the single token `acmecorp`). Searching a sender's company name as it appears in prose and searching their email domain are different queries with different results.
 
-This was verified live: sending a message with `maelsink send --attach ./note.txt ...` and then querying `?has_attachments=true` returned exactly that message.
+## Prefix wildcard
 
-From `maelsink list`, there's no dedicated flag for this yet, so the closest you can do from the CLI today is combine `--q` with attachment-related terms in the subject/body (e.g. `--q=invoice`), or reach for the REST parameter directly with `curl`, `maelsink shell`'s `show` builtin (which reports `has_attachments`/`attachment_count` per message), or a `--format` Go template on `list` that filters client-side:
+A trailing `*` matches any token starting with that prefix:
 
 ```
-maelsink list --format '{{if .HasAttachments}}{{.ID}}: {{.Subject}}{{end}}'
+invoic*      matches invoice, invoiced, invoicing, and other forms
+config*      matches configure, configuration, and other forms
 ```
 
-:::note
-Two other REST-only filters exist alongside `has_attachments`: `read` (boolean) and `parse_warning` (boolean, flags messages maelsink couldn't fully MIME-parse). Same story — reach for `curl` or a `--format` template until a dedicated `list` flag exists.
-:::
+This is useful for word-form variants, such as singular and plural forms or different verb tenses, without enumerating each one.
 
-## Other REST-only filters
+## Proximity search: NEAR
 
-- `tag` (repeatable) and `tag_mode=any|all` — see [Tagging Messages](/maelsink/docs/usage/tagging-messages/).
-- `read=true|false` — filter by read/unread state.
-- `parse_warning=true|false` — surface messages that had a MIME parsing issue on ingest.
+`NEAR(term1 term2, N)` matches when both terms appear within `N` tokens of each other, in either order, anywhere in the row:
 
-These compose with every other filter the same way, since they're all just additional query parameters on the same `GET /api/v1/messages` call.
+```
+NEAR(refund order, 5)
+```
+
+Reducing `N` tightens the match to require the terms to appear closer together, excluding messages where the terms are only loosely related.
+
+## Grouping with parentheses
+
+Boolean operators can be combined with explicit precedence using parentheses:
+
+```
+(receipt OR invoice) AND acme
+```
+
+This pattern, matching either of two related terms combined with a required term, is a common candidate for a saved search, since it is easy to get the operator precedence or exact spelling wrong when retyping it.
+
+## Quoting hyphenated and apostrophized terms
+
+A bare hyphen or apostrophe inside an unquoted query term is not treated as a literal character by the FTS5 parser; it is interpreted as syntax and causes a parse error:
+
+```
+multi-factor       →  400 invalid_query (bare hyphen breaks the parser)
+"multi-factor"     →  matches correctly
+multi factor       →  also matches correctly, as two unquoted tokens
+
+can't              →  400 invalid_query (bare apostrophe starts an unterminated quote)
+"can't"            →  matches correctly
+```
+
+A query term containing a hyphen, apostrophe, or other punctuation should be wrapped in double quotes. This has no effect when the term does not require it, and avoids a parse error when it does. Any malformed FTS5 syntax, including these punctuation cases, surfaces as the same generic `400 invalid_query` response.
+
+## Unicode and diacritics
+
+FTS5's default tokenizer folds diacritics, so accented and unaccented spellings match the same content:
+
+```
+cafe
+café
+```
+
+Both queries return the same results, which is useful when a keyboard or locale does not make typing an accented character convenient, or when a sender's own capitalization or accent usage is uncertain.
+
+## Numbers and alphanumeric codes
+
+Order numbers, invoice identifiers, ticket references, and one-time codes are indexed and searchable like any other token, including as a column-scoped search when the field containing the code is known:
+
+```
+INV-2024-00987
+482913
+TCK-10432
+```

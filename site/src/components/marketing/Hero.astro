@@ -14,25 +14,24 @@ const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL :
       class="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold"
       style="color: var(--ms-accent); background: #eeecff; border-color: #d9d5ff;"
     >
-      <span class="relative inline-block h-1.5 w-1.5 rounded-full" style="background: var(--ms-success);"></span>
-      Single binary &middot; SMTP + Web UI + REST API
+      maelsink 1.0.0
     </span>
 
     <h1
       class="max-w-3xl text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl lg:text-[56px]"
       style="color: var(--ms-text); letter-spacing: -0.025em;"
     >
-      A fake SMTP server for<br />
-      your <span
+      A local SMTP server for <br />
+      <span
         class="bg-clip-text text-transparent"
         style="background-image: linear-gradient(100deg, var(--ms-accent), #9b7bff);"
-      >real</span> development flow
+      >developers</span>
     </h1>
 
     <p class="max-w-xl text-lg leading-relaxed" style="color: var(--ms-text-soft);">
-      maelsink catches every email your app sends in dev, staging, and CI — no real
-      recipients, no surprises. One binary, a realtime web UI, and a REST API your test
-      suite can talk to.
+      Maelsink is a lightweight email capture service for <strong>non-production</strong> environments.
+      It intercepts outgoing application emails for inspection through a realtime web
+      UI and provides a REST API that can be used by test suites and other development tools.
     </p>
 
     <div class="mt-1 flex flex-wrap items-center justify-center gap-3">
@@ -55,7 +54,7 @@ const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL :
     </div>
 
     <div class="mt-0.5 text-[12.5px]" style="color: #9aa1b1; font-family: var(--ms-font-mono);">
-      Homebrew &middot; Scoop &middot; Docker &middot; or grab a binary from <a href="https://github.com/0funct0ry/maelsink/releases" class="underline" style="color: var(--ms-accent);">GitHub Releases</a>
+      Available through Homebrew, Scoop, Docker, or as a binary from <a href="https://github.com/0funct0ry/maelsink/releases" class="underline" style="color: var(--ms-accent);">GitHub Releases</a>
     </div>
   </div>
 
@@ -75,7 +74,7 @@ const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL :
     </figure>
     <p class="mt-4 flex items-center justify-center gap-2 text-[13px]" style="color: #9aa1b1;">
       <span class="h-1.5 w-1.5 rounded-full" style="background: var(--ms-success);"></span>
-      Updates in realtime over WebSockets — no refresh needed
+      The inbox updates in realtime over WebSockets, without requiring a manual refresh.
     </p>
   </div>
 </section>

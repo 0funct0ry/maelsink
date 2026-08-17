@@ -5,7 +5,7 @@ description: "Print the fully-resolved configuration (defaults + file + env + fl
 
 Print the fully-resolved configuration (defaults + file + env + flags) that `serve` would use.
 
-This page is generated directly from `maelsink config show --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink config show --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Loads maelsink.yaml (or --config), layers MAELSINK_* env vars and any flags given here, and prints the result as YAML.

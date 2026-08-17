@@ -79,7 +79,7 @@ function fmtFlag(f) {
 
 function renderBuiltins(data) {
   let out = `---\ntitle: "Shell Builtin Reference"\ndescription: "Every builtin command in the maelsink interactive shell, generated from the builtin registry."\n---\n\n`;
-  out += "This page is generated from `internal/shell/builtin`'s registry (`go run ./tools/docgen`) — the flag list for each builtin is always in sync with the shell binary; it is never hand-maintained.\n\n";
+  out += "This page is generated from `internal/shell/builtin`'s registry (`go run ./tools/docgen`). The flag list for each builtin is always in sync with the shell binary and is never hand-maintained.\n\n";
 
   for (const b of data.builtins) {
     out += `## ${b.name}\n\n`;
@@ -99,7 +99,7 @@ function renderBuiltins(data) {
 
 function renderFunctions(data) {
   let out = `---\ntitle: "Shell Functions Reference"\ndescription: "Every template function available to maelsink shell templates, generated from the template function registry."\n---\n\n`;
-  out += "This page is generated from `internal/shell/tmpl`'s registry (`go run ./tools/docgen`) — descriptions and signatures are always in sync with the engine; they are never hand-maintained.\n\n";
+  out += "This page is generated from `internal/shell/tmpl`'s registry (`go run ./tools/docgen`). Descriptions and signatures are always in sync with the engine and are never hand-maintained.\n\n";
   out += ":::caution\n";
   out += "Functions marked **unsafe** below (`env`, `expandenv`, `getHostByName`) are gated behind the shell's `--template-unsafe-funcs` / `-Z` flag (or the `shell.template_unsafe_funcs` config key). They are disabled by default because they can read host environment variables or perform DNS lookups from inside a template.\n";
   out += ":::\n\n";

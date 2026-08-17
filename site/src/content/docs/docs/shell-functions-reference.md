@@ -3,7 +3,7 @@ title: "Shell Functions Reference"
 description: "Every template function available to maelsink shell templates, generated from the template function registry."
 ---
 
-This page is generated from `internal/shell/tmpl`'s registry (`go run ./tools/docgen`) — descriptions and signatures are always in sync with the engine; they are never hand-maintained.
+This page is generated from `internal/shell/tmpl`'s registry (`go run ./tools/docgen`). Descriptions and signatures are always in sync with the engine and are never hand-maintained.
 
 :::caution
 Functions marked **unsafe** below (`env`, `expandenv`, `getHostByName`) are gated behind the shell's `--template-unsafe-funcs` / `-Z` flag (or the `shell.template_unsafe_funcs` config key). They are disabled by default because they can read host environment variables or perform DNS lookups from inside a template.

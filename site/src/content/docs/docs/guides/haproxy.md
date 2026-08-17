@@ -3,9 +3,9 @@ title: Running maelsink behind HAProxy
 description: Reverse-proxying maelsink's Web UI/API with HAProxy at a subpath, with TLS terminated at the proxy.
 ---
 
-If maelsink is one service among several behind a shared HAProxy front end, you'll
-typically want TLS terminated at the proxy and maelsink itself reachable at a subpath
-like `/maelsink/`.
+When maelsink is one service among several behind a shared HAProxy front end, TLS is
+typically terminated at the proxy, with maelsink itself reachable at a subpath such as
+`/maelsink/`.
 
 ## Configure `base_path`
 

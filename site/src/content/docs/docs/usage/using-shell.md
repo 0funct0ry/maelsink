@@ -85,6 +85,27 @@ echo 'list' | maelsink shell
 - **`--exit-on-error`** (`-Q`, default `false`) — abort the whole script on the first failing command instead of continuing.
 - Exit code is the last command's status.
 
+## Searching and filtering
+
+The `list` builtin (alias `ls`) mirrors `maelsink list`'s flags exactly, since both are thin clients over the same `GET /api/v1/messages` endpoint:
+
+- `-q, --query` — full-text search query, supporting the same FTS5 syntax as the Web UI search bar (see [Advanced Search Patterns](/maelsink/docs/usage/advanced-search-patterns/))
+- `--from`, `--to`, `--subject` — substring filters against the corresponding header
+- `--since`, `--until` — RFC3339 date-range bounds, inclusive at both ends
+- `--sort` — `received_at_desc` (default) or `received_at_asc`
+- `-n, --limit`, `--offset` — pagination
+- `--ids` — print matching message IDs only, one per line
+- `--format` — output as `table` (default), `json`, or `yaml`
+
+See the [Shell Builtin Reference](/maelsink/docs/shell-builtin-reference/) for the complete, generated flag list.
+
+```
+maelsink> list --q="(receipt OR invoice) AND acme"
+maelsink> list --from=bob --since=2026-08-17T00:00:00Z --sort=received_at_asc
+```
+
+Filters compose the same way as `maelsink list` and the REST API: every flag is combined with AND. Aliases and abbreviations (above) apply to `list` invocations as well, so a frequently repeated filter combination can be bound to a short name for the session, or persisted with `--global`. See [Using CLI](/maelsink/docs/usage/using-cli/) for the full set of filters, including the REST-only parameters (`tag`, `read`, `has_attachments`, `parse_warning`) not yet exposed as `list` flags.
+
 ## Offline / local-only operation
 
 The shell starts and runs every local builtin (`set`, `alias`, `template`, `config`, `sh`, ...) with **no reachable server at all** — only API-backed builtins (`list`, `send`, `stats`, ...) fail, and they fail distinguishably:

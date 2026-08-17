@@ -5,7 +5,7 @@ description: "Delete all messages via the REST API."
 
 Delete all messages via the REST API.
 
-This page is generated directly from `maelsink clear --help` — the flag list below is always in sync with the binary; it is never hand-maintained.
+This page is generated directly from `maelsink clear --help`. The flag list below is always in sync with the binary and is never hand-maintained.
 
 ```
 Thin REST API client: deletes every stored message. Prompts for confirmation unless --yes is given.

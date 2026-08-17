@@ -1,10 +1,10 @@
 ---
 title: Installation
-description: Four ways to install maelsink — binary download, Homebrew, Scoop, or Docker.
+description: Four ways to install maelsink, using a binary download, Homebrew, Scoop, or Docker.
 ---
 
-There are four supported ways to get maelsink running. Pick whichever fits your platform
-and workflow.
+maelsink supports four installation methods, each suited to a different platform and
+workflow.
 
 ## Binary download
 

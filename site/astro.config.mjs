@@ -52,6 +52,7 @@ export default defineConfig({
             { label: 'Advanced Search Patterns', slug: 'docs/usage/advanced-search-patterns' },
             { label: 'Deleting Messages', slug: 'docs/usage/deleting-messages' },
             { label: 'Tagging Messages', slug: 'docs/usage/tagging-messages' },
+            { label: 'SMTP Sessions', slug: 'docs/usage/smtp-sessions' },
             {
               label: 'Sending Mail',
               items: [
@@ -62,6 +63,7 @@ export default defineConfig({
               ],
             },
             { label: 'Export', slug: 'docs/usage/export' },
+            { label: 'Using CLI', slug: 'docs/usage/using-cli' },
             { label: 'Using Shell', slug: 'docs/usage/using-shell' },
             { label: 'Using Composer', slug: 'docs/usage/using-composer' },
           ],
