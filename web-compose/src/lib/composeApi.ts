@@ -103,13 +103,30 @@ export function health(): Promise<HealthResponse> {
 export interface ListMessagesParams {
   limit?: number
   offset?: number
+  q?: string
+  from?: string
+  to?: string
+  subject?: string
+  since?: string
+  until?: string
+  sort?: string
+}
+
+export function listMessagesQuery(params: ListMessagesParams = {}): URLSearchParams {
+  const q = new URLSearchParams({ sort: params.sort || 'received_at_desc' })
+  if (params.limit != null) q.set('limit', String(params.limit))
+  if (params.offset != null) q.set('offset', String(params.offset))
+  if (params.q) q.set('q', params.q)
+  if (params.from) q.set('from', params.from)
+  if (params.to) q.set('to', params.to)
+  if (params.subject) q.set('subject', params.subject)
+  if (params.since) q.set('since', params.since)
+  if (params.until) q.set('until', params.until)
+  return q
 }
 
 export function listMessages(params: ListMessagesParams = {}): Promise<ListResponse> {
-  const q = new URLSearchParams({ sort: 'received_at_desc' })
-  if (params.limit != null) q.set('limit', String(params.limit))
-  if (params.offset != null) q.set('offset', String(params.offset))
-  return request<ListResponse>(`/compose-api/v1/messages?${q.toString()}`)
+  return request<ListResponse>(`/compose-api/v1/messages?${listMessagesQuery(params).toString()}`)
 }
 
 export function getMessage(id: string): Promise<MessageDetail> {
@@ -184,4 +201,97 @@ export interface FuncDoc {
 
 export function getFunctions(): Promise<FuncDoc[]> {
   return request<{ functions: FuncDoc[] }>('/compose-api/v1/functions').then((r) => r.functions)
+}
+
+export interface Stats {
+  total_messages: number
+  total_size_bytes: number
+  oldest_received_at: string | null
+  newest_received_at: string | null
+}
+
+export function getStats(): Promise<Stats> {
+  return request<Stats>('/compose-api/v1/stats')
+}
+
+export interface BuildInfo {
+  version: string
+  commit: string
+  build_date: string
+  go: string
+}
+
+export interface VersionResponse {
+  target: BuildInfo
+  compose: BuildInfo
+}
+
+export function getVersion(): Promise<VersionResponse> {
+  return request<VersionResponse>('/compose-api/v1/version')
+}
+
+export interface DownloadResult {
+  blob: Blob
+  filename: string
+}
+
+function filenameFromContentDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback
+  const match = /filename="?([^";]+)"?/i.exec(header)
+  return match ? match[1] : fallback
+}
+
+async function requestBlob(path: string, fallbackFilename: string): Promise<DownloadResult> {
+  const resp = await fetch(path)
+  if (!resp.ok) {
+    let code = 'unknown_error'
+    let message = resp.statusText
+    try {
+      const body = await resp.json()
+      if (body?.error?.code) {
+        code = body.error.code
+        message = body.error.message ?? message
+      }
+    } catch {
+      // non-JSON error body — fall back to statusText
+    }
+    throw new ComposeApiError(resp.status, code, message)
+  }
+  const blob = await resp.blob()
+  const filename = filenameFromContentDisposition(resp.headers.get('Content-Disposition'), fallbackFilename)
+  return { blob, filename }
+}
+
+export type ExportParams = Pick<ListMessagesParams, 'q' | 'from' | 'to' | 'subject' | 'since' | 'until' | 'sort'>
+
+export function exportMessages(params: ExportParams = {}): Promise<DownloadResult> {
+  const q = listMessagesQuery(params)
+  q.delete('limit')
+  q.delete('offset')
+  return requestBlob(`/compose-api/v1/export?${q.toString()}`, 'export.zip')
+}
+
+export function downloadAttachment(
+  messageId: string,
+  attachmentId: string,
+  fallbackFilename: string,
+): Promise<DownloadResult> {
+  return requestBlob(
+    `/compose-api/v1/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    fallbackFilename,
+  )
+}
+
+// triggerDownload saves a DownloadResult to disk via a transient <a download>
+// link — the standard Blob trick, since there is no local output directory
+// in a browser (SPEC.md §7.7.4.2).
+export function triggerDownload(result: DownloadResult): void {
+  const url = URL.createObjectURL(result.blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = result.filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
 }

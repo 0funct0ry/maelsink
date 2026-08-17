@@ -7,7 +7,7 @@ import MessageListScreen from './screens/MessageListScreen'
 import MessageDetailView from './screens/MessageDetailView'
 import VarsScreen from './screens/VarsScreen'
 import ComposerScreen from './screens/ComposerScreen'
-import ApiExplorerPlaceholder from './screens/ApiExplorerPlaceholder'
+import ApiExplorerScreen from './screens/ApiExplorerScreen'
 import JobsPanelPlaceholder from './screens/JobsPanelPlaceholder'
 
 export default function App() {
@@ -30,7 +30,7 @@ export default function App() {
             <Route path="/messages/:id" element={<MessageDetailView />} />
             <Route path="/vars" element={<VarsScreen />} />
             <Route path="/composer" element={<ComposerScreen />} />
-            <Route path="/api-explorer" element={<ApiExplorerPlaceholder />} />
+            <Route path="/api-explorer" element={<ApiExplorerScreen />} />
             <Route path="/jobs" element={<JobsPanelPlaceholder />} />
           </Routes>
         </main>

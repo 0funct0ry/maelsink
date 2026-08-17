@@ -43,6 +43,10 @@ func New(client *cliclient.Client, logger *slog.Logger, target TargetConfig, cfg
 	rg.POST("/render", renderHandler())
 	rg.POST("/send", sendHandler(target))
 	rg.GET("/functions", functionsHandler())
+	rg.GET("/stats", statsHandler(client))
+	rg.GET("/version", versionHandler(client))
+	rg.GET("/export", exportHandler(client))
+	rg.GET("/messages/:id/attachments/:attachmentId", attachmentHandler(client))
 
 	assets, err := fs.Sub(distFS, "dist")
 	if err != nil {
