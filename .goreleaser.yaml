@@ -1,0 +1,75 @@
+version: 2
+
+before:
+  hooks:
+    # Build both embedded SPAs once, so web/dist and web-compose/dist exist
+    # identically for every platform target in the build matrix below —
+    # there is no per-platform frontend rebuild (SPEC.md §9.1).
+    - make build-web
+    - make build-web-compose
+
+builds:
+  - id: maelsink
+    main: .
+    binary: maelsink
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/0funct0ry/maelsink/internal/version.Version={{.Version}}
+      - -X github.com/0funct0ry/maelsink/internal/version.Commit={{.Commit}}
+      - -X github.com/0funct0ry/maelsink/internal/version.BuildDate={{.Date}}
+
+archives:
+  - id: maelsink
+    name_template: "maelsink_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: git
+  sort: asc
+
+# Publishes a Homebrew formula to the dedicated tap repo on every tagged
+# release. Requires the tap repo (0funct0ry/homebrew-maelsink) to already
+# exist and a repo-scoped PAT available to the release workflow as the
+# HOMEBREW_TAP_GITHUB_TOKEN secret. See internal-docs/PUBLISH_BREW_TAP.md
+# for one-time setup and the per-release verification flow.
+brews:
+  - name: maelsink
+    repository:
+      owner: 0funct0ry
+      name: homebrew-maelsink
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/0funct0ry/maelsink"
+    description: "A single-binary fake SMTP server for local dev/CI"
+    license: "MIT"
+
+# Publishes a Scoop manifest to the dedicated bucket repo on every tagged
+# release. Requires the bucket repo (0funct0ry/scoop-maelsink) to already
+# exist and the same HOMEBREW_TAP_GITHUB_TOKEN secret (or a dedicated one)
+# available to the release workflow. See internal-docs/PUBLISH_SCOOP.md.
+scoops:
+  - name: maelsink
+    repository:
+      owner: 0funct0ry
+      name: scoop-maelsink
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/0funct0ry/maelsink"
+    description: "A single-binary fake SMTP server for local dev/CI"
+    license: "MIT"
+
+# NOTE: no `dockers:`/`docker_manifests:` section here by design. The Docker
+# image is intentionally published as a separate manual step, not from this
+# automated GoReleaser run — see internal-docs/PUBLISH_GHCR.md.

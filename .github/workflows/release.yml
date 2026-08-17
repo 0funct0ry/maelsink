@@ -1,0 +1,52 @@
+name: Release
+
+# Manual trigger only — releases must never happen automatically on tag
+# push, to avoid accidental/mistaken publishes. Push the `vX.Y.Z` tag first,
+# then launch this workflow from the Actions tab (or `gh workflow run
+# release.yml -f tag=vX.Y.Z`), selecting that tag.
+#
+# Publishes: GitHub Release binaries, Homebrew tap, Scoop bucket.
+# Does NOT publish the Docker image — that's a separate manual step, see
+# internal-docs/PUBLISH_GHCR.md.
+#
+# Required secrets (repo Settings → Secrets and variables → Actions):
+#   HOMEBREW_TAP_GITHUB_TOKEN — a PAT with write access to
+#     0funct0ry/homebrew-maelsink and 0funct0ry/scoop-maelsink.
+#     See internal-docs/PUBLISH_BREW_TAP.md / PUBLISH_SCOOP.md.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (must already exist, e.g. v0.1.0)"
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            web/package-lock.json
+            web-compose/package-lock.json
+
+      - name: GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

@@ -1,0 +1,26 @@
+services:
+  maelsink:
+    build: .
+    image: maelsink:latest
+    ports:
+      - "1025:1025" # SMTP
+      - "8080:8080" # Web UI
+      - "9090:9090" # REST API
+    volumes:
+      - maelsink-data:/data
+
+  # Example: point an app under test's SMTP client at maelsink instead of a
+  # real mail server. Uncomment and swap `your-app-image` for the service
+  # you want to exercise — it needs no port mapping of its own since it only
+  # talks to maelsink over the compose network.
+  #
+  # app-under-test:
+  #   image: your-app-image
+  #   environment:
+  #     SMTP_HOST: maelsink
+  #     SMTP_PORT: "1025"
+  #   depends_on:
+  #     - maelsink
+
+volumes:
+  maelsink-data:

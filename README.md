@@ -3,6 +3,35 @@
 A single-binary fake SMTP server for local development and CI. It accepts
 any mail over SMTP and lets you inspect it — it never relays mail anywhere.
 
+## Install
+
+Pick one of four ways to get `maelsink`, all built from the same tagged
+release so every install path ships with a working, embedded Web UI:
+
+1. **Download a binary** from the [GitHub Releases](https://github.com/0funct0ry/maelsink/releases) page — pick the archive matching your OS/arch, extract, run.
+2. **Homebrew** (macOS/Linux):
+   ```bash
+   brew install 0funct0ry/maelsink/maelsink
+   ```
+3. **Scoop** (Windows):
+   ```powershell
+   scoop bucket add maelsink https://github.com/0funct0ry/scoop-maelsink
+   scoop install maelsink
+   ```
+4. **Docker**:
+   ```bash
+   docker run --rm -p 1025:1025 -p 8080:8080 -p 9090:9090 \
+     -v maelsink-data:/data ghcr.io/0funct0ry/maelsink:latest
+   ```
+   Or via Compose: `docker compose up` (see [docker-compose.yml](docker-compose.yml)).
+
+`go install` is deliberately not offered — it skips the frontend build step,
+so a binary built that way would ship without a working Web UI.
+
+Releases (binaries/Homebrew/Scoop) are cut via a manually triggered GitHub
+Actions workflow after a tag is pushed; the Docker image is published as a
+separate manual step.
+
 ## Prerequisites
 
 - Go 1.26+

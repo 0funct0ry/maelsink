@@ -75,9 +75,15 @@ build-web-compose: ## Build the compose frontend SPA (React/Vite)
 		echo "$(GREEN)Skip: $(WEB_COMPOSE_DIR) directory not found.$(NC)"; \
 	fi
 
-build-docker: ## Build the multi-stage Docker image
+build-docker: ## Build the multi-stage Docker image, tagged maelsink:latest and maelsink:$(VERSION)
 	@echo "$(BLUE)Building Docker image...$(NC)"
-	docker build -t maelsink:latest .
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t maelsink:latest \
+		-t maelsink:$(VERSION) \
+		.
 
 ensure-web-embed: ## Build web assets only if missing, so go:embed has something to compile
 	@if [ ! -f internal/webui/dist/index.html ]; then \
