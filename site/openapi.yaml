@@ -1,0 +1,1152 @@
+openapi: 3.0.3
+info:
+  title: maelsink REST API
+  version: "1.0.0"
+  description: >
+    maelsink is a single-binary fake SMTP server for local dev/CI. It accepts
+    mail over SMTP, stores messages in SQLite, and exposes them through a web
+    UI and this REST API. It never relays mail anywhere.
+
+
+    This is the stable `/api/v1` surface. It is mounted on the dedicated REST
+    API port (default `9090`) and read-through on the Web UI port (default
+    `8080`).
+  license:
+    name: MIT
+servers:
+  - url: http://127.0.0.1:9090/api/v1
+    description: Default REST API port
+  - url: http://127.0.0.1:8080/api/v1
+    description: Read-through on the Web UI port
+security:
+  - bearerAuth: []
+  - {}
+tags:
+  - name: Messages
+    description: Received mail messages.
+  - name: Tags
+    description: User-defined labels applied to messages.
+  - name: Sessions
+    description: SMTP/shell sessions that produced messages.
+  - name: Meta
+    description: Health and version information.
+paths:
+  /messages:
+    get:
+      tags: [Messages]
+      summary: List / filter messages
+      operationId: listMessages
+      parameters:
+        - $ref: '#/components/parameters/q'
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+        - $ref: '#/components/parameters/subject'
+        - $ref: '#/components/parameters/cc'
+        - $ref: '#/components/parameters/bcc'
+        - $ref: '#/components/parameters/read'
+        - $ref: '#/components/parameters/hasAttachments'
+        - $ref: '#/components/parameters/parseWarning'
+        - $ref: '#/components/parameters/tag'
+        - $ref: '#/components/parameters/tagMode'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+        - $ref: '#/components/parameters/since'
+        - $ref: '#/components/parameters/until'
+        - $ref: '#/components/parameters/sort'
+      responses:
+        '200':
+          description: A page of matching messages.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+              example:
+                messages:
+                  - id: msg_01hz3k5xj8y3n1p9t3q7r0abcd
+                    from: alice@example.com
+                    from_name: Alice Example
+                    to: [bob@example.com]
+                    to_names: [Bob Example]
+                    cc: []
+                    bcc: []
+                    subject: Welcome to maelsink
+                    size_bytes: 4213
+                    has_attachments: false
+                    attachment_count: 0
+                    received_at: "2026-08-17T09:15:00Z"
+                    parse_warning: false
+                    read: false
+                    tags: [onboarding]
+                    preview: Thanks for signing up! Here's how to get started...
+                total: 1
+                limit: 50
+                offset: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    delete:
+      tags: [Messages]
+      summary: Delete all messages
+      description: Requires `?confirm=true` to avoid accidental bulk deletion.
+      operationId: clearMessages
+      parameters:
+        - name: confirm
+          in: query
+          required: true
+          description: Must be exactly `true` to perform the delete.
+          schema:
+            type: string
+            enum: ["true"]
+      responses:
+        '204':
+          description: All messages deleted.
+        '400':
+          description: Missing or invalid `confirm=true`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: confirmation_required
+                  message: "bulk delete requires ?confirm=true"
+  /messages/export:
+    get:
+      tags: [Messages]
+      summary: Bulk export filtered messages as a .zip
+      description: >
+        Accepts the same filter parameters as `GET /messages` (pagination
+        parameters are ignored) and streams back a `.zip` archive containing
+        one `<id>.eml` file per matching message.
+      operationId: bulkExportMessages
+      parameters:
+        - $ref: '#/components/parameters/q'
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+        - $ref: '#/components/parameters/subject'
+        - $ref: '#/components/parameters/cc'
+        - $ref: '#/components/parameters/bcc'
+        - $ref: '#/components/parameters/read'
+        - $ref: '#/components/parameters/hasAttachments'
+        - $ref: '#/components/parameters/parseWarning'
+        - $ref: '#/components/parameters/tag'
+        - $ref: '#/components/parameters/tagMode'
+        - $ref: '#/components/parameters/since'
+        - $ref: '#/components/parameters/until'
+        - $ref: '#/components/parameters/sort'
+      responses:
+        '200':
+          description: A zip archive of matching messages.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /messages/{id}:
+    parameters:
+      - $ref: '#/components/parameters/messageId'
+    get:
+      tags: [Messages]
+      summary: Get a single message (full detail)
+      operationId: getMessage
+      responses:
+        '200':
+          description: The message detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageDetail'
+        '400':
+          $ref: '#/components/responses/AmbiguousID'
+        '404':
+          $ref: '#/components/responses/MessageNotFound'
+    delete:
+      tags: [Messages]
+      summary: Delete a single message
+      operationId: deleteMessage
+      responses:
+        '204':
+          description: Message deleted.
+        '400':
+          $ref: '#/components/responses/AmbiguousID'
+        '404':
+          $ref: '#/components/responses/MessageNotFound'
+  /messages/{id}/read:
+    parameters:
+      - $ref: '#/components/parameters/messageId'
+    patch:
+      tags: [Messages]
+      summary: Mark a message read or unread
+      description: >
+        An empty/absent request body marks the message read. Pass
+        `{"read": false}` to mark it unread.
+      operationId: markMessageRead
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+            example:
+              read: false
+      responses:
+        '204':
+          description: Read state updated.
+        '400':
+          description: Invalid request body, or ambiguous id prefix.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/MessageNotFound'
+  /messages/{id}/tags:
+    parameters:
+      - $ref: '#/components/parameters/messageId'
+    patch:
+      tags: [Messages]
+      summary: Add or remove tags on a message
+      operationId: updateMessageTags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTagsRequest'
+            example:
+              add: [important]
+              remove: [onboarding]
+      responses:
+        '200':
+          description: The updated message summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSummary'
+        '400':
+          description: Invalid request body, invalid tag name, or ambiguous id prefix.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/MessageNotFound'
+  /messages/{id}/raw:
+    parameters:
+      - $ref: '#/components/parameters/messageId'
+    get:
+      tags: [Messages]
+      summary: Get the raw RFC 5322 message source
+      operationId: getRawMessage
+      responses:
+        '200':
+          description: The raw message source.
+          content:
+            message/rfc822:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/AmbiguousID'
+        '404':
+          $ref: '#/components/responses/MessageNotFound'
+  /messages/{id}/export:
+    parameters:
+      - $ref: '#/components/parameters/messageId'
+    get:
+      tags: [Messages]
+      summary: Download a single message as a .eml file
+      operationId: exportMessage
+      responses:
+        '200':
+          description: The message as an RFC 5322 `.eml` file download.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: 'attachment; filename="<id>.eml"'
+          content:
+            message/rfc822:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/AmbiguousID'
+        '404':
+          $ref: '#/components/responses/MessageNotFound'
+  /messages/{id}/attachments/{attId}:
+    parameters:
+      - $ref: '#/components/parameters/messageId'
+      - name: attId
+        in: path
+        required: true
+        description: Attachment (or inline image) id.
+        schema:
+          type: string
+        example: att_01hz3k5y0j2n1p9t3q7r0efgh
+    get:
+      tags: [Messages]
+      summary: Download an attachment (or inline image)
+      operationId: getAttachment
+      responses:
+        '200':
+          description: The attachment's raw bytes.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: 'attachment; filename="<filename>"'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/AmbiguousID'
+        '404':
+          description: Message or attachment not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: attachment_not_found
+                  message: "no attachment with id att_xxx on message msg_xxx"
+  /stats:
+    get:
+      tags: [Meta]
+      summary: Server-wide message statistics
+      operationId: getStats
+      responses:
+        '200':
+          description: Aggregate stats over all stored messages.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stats'
+              example:
+                total_messages: 42
+                total_size_bytes: 1048576
+                unread_count: 5
+                attachment_count: 7
+                parse_warning_count: 0
+                oldest_received_at: "2026-08-01T12:00:00Z"
+                newest_received_at: "2026-08-17T09:15:00Z"
+  /tags:
+    get:
+      tags: [Tags]
+      summary: List all tags
+      operationId: listTags
+      responses:
+        '200':
+          description: All tags with usage stats.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TagStats'
+              example:
+                - name: important
+                  color: "#e11d48"
+                  count: 3
+                  last_used: "2026-08-17T09:15:00Z"
+                - name: onboarding
+                  color: "#2563eb"
+                  count: 1
+                  last_used: null
+    post:
+      tags: [Tags]
+      summary: Create a tag
+      operationId: createTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+            example:
+              name: important
+              color: "#e11d48"
+      responses:
+        '201':
+          description: The created tag.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagStats'
+        '400':
+          description: Missing name/color, or invalid tag name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: A tag with that name already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: tag_exists
+                  message: "tag important already exists"
+  /tags/{name}:
+    parameters:
+      - $ref: '#/components/parameters/tagName'
+    patch:
+      tags: [Tags]
+      summary: Rename and/or recolor a tag
+      operationId: patchTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchTagRequest'
+            example:
+              color: "#16a34a"
+      responses:
+        '200':
+          description: The updated tag.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagStats'
+        '400':
+          description: Neither name nor color provided.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/TagNotFound'
+    delete:
+      tags: [Tags]
+      summary: Delete a tag
+      description: Deletes the tag itself; tagged messages are kept.
+      operationId: deleteTag
+      responses:
+        '204':
+          description: Tag deleted.
+        '404':
+          $ref: '#/components/responses/TagNotFound'
+  /tags/{name}/messages:
+    parameters:
+      - $ref: '#/components/parameters/tagName'
+    delete:
+      tags: [Tags]
+      summary: Delete a tag and every message tagged with it
+      operationId: deleteTagWithMessages
+      responses:
+        '204':
+          description: Tag and its messages deleted.
+        '404':
+          $ref: '#/components/responses/TagNotFound'
+  /sessions:
+    get:
+      tags: [Sessions]
+      summary: List SMTP/shell sessions
+      operationId: listSessions
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          example: completed
+        - name: client_ip
+          in: query
+          schema:
+            type: string
+          example: 127.0.0.1
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+        - $ref: '#/components/parameters/since'
+        - $ref: '#/components/parameters/until'
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [started_at_desc, started_at_asc]
+            default: started_at_desc
+      responses:
+        '200':
+          description: A page of matching sessions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    delete:
+      tags: [Sessions]
+      summary: Delete all sessions
+      description: Requires `?confirm=true` to avoid accidental bulk deletion.
+      operationId: clearSessions
+      parameters:
+        - name: confirm
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ["true"]
+      responses:
+        '204':
+          description: All sessions deleted.
+        '400':
+          description: Missing or invalid `confirm=true`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: confirmation_required
+                  message: "bulk delete requires ?confirm=true"
+  /sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/sessionId'
+    get:
+      tags: [Sessions]
+      summary: Get a session and its full transcript
+      operationId: getSession
+      responses:
+        '200':
+          description: The session detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+        '400':
+          description: id prefix matches more than one session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: ambiguous_id
+                  message: "id prefix sess_01 matches more than one session"
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+    delete:
+      tags: [Sessions]
+      summary: Delete a single session
+      operationId: deleteSession
+      responses:
+        '204':
+          description: Session deleted.
+        '400':
+          description: id prefix matches more than one session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+  /health:
+    get:
+      tags: [Meta]
+      summary: Health check
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: The server (and its database) is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                db: ok
+                smtp: listening
+        '503':
+          description: The server is degraded (e.g. the database is unreachable).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: degraded
+                db: error
+                smtp: listening
+  /version:
+    get:
+      tags: [Meta]
+      summary: Build/version information
+      operationId: getVersion
+      security: []
+      responses:
+        '200':
+          description: Build provenance for the running binary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+              example:
+                version: "1.0.0"
+                commit: a1b2c3d
+                build_date: "2026-08-17T00:00:00Z"
+                go: go1.26.4
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Sent only when `api.auth.enabled` is `true` in server config, as
+        `Authorization: Bearer <api.auth.api_key>`. `/health` and `/version`
+        are never protected.
+  parameters:
+    messageId:
+      name: id
+      in: path
+      required: true
+      description: >
+        Message id, or any unambiguous prefix of it. An ambiguous prefix
+        returns `400 ambiguous_id`.
+      schema:
+        type: string
+      example: msg_01hz3k5xj8y3n1p9t3q7r0abcd
+    sessionId:
+      name: id
+      in: path
+      required: true
+      description: Session id, or any unambiguous prefix of it.
+      schema:
+        type: string
+      example: sess_01hz3k5xj8y3n1p9t3q7r0abcd
+    tagName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      example: important
+    q:
+      name: q
+      in: query
+      description: Full-text search query (FTS5 syntax; supports AND/OR/NOT and column filters like `subject:...`).
+      schema:
+        type: string
+    from:
+      name: from
+      in: query
+      description: Filter by sender address (substring match).
+      schema:
+        type: string
+    to:
+      name: to
+      in: query
+      description: Filter by recipient address (substring match).
+      schema:
+        type: string
+    subject:
+      name: subject
+      in: query
+      description: Filter by subject (substring match).
+      schema:
+        type: string
+    cc:
+      name: cc
+      in: query
+      schema:
+        type: string
+    bcc:
+      name: bcc
+      in: query
+      schema:
+        type: string
+    read:
+      name: read
+      in: query
+      description: Filter by read state.
+      schema:
+        type: boolean
+    hasAttachments:
+      name: has_attachments
+      in: query
+      schema:
+        type: boolean
+    parseWarning:
+      name: parse_warning
+      in: query
+      description: Filter to messages that had a MIME parse warning.
+      schema:
+        type: boolean
+    tag:
+      name: tag
+      in: query
+      description: Filter by tag name. Repeatable.
+      schema:
+        type: array
+        items:
+          type: string
+      style: form
+      explode: true
+    tagMode:
+      name: tag_mode
+      in: query
+      description: When multiple `tag` params are given, match `any` or `all` of them.
+      schema:
+        type: string
+        enum: [any, all]
+        default: any
+    limit:
+      name: limit
+      in: query
+      description: Maximum results to return (capped at 500).
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 500
+        default: 50
+    offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    since:
+      name: since
+      in: query
+      description: RFC 3339 timestamp lower bound.
+      schema:
+        type: string
+        format: date-time
+    until:
+      name: until
+      in: query
+      description: RFC 3339 timestamp upper bound.
+      schema:
+        type: string
+        format: date-time
+    sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+        enum: [received_at_desc, received_at_asc]
+        default: received_at_desc
+  responses:
+    BadRequest:
+      description: Invalid query parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: validation_error
+              message: "limit must be a non-negative integer"
+    AmbiguousID:
+      description: The id prefix matches more than one message.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: ambiguous_id
+              message: "id prefix msg_01 matches more than one message"
+    MessageNotFound:
+      description: No message with that id exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: message_not_found
+              message: "no message with id msg_xxx"
+    SessionNotFound:
+      description: No session with that id exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: session_not_found
+              message: "no session with id sess_xxx"
+    TagNotFound:
+      description: No tag with that name exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: tag_not_found
+              message: "no tag named important"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: message_not_found
+            message:
+              type: string
+              example: "no message with id msg_xxx"
+    MessageSummary:
+      type: object
+      required:
+        - id
+        - from
+        - to
+        - cc
+        - bcc
+        - subject
+        - size_bytes
+        - has_attachments
+        - attachment_count
+        - received_at
+        - parse_warning
+        - read
+        - tags
+        - preview
+      properties:
+        id:
+          type: string
+          example: msg_01hz3k5xj8y3n1p9t3q7r0abcd
+        from:
+          type: string
+          example: alice@example.com
+        from_name:
+          type: string
+          example: Alice Example
+        to:
+          type: array
+          items:
+            type: string
+          example: [bob@example.com]
+        to_names:
+          type: array
+          items:
+            type: string
+        cc:
+          type: array
+          items:
+            type: string
+        cc_names:
+          type: array
+          items:
+            type: string
+        bcc:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+          example: Welcome to maelsink
+        size_bytes:
+          type: integer
+          format: int64
+          example: 4213
+        has_attachments:
+          type: boolean
+        attachment_count:
+          type: integer
+        received_at:
+          type: string
+          format: date-time
+          example: "2026-08-17T09:15:00Z"
+        parse_warning:
+          type: boolean
+        read:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+          example: [onboarding]
+        preview:
+          type: string
+          example: Thanks for signing up! Here's how to get started...
+    Header:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+          example: Content-Type
+        value:
+          type: string
+          example: text/html; charset=utf-8
+    Attachment:
+      type: object
+      required: [id, filename, content_type, size_bytes]
+      properties:
+        id:
+          type: string
+          example: att_01hz3k5y0j2n1p9t3q7r0efgh
+        filename:
+          type: string
+          example: invoice.pdf
+        content_type:
+          type: string
+          example: application/pdf
+        size_bytes:
+          type: integer
+          format: int64
+          example: 20480
+        content_id:
+          type: string
+          nullable: true
+          description: Set only for inline images referenced via `cid:` in the HTML body.
+          example: null
+    MessageDetail:
+      allOf:
+        - $ref: '#/components/schemas/MessageSummary'
+        - type: object
+          required:
+            - headers
+            - text_body
+            - html_body
+            - attachments
+            - raw_size_bytes
+          properties:
+            headers:
+              type: array
+              items:
+                $ref: '#/components/schemas/Header'
+            text_body:
+              type: string
+              example: Thanks for signing up! Here's how to get started with maelsink.
+            html_body:
+              type: string
+              example: "<p>Thanks for signing up! Here's how to get started with maelsink.</p>"
+            attachments:
+              type: array
+              items:
+                $ref: '#/components/schemas/Attachment'
+            raw_size_bytes:
+              type: integer
+              format: int64
+              example: 4213
+            session_id:
+              type: string
+              description: Links to the SMTP session that produced this message. Omitted for messages saved outside a tracked SMTP session.
+              example: sess_01hz3k5xj8y3n1p9t3q7r0abcd
+    MessageListResponse:
+      type: object
+      required: [messages, total, limit, offset]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageSummary'
+        total:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+    MarkReadRequest:
+      type: object
+      properties:
+        read:
+          type: boolean
+          default: true
+          description: Omit (or send an empty body) to mark read; pass `false` to mark unread.
+    UpdateTagsRequest:
+      type: object
+      properties:
+        add:
+          type: array
+          items:
+            type: string
+          example: [important]
+        remove:
+          type: array
+          items:
+            type: string
+          example: [onboarding]
+    Stats:
+      type: object
+      required:
+        - total_messages
+        - total_size_bytes
+        - unread_count
+        - attachment_count
+        - parse_warning_count
+        - oldest_received_at
+        - newest_received_at
+      properties:
+        total_messages:
+          type: integer
+          example: 42
+        total_size_bytes:
+          type: integer
+          format: int64
+          example: 1048576
+        unread_count:
+          type: integer
+          example: 5
+        attachment_count:
+          type: integer
+          example: 7
+        parse_warning_count:
+          type: integer
+          example: 0
+        oldest_received_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-08-01T12:00:00Z"
+        newest_received_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-08-17T09:15:00Z"
+    TagStats:
+      type: object
+      required: [name, color, count, last_used]
+      properties:
+        name:
+          type: string
+          example: important
+        color:
+          type: string
+          example: "#e11d48"
+        count:
+          type: integer
+          example: 3
+        last_used:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-08-17T09:15:00Z"
+    CreateTagRequest:
+      type: object
+      required: [name, color]
+      properties:
+        name:
+          type: string
+          example: important
+        color:
+          type: string
+          example: "#e11d48"
+    PatchTagRequest:
+      type: object
+      description: At least one of `name` or `color` is required.
+      properties:
+        name:
+          type: string
+          example: urgent
+        color:
+          type: string
+          example: "#16a34a"
+    SessionSummary:
+      type: object
+      required: [id, client_ip, client_helo, started_at, ended_at, status, message_id]
+      properties:
+        id:
+          type: string
+          example: sess_01hz3k5xj8y3n1p9t3q7r0abcd
+        client_ip:
+          type: string
+          example: 127.0.0.1
+        client_helo:
+          type: string
+          example: client.example.com
+        started_at:
+          type: string
+          format: date-time
+          example: "2026-08-17T09:14:58Z"
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-08-17T09:15:00Z"
+        status:
+          type: string
+          example: completed
+        message_id:
+          type: string
+          nullable: true
+          example: msg_01hz3k5xj8y3n1p9t3q7r0abcd
+    TranscriptLine:
+      type: object
+      required: [direction, line, position]
+      properties:
+        direction:
+          type: string
+          enum: [send, recv]
+          example: recv
+        line:
+          type: string
+          example: "MAIL FROM:<alice@example.com>"
+        position:
+          type: integer
+          example: 3
+    SessionDetail:
+      allOf:
+        - $ref: '#/components/schemas/SessionSummary'
+        - type: object
+          required: [transcript]
+          properties:
+            transcript:
+              type: array
+              items:
+                $ref: '#/components/schemas/TranscriptLine'
+    SessionListResponse:
+      type: object
+      required: [sessions, total, limit, offset]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+        total:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+    Health:
+      type: object
+      required: [status, db, smtp]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+        db:
+          type: string
+          enum: [ok, error]
+          example: ok
+        smtp:
+          type: string
+          example: listening
+    Version:
+      type: object
+      required: [version, commit, build_date, go]
+      properties:
+        version:
+          type: string
+          example: "1.0.0"
+        commit:
+          type: string
+          example: a1b2c3d
+        build_date:
+          type: string
+          example: "2026-08-17T00:00:00Z"
+        go:
+          type: string
+          example: go1.26.4

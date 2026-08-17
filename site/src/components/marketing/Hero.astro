@@ -1,0 +1,81 @@
+---
+import { Image } from 'astro:assets';
+import inboxHero from '../../assets/screenshots/inbox-hero.png';
+
+const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/';
+---
+
+<section
+  class="relative overflow-hidden pt-20 pb-16 sm:pt-24"
+  style="background: radial-gradient(650px 320px at 82% -10%, #eeecff 0%, rgba(238,236,255,0) 70%), radial-gradient(500px 280px at 10% 0%, #eaf6ff 0%, rgba(234,246,255,0) 70%);"
+>
+  <div class="mx-auto flex max-w-[1160px] flex-col items-center gap-6 px-7 text-center">
+    <span
+      class="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold"
+      style="color: var(--ms-accent); background: #eeecff; border-color: #d9d5ff;"
+    >
+      <span class="relative inline-block h-1.5 w-1.5 rounded-full" style="background: var(--ms-success);"></span>
+      Single binary &middot; SMTP + Web UI + REST API
+    </span>
+
+    <h1
+      class="max-w-3xl text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl lg:text-[56px]"
+      style="color: var(--ms-text); letter-spacing: -0.025em;"
+    >
+      A fake SMTP server for<br />
+      your <span
+        class="bg-clip-text text-transparent"
+        style="background-image: linear-gradient(100deg, var(--ms-accent), #9b7bff);"
+      >real</span> development flow
+    </h1>
+
+    <p class="max-w-xl text-lg leading-relaxed" style="color: var(--ms-text-soft);">
+      maelsink catches every email your app sends in dev, staging, and CI — no real
+      recipients, no surprises. One binary, a realtime web UI, and a REST API your test
+      suite can talk to.
+    </p>
+
+    <div class="mt-1 flex flex-wrap items-center justify-center gap-3">
+      <a
+        href="https://github.com/0funct0ry/maelsink/releases/latest"
+        class="inline-flex items-center gap-2 rounded-lg px-6 py-3.5 text-[15px] font-semibold text-white shadow-lg transition hover:-translate-y-0.5"
+        style="background: var(--ms-accent); box-shadow: 0 4px 10px rgba(99,91,255,0.28);"
+      >
+        <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        Download maelsink
+      </a>
+      <a
+        href={`${base}docs/`}
+        class="inline-flex items-center gap-2 rounded-lg border px-6 py-3.5 text-[15px] font-semibold transition hover:border-[var(--ms-text-soft)]"
+        style="color: var(--ms-text); border-color: var(--ms-border); background: var(--ms-bg);"
+      >
+        <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="currentColor" stroke-width="1.6"></path></svg>
+        Read the docs
+      </a>
+    </div>
+
+    <div class="mt-0.5 text-[12.5px]" style="color: #9aa1b1; font-family: var(--ms-font-mono);">
+      Homebrew &middot; Scoop &middot; Docker &middot; or grab a binary from <a href="https://github.com/0funct0ry/maelsink/releases" class="underline" style="color: var(--ms-accent);">GitHub Releases</a>
+    </div>
+  </div>
+
+  <!-- product showcase: a real screenshot of the running Web UI -->
+  <div class="mx-auto mt-12 max-w-[1160px] px-7">
+    <figure
+      class="mx-auto max-w-[980px] overflow-hidden rounded-2xl border"
+      style="border-color: var(--ms-border); background: var(--ms-bg); box-shadow: 0 24px 64px rgba(26,31,54,0.14), 0 4px 12px rgba(26,31,54,0.06);"
+    >
+      <Image
+        src={inboxHero}
+        alt="The maelsink Web UI showing four captured messages arriving in realtime"
+        width={980}
+        loading="eager"
+        class="block w-full"
+      />
+    </figure>
+    <p class="mt-4 flex items-center justify-center gap-2 text-[13px]" style="color: #9aa1b1;">
+      <span class="h-1.5 w-1.5 rounded-full" style="background: var(--ms-success);"></span>
+      Updates in realtime over WebSockets — no refresh needed
+    </p>
+  </div>
+</section>

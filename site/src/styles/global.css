@@ -1,0 +1,78 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+:root {
+  --ms-bg: #ffffff;
+  --ms-surface: #f7f7fa;
+  --ms-text: #1a1f36;
+  --ms-text-soft: #6b7280;
+  --ms-border: #e5e7eb;
+  --ms-accent: #635bff;
+  --ms-accent-hover: #514adb;
+  --ms-success: #0ea472;
+  --ms-success-bg: #e6f7f1;
+  --ms-warning: #b45309;
+  --ms-warning-bg: #fef3e2;
+  --ms-code-bg: #1a1f36;
+  --ms-code-comment: #8891ab;
+  --ms-code-string: #7ee2b8;
+  --ms-code-value: #a89bff;
+  --ms-font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --ms-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+body {
+  font-family: var(--ms-font-sans);
+}
+
+code, pre, .ms-mono {
+  font-family: var(--ms-font-mono);
+}
+
+/* Thin, on-brand scrollbars instead of the browser default. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c7cbe0 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #c7cbe0;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ms-accent);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark terminal/code panels need a lighter, more subtle thumb than the
+   page-wide default — a light-gray pill on near-black reads as harsh. */
+pre {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+pre::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+
+pre::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.4);
+}

@@ -1,0 +1,154 @@
+---
+title: Runtime Options
+description: The full config-layering system and the canonical key/default/env/flag table for every setting.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every setting in maelsink can be configured four ways, layered from lowest to highest
+precedence:
+
+1. **Built-in defaults** — baked into the binary.
+2. **`maelsink.yaml`** — a config file, path given via `-c/--config`.
+3. **`MAELSINK_*` environment variables** — override the file.
+4. **CLI flags** — override everything, only in effect for that invocation.
+
+A value set at a higher layer always wins, regardless of what's set below it. For
+example, a `--smtp-port` flag beats `MAELSINK_SMTP_PORT` beats a `port:` line under
+`smtp:` in `maelsink.yaml` beats the built-in default of `1025`.
+
+Environment variables follow one fixed convention: `MAELSINK_<SECTION>_<KEY>`, with dots
+replaced by underscores and everything uppercased. For example, `smtp.max_message_size_mb`
+becomes `MAELSINK_SMTP_MAX_MESSAGE_SIZE_MB`.
+
+<Aside type="note">
+`MAELSINK_SMTP_AUTH` (a space-separated list of `user:pass` pairs) is an exception: it's
+env-only, parsed directly by the `serve` command, and has no YAML key or CLI flag. It's
+intended for quick CI use — see [Password files](/maelsink/docs/configuration/password-files/).
+</Aside>
+
+## The table
+
+Every row below is a complete key: its YAML path, type, default, environment variable,
+and CLI flag (long and short form, where one exists).
+
+### smtp
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `smtp.host` | string | `127.0.0.1` | `MAELSINK_SMTP_HOST` | `-H, --smtp-host` |
+| `smtp.port` | int | `1025` | `MAELSINK_SMTP_PORT` | `-p, --smtp-port` |
+| `smtp.domain` | string | `maelsink.local` | `MAELSINK_SMTP_DOMAIN` | `-m, --smtp-domain` |
+| `smtp.max_message_size_mb` | int | `25` | `MAELSINK_SMTP_MAX_MESSAGE_SIZE_MB` | `-s, --smtp-max-message-size-mb` |
+| `smtp.require_starttls` | bool | `false` | `MAELSINK_SMTP_REQUIRE_STARTTLS` | `-R, --smtp-require-starttls` |
+| `smtp.require_tls` | bool | `false` | `MAELSINK_SMTP_REQUIRE_TLS` | `-S, --smtp-require-tls` |
+| `smtp.tls_cert` | string | `""` | `MAELSINK_SMTP_TLS_CERT` | `-C, --smtp-tls-cert` |
+| `smtp.tls_key` | string | `""` | `MAELSINK_SMTP_TLS_KEY` | `-K, --smtp-tls-key` |
+| `smtp.auth.enabled` | bool | `false` | `MAELSINK_SMTP_AUTH_ENABLED` | `-a, --smtp-auth-enabled` |
+| `smtp.auth.username` | string | `""` | `MAELSINK_SMTP_AUTH_USERNAME` | `-U, --smtp-auth-username` |
+| `smtp.auth.password` | string | `""` | `MAELSINK_SMTP_AUTH_PASSWORD` | `-W, --smtp-auth-password` |
+| `smtp.auth.file` | string | `""` | `MAELSINK_SMTP_AUTH_FILE` | `-f, --smtp-auth-file` |
+| `smtp.auth.allow_insecure` | bool | `false` | `MAELSINK_SMTP_AUTH_ALLOW_INSECURE` | `-I, --smtp-auth-allow-insecure` |
+| `smtp.auth.accept_any` | bool | `false` | `MAELSINK_SMTP_AUTH_ACCEPT_ANY` | `-Y, --smtp-auth-accept-any` |
+
+### web
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `web.enabled` | bool | `true` | `MAELSINK_WEB_ENABLED` | `-e, --web-enabled` |
+| `web.host` | string | `127.0.0.1` | `MAELSINK_WEB_HOST` | `-w, --web-host` |
+| `web.port` | int | `8080` | `MAELSINK_WEB_PORT` | `-P, --web-port` |
+| `web.base_path` | string | `""` | `MAELSINK_WEB_BASE_PATH` | `-b, --web-base-path` |
+| `web.cors_origins` | []string | `[]` | `MAELSINK_WEB_CORS_ORIGINS` | `-O, --web-cors-origins` |
+| `web.auth.file` | string | `""` | `MAELSINK_WEB_AUTH_FILE` | `-L, --web-auth-file` |
+| `web.tls.cert` | string | `""` | `MAELSINK_WEB_TLS_CERT` | `-q, --web-tls-cert` |
+| `web.tls.key` | string | `""` | `MAELSINK_WEB_TLS_KEY` | `-z, --web-tls-key` |
+
+Headless mode — running with no web UI at all — is its own flag, `-u/--headless`
+(bool, default `false`), not a `web.*` config key.
+
+### api
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `api.host` | string | `127.0.0.1` | `MAELSINK_API_HOST` | `-A, --api-host` |
+| `api.port` | int | `9090` | `MAELSINK_API_PORT` | `-o, --api-port` |
+| `api.base_path` | string | `""` | `MAELSINK_API_BASE_PATH` | `-B, --api-base-path` |
+| `api.auth.enabled` | bool | `false` | `MAELSINK_API_AUTH_ENABLED` | `-y, --api-auth-enabled` |
+| `api.auth.api_key` | string | `""` | `MAELSINK_API_AUTH_API_KEY` | `-k, --api-auth-api-key` |
+
+### storage
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `storage.driver` | string | `sqlite` | `MAELSINK_STORAGE_DRIVER` | `-r, --storage-driver` |
+| `storage.path` | string | `./maelsink.db` | `MAELSINK_STORAGE_PATH` | `-d, --db` |
+| `storage.retention.max_messages` | int | `0` | `MAELSINK_STORAGE_RETENTION_MAX_MESSAGES` | `-M, --retention-max-messages` |
+| `storage.retention.max_age_hours` | int | `0` | `MAELSINK_STORAGE_RETENTION_MAX_AGE_HOURS` | `-g, --retention-max-age-hours` |
+| `storage.retention.sweep_interval_minutes` | int | `5` | `MAELSINK_STORAGE_RETENTION_SWEEP_INTERVAL_MINUTES` | `-i, --retention-sweep-interval-minutes` |
+| `storage.attachments.store_on_disk` | bool | `false` | `MAELSINK_STORAGE_ATTACHMENTS_STORE_ON_DISK` | `-n, --storage-attachments-store-on-disk` |
+| `storage.attachments.disk_path` | string | `./attachments` | `MAELSINK_STORAGE_ATTACHMENTS_DISK_PATH` | `-x, --storage-attachments-disk-path` |
+
+A `max_messages`/`max_age_hours` of `0` means unlimited (no retention pruning).
+
+### logging
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `logging.level` | string | `info` | `MAELSINK_LOGGING_LEVEL` | `-l, --log-level` (root) |
+| `logging.format` | string | `text` | `MAELSINK_LOGGING_FORMAT` | `-F, --log-format` (root) |
+| `logging.file` | string | `""` | `MAELSINK_LOGGING_FILE` | `-j, --log-file` (root) |
+
+Logging flags are registered on the root command (inherited by every subcommand), not
+on `serve` specifically.
+
+### server
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `server.shutdown_timeout_seconds` | int | `15` | `MAELSINK_SERVER_SHUTDOWN_TIMEOUT_SECONDS` | `-T, --server-shutdown-timeout-seconds` |
+
+### shell
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `shell.command_prefix` | string | `""` | `MAELSINK_SHELL_COMMAND_PREFIX` | `-x, --command-prefix` |
+| `shell.prompt` | string | `` maelsink{{ if not .connected }} (offline){{ end }}> `` | `MAELSINK_SHELL_PROMPT` | `-R, --prompt` |
+| `shell.history_file` | string | `""` | `MAELSINK_SHELL_HISTORY_FILE` | `-Y, --history-file` |
+| `shell.history_size` | int | `5000` | `MAELSINK_SHELL_HISTORY_SIZE` | `-z, --history-size` |
+| `shell.color` | string | `auto` | `MAELSINK_SHELL_COLOR` | `-L, --color` |
+| `shell.seed` | int64 | `0` | `MAELSINK_SHELL_SEED` | `-S, --seed` |
+| `shell.editor` | string | `""` | `MAELSINK_SHELL_EDITOR` | `-E, --editor` |
+| `shell.sh_enabled` | bool | `true` | `MAELSINK_SHELL_SH_ENABLED` | `-X, --sh-enabled` |
+| `shell.exit_on_error` | bool | `false` | `MAELSINK_SHELL_EXIT_ON_ERROR` | `-Q, --exit-on-error` |
+| `shell.abbr_trigger_key` | string | `space` | `MAELSINK_SHELL_ABBR_TRIGGER_KEY` | `-G, --abbr-trigger-key` |
+| `shell.template_enabled` | bool | `true` | `MAELSINK_SHELL_TEMPLATE_ENABLED` | `-t, --template-enabled` |
+| `shell.template_unsafe_funcs` | bool | `false` | `MAELSINK_SHELL_TEMPLATE_UNSAFE_FUNCS` | `-Z, --template-unsafe-funcs` |
+
+These `shell.*` keys apply only to `maelsink shell`, and are not part of `serve`'s flag
+set.
+
+### compose
+
+| Key | Type | Default | Env var | Flag |
+|---|---|---|---|---|
+| `compose.listen` | string | `:8090` | `MAELSINK_COMPOSE_LISTEN` | `-L, --listen` |
+| `compose.api_addr` | string | `http://localhost:9090` | `MAELSINK_COMPOSE_API_ADDR` | `-A, --api-addr` |
+| `compose.api_user` | string | `""` | `MAELSINK_COMPOSE_API_USER` | `-u, --api-user` |
+| `compose.api_pass` | string | `""` | `MAELSINK_COMPOSE_API_PASS` | `-P, --api-pass` |
+| `compose.api_insecure_skip_verify` | bool | `false` | `MAELSINK_COMPOSE_API_INSECURE_SKIP_VERIFY` | `-k, --api-insecure-skip-verify` |
+| `compose.api_ca_cert` | string | `""` | `MAELSINK_COMPOSE_API_CA_CERT` | `-C, --api-ca-cert` |
+| `compose.smtp_addr` | string | `127.0.0.1:1025` | `MAELSINK_COMPOSE_SMTP_ADDR` | `-S, --smtp-addr` |
+| `compose.smtp_user` | string | `""` | `MAELSINK_COMPOSE_SMTP_USER` | `-U, --smtp-user` |
+| `compose.smtp_pass` | string | `""` | `MAELSINK_COMPOSE_SMTP_PASS` | `-W, --smtp-pass` |
+| `compose.open` | bool | `false` | `MAELSINK_COMPOSE_OPEN` | `-o, --open` |
+
+These `compose.*` keys apply only to `maelsink compose`.
+
+## Other pages that build on this table
+
+- [Web UI and API server](/maelsink/docs/configuration/web-ui-and-api-server/) — `web.*`/`api.*`
+  keys in context.
+- [SMTP server](/maelsink/docs/configuration/smtp-server/) — `smtp.*` keys in context.
+- [TLS certificates](/maelsink/docs/configuration/tls-certificates/) — `*.tls.*` keys in context.
+- [Password files](/maelsink/docs/configuration/password-files/) — `*.auth.file` keys in context.

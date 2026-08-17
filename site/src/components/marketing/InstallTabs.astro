@@ -1,0 +1,102 @@
+---
+const tabs = [
+  {
+    id: 'binary',
+    label: 'Binary',
+    lines: [
+      '# download the tarball for your OS/arch from GitHub Releases',
+      'curl -LO https://github.com/0funct0ry/maelsink/releases/latest/download/maelsink_$(uname -s)_$(uname -m).tar.gz',
+    ],
+  },
+  {
+    id: 'homebrew',
+    label: 'Homebrew',
+    lines: ['brew tap 0funct0ry/maelsink   # or: brew install 0funct0ry/maelsink/maelsink', 'brew install maelsink'],
+  },
+  {
+    id: 'scoop',
+    label: 'Scoop',
+    lines: ['scoop bucket add maelsink https://github.com/0funct0ry/scoop-maelsink', 'scoop install maelsink'],
+  },
+  {
+    id: 'docker',
+    label: 'Docker',
+    lines: [
+      'docker run --rm -p 1025:1025 -p 8080:8080 -p 9090:9090 \\',
+      '  ghcr.io/0funct0ry/maelsink:latest',
+    ],
+  },
+];
+---
+
+<section id="install" class="py-20 sm:py-24">
+  <div class="mx-auto max-w-[1160px] px-7">
+    <div class="mx-auto mb-10 max-w-xl text-center">
+      <div class="mb-3 text-[12.5px] font-bold uppercase tracking-wider" style="color: var(--ms-accent);">Get started</div>
+      <h2 class="mb-3 text-2xl font-bold tracking-tight sm:text-[34px]" style="color: var(--ms-text); letter-spacing: -0.02em;">
+        Install in one line
+      </h2>
+      <p class="text-base leading-relaxed" style="color: var(--ms-text-soft);">
+        Pick the path that fits your workflow — all four ship from the same release.
+      </p>
+    </div>
+
+    <div class="ms-install-tabs mx-auto max-w-[640px]">
+      <div class="mb-6 flex flex-wrap justify-center gap-2" role="tablist">
+        {tabs.map((t, i) => (
+          <button
+            type="button"
+            class="ms-install-tab rounded-full border px-4 py-2 text-[13.5px] font-semibold transition"
+            data-tab={t.id}
+            aria-selected={i === 0 ? 'true' : 'false'}
+            style={
+              i === 0
+                ? 'background: var(--ms-text); color: #fff; border-color: var(--ms-text);'
+                : 'background: var(--ms-bg); color: var(--ms-text-soft); border-color: var(--ms-border);'
+            }
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tabs.map((t, i) => (
+        <div
+          class="ms-install-panel rounded-xl px-6 py-5"
+          data-panel={t.id}
+          style={`background: var(--ms-code-bg); ${i === 0 ? '' : 'display:none;'}`}
+        >
+          <pre class="overflow-x-auto text-[13.5px] leading-relaxed" style={`font-family: var(--ms-font-mono); color: #e7e9f5;`}><code>{t.lines.join('\n')}</code></pre>
+        </div>
+      ))}
+    </div>
+
+    <div class="mt-6 flex flex-wrap justify-center gap-6 text-[13px]" style={`font-family: var(--ms-font-mono); color: #9aa1b1;`}>
+      <span>macOS (arm64 / amd64)</span>
+      <span>Linux (arm64 / amd64)</span>
+      <span>Windows (amd64)</span>
+    </div>
+  </div>
+</section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll<HTMLButtonElement>('.ms-install-tab');
+    const panels = document.querySelectorAll<HTMLElement>('.ms-install-panel');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        tabs.forEach((t) => {
+          const active = t === tab;
+          t.setAttribute('aria-selected', String(active));
+          t.style.background = active ? 'var(--ms-text)' : 'var(--ms-bg)';
+          t.style.color = active ? '#fff' : 'var(--ms-text-soft)';
+          t.style.borderColor = active ? 'var(--ms-text)' : 'var(--ms-border)';
+        });
+        panels.forEach((p) => {
+          p.style.display = p.dataset.panel === target ? '' : 'none';
+        });
+      });
+    });
+  });
+</script>

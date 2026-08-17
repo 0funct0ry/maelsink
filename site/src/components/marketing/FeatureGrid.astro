@@ -1,0 +1,69 @@
+---
+const features = [
+  {
+    title: 'Real SMTP, zero delivery',
+    desc: 'Speaks HELO/EHLO, STARTTLS, and AUTH — accepts mail for any recipient and never relays a single message out.',
+    icon: 'M3 6.5L12 13L21 6.5M3 6.5C3 5.4 3.9 4.5 5 4.5H19C20.1 4.5 21 5.4 21 6.5V15C21 17.5 18.5 20 15 20H9C5.5 20 3 17.5 3 15V6.5Z',
+  },
+  {
+    title: 'Realtime by default',
+    desc: "Mail lands in the UI over WebSockets the instant it's captured. No polling, no manual refresh, no delay.",
+    icon: 'M13 2L3 14h7l-1 8 10-12h-7l1-8z',
+  },
+  {
+    title: 'Single embedded binary',
+    desc: 'The web UI ships baked into the Go binary. No separate frontend deploy, no node_modules in production.',
+    icon: 'M4 17V7a2 2 0 012-2h9l5 5v7a2 2 0 01-2 2H6a2 2 0 01-2-2z',
+  },
+  {
+    title: 'Full REST API',
+    desc: 'Every message, header, and attachment is reachable over a stable, documented API — perfect for assertions in your test suite.',
+    icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 21H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4',
+  },
+  {
+    title: 'CI-friendly by design',
+    desc: 'Run headless, script against it with maelsink send, and tear it down clean every run.',
+    icon: 'M8 9l-5 5 5 5M16 5l5 5-5 5',
+  },
+  {
+    title: 'Reverse-proxy ready',
+    desc: 'Deploy behind HAProxy or nginx under a subpath for the whole team, with realtime WebSocket support included.',
+    icon: 'M12 3a9 9 0 100 18 9 9 0 000-18z',
+  },
+];
+---
+
+<section id="features" class="py-20 sm:py-24">
+  <div class="mx-auto max-w-[1160px] px-7">
+    <div class="mx-auto mb-12 max-w-xl text-center">
+      <div class="mb-3 text-[12.5px] font-bold uppercase tracking-wider" style="color: var(--ms-accent);">Why maelsink</div>
+      <h2 class="mb-3 text-2xl font-bold tracking-tight sm:text-[34px]" style="color: var(--ms-text); letter-spacing: -0.02em;">
+        Built for how you actually test email
+      </h2>
+      <p class="text-base leading-relaxed" style="color: var(--ms-text-soft);">
+        Not a hosted inbox service, not a mail-log-scraper — a purpose-built sink that
+        speaks SMTP, so anything you can already send mail to, you can point at maelsink.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {features.map((f) => (
+        <div
+          class="rounded-2xl border p-6 transition hover:-translate-y-0.5"
+          style="border-color: var(--ms-border); background: var(--ms-bg);"
+        >
+          <div
+            class="mb-4 flex h-10 w-10 items-center justify-center rounded-[10px]"
+            style="background: #eeecff; color: var(--ms-accent);"
+          >
+            <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5">
+              <path d={f.icon} stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <div class="mb-2 text-base font-semibold" style="color: var(--ms-text);">{f.title}</div>
+          <div class="text-[13.8px] leading-relaxed" style="color: var(--ms-text-soft);">{f.desc}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

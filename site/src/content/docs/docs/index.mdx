@@ -1,0 +1,32 @@
+---
+title: maelsink docs
+description: Documentation for maelsink, a single-binary fake SMTP server for local dev and CI.
+---
+
+**maelsink** is a single-binary fake SMTP server for local development and CI. It accepts
+any mail sent to it over SMTP, stores every message in SQLite, and exposes those messages
+through a web UI and a REST API. It never relays mail anywhere — it's a sink, not an MTA.
+
+Point your application's SMTP settings at a local maelsink instance, send mail as normal,
+and watch every message land in the inbox instead of a real mailbox.
+
+## Where to start
+
+- **New to maelsink?** Head to [Getting Started](/maelsink/docs/getting-started/) — install, run,
+  send a test email, and see it appear, in under two minutes.
+- **Want the full picture first?** [Features](/maelsink/docs/features/) is a map of everything
+  maelsink can do, with links into the guide for each capability.
+
+## The three services
+
+maelsink runs three independently-configurable network listeners concurrently in one
+process:
+
+| Service | Default Port | Purpose |
+|---|---|---|
+| SMTP Server | 1025 | Accepts incoming mail from apps under test |
+| Web UI Server | 8080 | Embedded web app + internal APIs + WebSocket updates |
+| REST API | 9090 | Stable `/api/v1/*` surface, also mounted on the Web UI port |
+
+See [Configuration → Runtime options](/maelsink/docs/configuration/runtime-options/) for the full
+list of settings and how to change them via config file, environment variable, or CLI flag.

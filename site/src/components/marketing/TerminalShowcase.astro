@@ -1,0 +1,59 @@
+---
+const checklist = [
+  'No config beyond an SMTP host/port — works with any mail library',
+  'Sensible defaults, fully overridable via flags, env vars, or a config file',
+  'Ship a maelsink send smoke test straight into CI',
+];
+---
+
+<section id="how-it-works" class="py-20 sm:py-24" style="background: var(--ms-surface);">
+  <div class="mx-auto grid max-w-[1160px] grid-cols-1 gap-10 px-7 lg:grid-cols-2 lg:items-center lg:gap-12">
+    <div>
+      <div class="mb-3 text-[12.5px] font-bold uppercase tracking-wider" style="color: var(--ms-accent);">How it works</div>
+      <h2 class="mb-3.5 text-2xl font-bold tracking-tight sm:text-[30px]" style="color: var(--ms-text); letter-spacing: -0.02em;">
+        Point, send, inspect. That's it.
+      </h2>
+      <p class="mb-5 text-[15px] leading-relaxed" style="color: var(--ms-text-soft);">
+        Configure your app's SMTP settings to localhost:1025 (or wherever you run
+        maelsink), and every message it sends shows up captured — headers, MIME
+        parts, attachments, raw source — ready to inspect in the UI or pull via
+        the API.
+      </p>
+      <div class="flex flex-col gap-2.5">
+        {checklist.map((item) => (
+          <div class="flex items-start gap-2.5 text-sm" style="color: var(--ms-text);">
+            <svg viewBox="0 0 24 24" fill="none" class="mt-0.5 h-4 w-4 flex-none" style="color: var(--ms-success);">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="overflow-hidden rounded-xl" style="background: var(--ms-code-bg); box-shadow: 0 20px 50px rgba(26,31,54,0.25);">
+      <div class="flex items-center gap-2 px-3.5 py-2.5" style="background: #20263f; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <span class="h-[11px] w-[11px] rounded-full" style="background:#ff5f57"></span>
+        <span class="h-[11px] w-[11px] rounded-full" style="background:#febc2e"></span>
+        <span class="h-[11px] w-[11px] rounded-full" style="background:#28c840"></span>
+        <span class="ml-2 text-[11.5px]" style={`font-family: var(--ms-font-mono); color: var(--ms-code-comment);`}>~/acme-app</span>
+      </div>
+      <div class="px-5 py-5 text-[13px] leading-[1.85]" style={`font-family: var(--ms-font-mono); color: #c6cbe0;`}>
+        <div><span style="color: var(--ms-code-string);">$</span> <span style="color:#e7e9f5;">maelsink serve</span></div>
+        <div style={`color: var(--ms-code-comment);`}>maelsink v1.0.0</div>
+        <div style={`color: var(--ms-code-comment);`}>&nbsp;&nbsp;SMTP&nbsp;&nbsp;&nbsp;&nbsp;→ 0.0.0.0:1025</div>
+        <div style={`color: var(--ms-code-comment);`}>&nbsp;&nbsp;Web UI&nbsp;&nbsp;&nbsp;→ http://0.0.0.0:8080/</div>
+        <div style={`color: var(--ms-code-comment);`}>&nbsp;&nbsp;REST API → http://0.0.0.0:9090/api/v1</div>
+        <div style={`color: var(--ms-code-comment);`}>Ready. Send mail to localhost:1025 to see it appear here.</div>
+        <div>&nbsp;</div>
+        <div><span style="color: var(--ms-code-string);">$</span> <span style="color:#e7e9f5;">maelsink send --to=you@example.com --subject="test" --text="hello"</span></div>
+        <div style={`color: var(--ms-code-comment);`}>✓ delivered to maelsink (msg_01hzy...)</div>
+        <div>&nbsp;</div>
+        <div><span style="color: var(--ms-code-string);">$</span> <span style="color:#e7e9f5;">maelsink list --format table</span></div>
+        <div style={`color: var(--ms-code-comment);`}>ID&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FROM&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SUBJECT&nbsp;&nbsp;&nbsp;&nbsp;RECEIVED</div>
+        <div style={`color: var(--ms-code-comment);`}>msg_01hzy…&nbsp;&nbsp;<span style="color: var(--ms-code-value);">you@example.com</span>&nbsp;&nbsp;test&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;just now</div>
+        <div><span style="color: var(--ms-code-string);">$</span> <span class="inline-block h-3.5 w-[7px] animate-pulse" style="background: var(--ms-code-string);"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
