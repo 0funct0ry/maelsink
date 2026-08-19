@@ -82,7 +82,7 @@ Headless mode — running with no web UI at all — is its own flag, `-u/--headl
 | Key | Type | Default | Env var | Flag |
 |---|---|---|---|---|
 | `storage.driver` | string | `sqlite` | `MAELSINK_STORAGE_DRIVER` | `-r, --storage-driver` |
-| `storage.path` | string | `./maelsink.db` | `MAELSINK_STORAGE_PATH` | `-d, --db` |
+| `storage.path` | string | `""` (in-memory) | `MAELSINK_STORAGE_PATH` | `-d, --db` |
 | `storage.retention.max_messages` | int | `0` | `MAELSINK_STORAGE_RETENTION_MAX_MESSAGES` | `-M, --retention-max-messages` |
 | `storage.retention.max_age_hours` | int | `0` | `MAELSINK_STORAGE_RETENTION_MAX_AGE_HOURS` | `-g, --retention-max-age-hours` |
 | `storage.retention.sweep_interval_minutes` | int | `5` | `MAELSINK_STORAGE_RETENTION_SWEEP_INTERVAL_MINUTES` | `-i, --retention-sweep-interval-minutes` |
@@ -90,6 +90,26 @@ Headless mode — running with no web UI at all — is its own flag, `-u/--headl
 | `storage.attachments.disk_path` | string | `./attachments` | `MAELSINK_STORAGE_ATTACHMENTS_DISK_PATH` | `-x, --storage-attachments-disk-path` |
 
 A `max_messages`/`max_age_hours` of `0` means unlimited (no retention pruning).
+
+<Aside type="caution">
+`storage.path`/`-d, --db` has three distinct outcomes, not two:
+
+- **Omitted everywhere** (no flag, no `MAELSINK_STORAGE_PATH`, no `storage.path` in
+  `maelsink.yaml`) — maelsink uses a transient **in-memory** SQLite database. All
+  messages are lost when the process exits; nothing is written to disk.
+- **Set to an empty string explicitly** (`--db ""`, a bare `--db`/`-d` with no
+  value at all, `MAELSINK_STORAGE_PATH=""`, or `path: ""` in the config file) —
+  maelsink falls back to the default file, `./maelsink.db`, in the current
+  working directory.
+- **Set to a path** (`--db /data/maelsink.db`, etc.) — that exact file is used,
+  created if it doesn't already exist.
+
+The running server's startup log always states which of the three is in effect
+(`Storage -> ...`), and the Web UI's Settings screen shows `(in-memory)` for
+`storage.path` when no persistent file is configured. In the sidebar's storage
+widget, a `MEMORY` pill (hover for details) replaces the filename when running
+in-memory.
+</Aside>
 
 ### logging
 

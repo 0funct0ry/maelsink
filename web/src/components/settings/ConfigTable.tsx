@@ -25,7 +25,12 @@ function sourceBadgeVariant(layer: ConfigSource['layer']) {
   return `source-${layer}` as const
 }
 
-function formatValue(value: unknown): string {
+function formatValue(key: string, value: unknown): string {
+  // storage.path resolves to "" when --db/-d was never given (nor set via
+  // config file/env) — the server falls back to a transient in-memory
+  // SQLite database rather than ./maelsink.db in that case. Render that
+  // distinctly instead of an empty-looking cell that reads as "unset".
+  if (key === 'storage.path' && value === '') return '(in-memory)'
   if (Array.isArray(value)) return value.length === 0 ? '[]' : value.join(', ')
   if (typeof value === 'boolean') return value ? 'true' : 'false'
   return String(value)
@@ -158,7 +163,7 @@ export default function ConfigTable() {
                           </span>
                         </td>
                         <td className="w-1/3 py-2 pr-4 font-mono text-text-primary">
-                          {row.secret ? formatSecretValue(row.value) : formatValue(row.value)}
+                          {row.secret ? formatSecretValue(row.value) : formatValue(row.key, row.value)}
                         </td>
                         <td className="py-2 pr-4">
                           <Badge variant={sourceBadgeVariant(row.source.layer)}>{SOURCE_LABEL[row.source.layer]}</Badge>

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -39,9 +40,38 @@ Running "maelsink" with no subcommand is equivalent to "maelsink serve".`,
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	rootCmd.SetArgs(normalizeBareDBFlag(os.Args[1:]))
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// normalizeBareDBFlag rewrites a trailing/unaccompanied "--db"/"-d" (no
+// argument at all — the last token, or immediately followed by another
+// flag) to "--db=", before cobra/pflag ever parses args.
+//
+// This exists instead of pflag's NoOptDefVal mechanism because
+// NoOptDefVal's substitution isn't limited to the "no argument given" case:
+// once set, pflag *always* uses NoOptDefVal for "--db value"/"-d value"
+// (space-separated) too, since it can't tell a following positional-looking
+// token from that value's own intended argument — the same ambiguity every
+// optional-value flag has (a bare "--db" is genuinely indistinguishable
+// from "--db /path/to/file" without a rule for which token is which). This
+// rewrite keeps that documented space-separated form ("--db ./x.db")
+// working exactly as before, and only special-cases the truly-bare form.
+//
+// A real path can't itself start with "-" without --db=-foo — an edge case
+// shared with essentially every CLI flag parser, not specific to this rule.
+func normalizeBareDBFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i, a := range args {
+		if (a == "--db" || a == "-d") && (i+1 >= len(args) || strings.HasPrefix(args[i+1], "-")) {
+			out = append(out, "--db=")
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func init() {

@@ -111,7 +111,7 @@ func addServeFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&flagAPIBasePath, "api-base-path", "B", d.API.BasePath, "REST API reverse-proxy base path")
 	cmd.Flags().BoolVarP(&flagAPIAuthEnabled, "api-auth-enabled", "y", d.API.Auth.Enabled, "require a bearer API key on /api/v1")
 	cmd.Flags().StringVarP(&flagAPIAuthAPIKey, "api-auth-api-key", "k", d.API.Auth.APIKey, "REST API bearer key")
-	cmd.Flags().StringVarP(&flagDBPath, "db", "d", d.Storage.Path, "path to the SQLite database file")
+	cmd.Flags().StringVarP(&flagDBPath, "db", "d", d.Storage.Path, "path to the SQLite database file (omit for a transient in-memory database; pass with no value, or an empty string, to force the default file, "+config.DefaultDBPath+")")
 	cmd.Flags().StringVarP(&flagStorageDriver, "storage-driver", "r", d.Storage.Driver, "storage driver")
 	cmd.Flags().BoolVarP(&flagStorageAttachmentsStoreOnDisk, "storage-attachments-store-on-disk", "n", d.Storage.Attachments.StoreOnDisk, "store attachments on disk instead of as SQLite BLOBs")
 	cmd.Flags().StringVarP(&flagStorageAttachmentsDiskPath, "storage-attachments-disk-path", "x", d.Storage.Attachments.DiskPath, "directory for on-disk attachment storage")
@@ -217,7 +217,17 @@ func resolveConfig(cmd *cobra.Command) (config.Config, config.Provenance, error)
 		overrides.APIAuthAPIKey = &flagAPIAuthAPIKey
 	}
 	if f.Changed("db") {
-		overrides.DBPath = &flagDBPath
+		dbPath := flagDBPath
+		if dbPath == "" {
+			// An explicit empty --db/-d (including a bare --db/-d with no
+			// argument at all, normalized to "--db=" by normalizeDBFlagArgs
+			// in root.go before cobra ever parses args) asks for the
+			// default persistent file, distinct from omitting the flag
+			// entirely (which leaves overrides.DBPath nil and falls through
+			// to Storage.Path's zero-value default: an in-memory database).
+			dbPath = config.DefaultDBPath
+		}
+		overrides.DBPath = &dbPath
 	}
 	if f.Changed("storage-driver") {
 		overrides.StorageDriver = &flagStorageDriver
@@ -390,7 +400,21 @@ func runServe(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "  Web UI   -> %s://%s:%d%s/\n", webScheme, cfg.Web.Host, cfg.Web.Port, cfg.Web.BasePath)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  REST API -> http://%s:%d%s/api/v1\n", cfg.API.Host, cfg.API.Port, cfg.API.BasePath)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Storage  -> %s (%s)\n", cfg.Storage.Path, cfg.Storage.Driver)
+	// Spell out which of the three storage.path outcomes is in effect
+	// (SPEC.md §3: unset -> in-memory, explicitly-empty flag -> the default
+	// file, or a path -> that file) rather than just printing the resolved
+	// path, since an in-memory run's data loss on restart is easy to miss
+	// otherwise.
+	var storageDisplay string
+	switch {
+	case cfg.Storage.Path == "":
+		storageDisplay = "in-memory (not persisted; data is lost on restart)"
+	case cfg.Storage.Path == config.DefaultDBPath:
+		storageDisplay = cfg.Storage.Path + " (default)"
+	default:
+		storageDisplay = cfg.Storage.Path
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "  Storage  -> %s (%s)\n", storageDisplay, cfg.Storage.Driver)
 
 	// Full graceful drain with a configurable timeout is M10.0's job; here
 	// we only need the listener and its connection-handler goroutines to

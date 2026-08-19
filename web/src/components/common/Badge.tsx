@@ -15,6 +15,10 @@ type BadgeVariant =
 interface BadgeProps {
   variant?: BadgeVariant
   children: ReactNode
+  /** Native tooltip shown on hover/focus — no dedicated Tooltip/Popover
+   * component exists in this codebase yet, so `title` is the established
+   * convention elsewhere (e.g. TagRow's icon buttons). */
+  title?: string
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
@@ -33,9 +37,10 @@ const variantClasses: Record<BadgeVariant, string> = {
   'source-flag': 'bg-accent-soft text-accent',
 }
 
-export default function Badge({ variant = 'default', children }: BadgeProps) {
+export default function Badge({ variant = 'default', children, title }: BadgeProps) {
   return (
     <span
+      title={title}
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${variantClasses[variant]}`}
     >
       {children}

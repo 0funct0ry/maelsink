@@ -20,7 +20,7 @@ Flags:
   -B, --api-base-path string                   REST API reverse-proxy base path
   -A, --api-host string                        REST API listen host (default "127.0.0.1")
   -o, --api-port int                           REST API listen port (default 9090)
-  -d, --db string                              path to the SQLite database file (default "./maelsink.db")
+  -d, --db string                              path to the SQLite database file (omit for a transient in-memory database; pass with no value, or an empty string, to force the default file, ./maelsink.db)
   -u, --headless                               shorthand for --web-enabled=false (headless mode)
   -h, --help                                   help for serve
   -g, --retention-max-age-hours int            max message age in hours (0 = unlimited)

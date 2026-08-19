@@ -41,6 +41,13 @@ const sampleEntries: ConfigEntry[] = [
     secret: false,
     source: { layer: 'flag', origin: '--api-port=9999' },
   },
+  {
+    section: 'storage',
+    key: 'storage.path',
+    value: '',
+    secret: false,
+    source: { layer: 'default', origin: '' },
+  },
 ]
 
 describe('ConfigTable', () => {
@@ -107,6 +114,14 @@ describe('ConfigTable', () => {
     vi.mocked(getConfig).mockRejectedValue(new Error('boom'))
     render(<ConfigTable />)
     await waitFor(() => expect(screen.getByText(/failed to load config/i)).toBeInTheDocument())
+  })
+
+  it('shows "(in-memory)" for an empty storage.path instead of a blank cell', async () => {
+    vi.mocked(getConfig).mockResolvedValue(sampleEntries)
+    render(<ConfigTable />)
+    await waitFor(() => expect(screen.getByText('storage.path')).toBeInTheDocument())
+
+    expect(screen.getByText('(in-memory)')).toBeInTheDocument()
   })
 
   it('masks secret entries instead of showing their value', async () => {

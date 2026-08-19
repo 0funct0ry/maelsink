@@ -76,6 +76,12 @@ type Attachments struct {
 	DiskPath    string `yaml:"disk_path" mapstructure:"disk_path"`
 }
 
+// DefaultDBPath is the on-disk SQLite path used when storage.path is
+// explicitly set to "" via --db/-d (rather than left unset): an explicit
+// empty flag value asks for the default persistent file, not the in-memory
+// database that an *unset* --db/-d resolves to (Storage.Path's zero value).
+const DefaultDBPath = "./maelsink.db"
+
 type Storage struct {
 	Driver      string      `yaml:"driver" mapstructure:"driver"`
 	Path        string      `yaml:"path" mapstructure:"path"`
@@ -169,7 +175,13 @@ func Defaults() Config {
 		},
 		Storage: Storage{
 			Driver: "sqlite",
-			Path:   "./maelsink.db",
+			// Path defaults to "" (in-memory) rather than DefaultDBPath: an
+			// empty storage.path means "no persistent database configured
+			// anywhere" and is resolved to a transient :memory: SQLite
+			// database by internal/store/sqlite.Open. --db/-d (and
+			// storage.path via file/env) can still be set to DefaultDBPath
+			// or any other path for a persistent, file-backed database.
+			Path: "",
 			Attachments: Attachments{
 				StoreOnDisk: false,
 				DiskPath:    "./attachments",
@@ -360,9 +372,6 @@ func (c Config) Validate() error {
 	case "debug", "info", "warn", "error":
 	default:
 		return fmt.Errorf("logging.level: must be debug|info|warn|error, got %q", c.Logging.Level)
-	}
-	if c.Storage.Path == "" {
-		return fmt.Errorf("storage.path: must not be empty")
 	}
 	if c.SMTP.MaxMessageSizeMB <= 0 {
 		return fmt.Errorf("smtp.max_message_size_mb: must be > 0, got %d", c.SMTP.MaxMessageSizeMB)

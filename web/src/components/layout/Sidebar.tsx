@@ -7,11 +7,18 @@ import { paletteByToken } from '../../lib/tagColor'
 import { deleteSavedSearch, listSavedSearches, saveSearch, type SavedSearch } from '../../lib/savedSearches'
 import { getInfo } from '../../lib/uiApiClient'
 import type { ListMessagesParams } from '../../lib/apiTypes'
+import Badge from '../common/Badge'
 
 // Fallback shown until getInfo() resolves, or if it fails — matches the
 // server's own default storage.path basename, so it's usually right even
 // before the real value loads.
 const DEFAULT_DB_FILENAME = 'maelsink.db'
+
+// Tooltip text for the "MEMORY" pill shown once getInfo() resolves with an
+// empty db_filename — that means storage.path resolved to "" (--db/-d
+// omitted, and not set via config file/env either), so the server is backed
+// by a transient in-memory SQLite database rather than a file on disk.
+const IN_MEMORY_TOOLTIP = 'Using an in-memory database — no data is written to disk, and all messages will be lost when maelsink restarts.'
 
 type MailboxFilter = 'all' | 'unread' | 'attachments' | 'warnings'
 
@@ -50,6 +57,7 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [newSearchName, setNewSearchName] = useState('')
   const [dbFilename, setDbFilename] = useState(DEFAULT_DB_FILENAME)
+  const [isInMemory, setIsInMemory] = useState(false)
 
   // Sidebar counts/tags live in useMessageStore (M7.0) so they stay in sync
   // with realtime message.created/deleted/messages.cleared events and with
@@ -68,7 +76,14 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
     let cancelled = false
     getInfo()
       .then((info) => {
-        if (!cancelled && info.db_filename) setDbFilename(info.db_filename)
+        if (cancelled) return
+        // info.db_filename is "" (not just absent) for an in-memory
+        // database, so it can't use the same falsy-check-and-keep-default
+        // pattern as a load failure would — that would leave the
+        // DEFAULT_DB_FILENAME fallback showing "maelsink.db" for a database
+        // that was never actually written to disk.
+        setIsInMemory(info.db_filename === '')
+        if (info.db_filename !== '') setDbFilename(info.db_filename)
       })
       .catch(() => {
         // Non-fatal: keeps the DEFAULT_DB_FILENAME fallback.
@@ -339,8 +354,14 @@ export default function Sidebar({ variant = 'desktop' }: SidebarProps) {
           <div className="h-[5px] overflow-hidden rounded-[3px] bg-border-soft">
             <div className="h-full w-[12%] rounded-[3px] bg-accent" />
           </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-[11.5px] text-text-tertiary">{dbFilename}</span>
+          <div className="flex items-center justify-between">
+            {isInMemory ? (
+              <Badge variant="warning" title={IN_MEMORY_TOOLTIP}>
+                MEMORY
+              </Badge>
+            ) : (
+              <span className="text-[11.5px] text-text-tertiary">{dbFilename}</span>
+            )}
             <span className="font-mono text-xs font-medium text-text-primary">{stats.total_messages} msgs</span>
           </div>
         </div>

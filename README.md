@@ -54,6 +54,14 @@ This starts maelsink with its default configuration:
 Point your application's SMTP client at `localhost:1025` and send mail —
 it'll show up in maelsink.
 
+By default (no `-d`/`--db` given, and no `storage.path` set via config file or
+env var) maelsink stores messages in a transient **in-memory** SQLite
+database — nothing is written to disk, and all messages are lost when the
+process exits. The startup log states which storage mode is active. Pass
+`--db <path>` (e.g. `--db ./maelsink.db`) for a persistent, file-backed
+database; passing `--db` with no value at all (or `--db ""` explicitly)
+falls back to the default file, `./maelsink.db`, in the current directory.
+
 By default maelsink only listens on `127.0.0.1` (loopback) — it's a
 development tool and isn't meant to be exposed on a network. To bind
 elsewhere (e.g. `0.0.0.0` inside a container), set `--smtp-host`,

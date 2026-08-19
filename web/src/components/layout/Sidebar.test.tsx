@@ -117,6 +117,27 @@ describe('Sidebar', () => {
     expect(screen.queryByText('maelsink.db')).not.toBeInTheDocument()
   })
 
+  it('shows a "MEMORY" pill with a tooltip when getInfo resolves with an empty db_filename', async () => {
+    vi.mocked(apiClient.getStats).mockResolvedValue({
+      total_messages: 5,
+      total_size_bytes: 2048,
+      unread_count: 0,
+      attachment_count: 0,
+      parse_warning_count: 0,
+      oldest_received_at: null,
+      newest_received_at: null,
+    })
+    vi.mocked(uiApiClient.getInfo).mockResolvedValue({
+      smtp: { host: '127.0.0.1', port: 1025 },
+      auth_enabled: false,
+      db_filename: '',
+    })
+    renderSidebar()
+    await waitFor(() => expect(screen.getByText('MEMORY')).toBeInTheDocument())
+    expect(screen.queryByText('maelsink.db')).not.toBeInTheDocument()
+    expect(screen.getByText('MEMORY').closest('span')).toHaveAttribute('title', expect.stringMatching(/no data is written to disk/))
+  })
+
   it('does not render the storage card when stats fail to load', async () => {
     vi.mocked(apiClient.getStats).mockRejectedValue(new Error('offline'))
     renderSidebar()

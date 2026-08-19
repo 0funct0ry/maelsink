@@ -20,26 +20,46 @@ import (
 
 const timeLayout = time.RFC3339Nano
 
+// inMemoryDSN is the modernc.org/sqlite DSN for a private, transient
+// database used when path is "" (SPEC.md §3: an unset --db/-d / storage.path
+// means "no persistent database configured"). It exists only for the
+// process lifetime and is lost on restart.
+const inMemoryDSN = ":memory:"
+
 // Open opens (creating if necessary) the SQLite database at path, enables
-// WAL mode and foreign keys, and runs every pending migration.
+// WAL mode and foreign keys, and runs every pending migration. An empty path
+// opens a transient in-memory database instead of a file.
 func Open(ctx context.Context, path string) (*sql.DB, error) {
-	if dir := filepath.Dir(path); dir != "." && dir != "" {
+	dsn := path
+	if dsn == "" {
+		dsn = inMemoryDSN
+	} else if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("sqlite: creating db directory: %w", err)
 		}
 	}
 
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: open: %w", err)
 	}
-	db.SetMaxOpenConns(1) // modernc.org/sqlite serializes writes; avoid SQLITE_BUSY churn.
+	// modernc.org/sqlite serializes writes (avoids SQLITE_BUSY churn), and a
+	// single shared connection is also what makes the in-memory DSN work at
+	// all: each *new* connection to ":memory:" would otherwise see its own
+	// empty, unmigrated database instead of the same one.
+	db.SetMaxOpenConns(1)
 
-	for _, pragma := range []string{
+	pragmas := []string{
 		"PRAGMA journal_mode=WAL",
 		"PRAGMA foreign_keys=ON",
 		"PRAGMA busy_timeout=5000",
-	} {
+	}
+	if dsn == inMemoryDSN {
+		// WAL requires a real file on disk; it's meaningless (and rejected
+		// by some SQLite builds) for an in-memory database.
+		pragmas = pragmas[1:]
+	}
+	for _, pragma := range pragmas {
 		if _, err := db.ExecContext(ctx, pragma); err != nil {
 			_ = db.Close()
 			return nil, fmt.Errorf("sqlite: %s: %w", pragma, err)
