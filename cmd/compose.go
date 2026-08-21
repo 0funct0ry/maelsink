@@ -53,6 +53,7 @@ attached.`,
 func init() {
 	rootCmd.AddCommand(composeCmd)
 	addComposeFlags(composeCmd)
+	addConfigFlag(composeCmd)
 }
 
 func addComposeFlags(cmd *cobra.Command) {
@@ -104,15 +105,6 @@ func resolveComposeConfig(cmd *cobra.Command) (config.Config, error) {
 	}
 	if f.Changed("open") {
 		overrides.ComposeOpen = &composeOpen
-	}
-	if logLevel != "" {
-		overrides.LogLevel = &logLevel
-	}
-	if logFormat != "" {
-		overrides.LogFormat = &logFormat
-	}
-	if logFile != "" {
-		overrides.LogFile = &logFile
 	}
 
 	return config.Load(config.Options{ConfigFile: cfgFile, Flags: overrides})

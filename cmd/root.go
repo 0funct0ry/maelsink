@@ -75,16 +75,38 @@ func normalizeBareDBFlag(args []string) []string {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "path to maelsink.yaml")
-	rootCmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "", "log level (debug|info|warn|error)")
-	rootCmd.PersistentFlags().StringVarP(&logFormat, "log-format", "F", "", "log format (text|json)")
-	rootCmd.PersistentFlags().StringVarP(&logFile, "log-file", "j", "", "log file path (empty = stdout only)")
+	// config/log flags are local (not persistent) — registered per-command by
+	// addConfigFlag/addLogFlags below, only on commands that actually consult
+	// cfgFile/logLevel/logFormat/logFile, instead of being inherited by every
+	// subcommand in the tree regardless of whether it uses them.
+	addConfigFlag(rootCmd)
+	addLogFlags(rootCmd)
 
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "print version information and exit")
 
 	// serve's flags are also accepted on the bare root command, since bare
 	// `maelsink` is an alias for `maelsink serve`.
 	addServeFlags(rootCmd)
+}
+
+// addConfigFlag registers --config/-c on cmd. Only commands that actually
+// load maelsink.yaml (serve, shell, compose, config show, config validate)
+// register this — client-only commands like send/list/get/delete/clear/export
+// never consult cfgFile.
+func addConfigFlag(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&cfgFile, "config", "c", "", "path to maelsink.yaml")
+}
+
+// addLogFlags registers --log-level/-l, --log-format/-F, and --log-file/-j on
+// cmd. Only maelsink (bare root, an alias for serve) and serve itself
+// register these. Every other, client-only command (send, shell, compose,
+// list/get/delete/clear/export, config show/init/validate, version) doesn't
+// get this CLI-flag override layer — logging.* is still configurable for
+// them via maelsink.yaml/MAELSINK_* env vars, just not per-invocation flags.
+func addLogFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&logLevel, "log-level", "l", "", "log level (debug|info|warn|error)")
+	cmd.Flags().StringVarP(&logFormat, "log-format", "F", "", "log format (text|json)")
+	cmd.Flags().StringVarP(&logFile, "log-file", "j", "", "log file path (empty = stdout only)")
 }
 
 // notImplemented is the stub RunE for commands not yet built (SPEC.md's

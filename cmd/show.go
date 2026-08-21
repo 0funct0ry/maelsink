@@ -28,7 +28,11 @@ var showCmd = &cobra.Command{
 
 func init() {
 	configCmd.AddCommand(showCmd)
-	// Accept the same flags as `serve` so `config show` can demonstrate/debug
-	// the full defaults < file < env < flags precedence chain.
+	// Accept the same non-logging flags as `serve` so `config show` can
+	// demonstrate/debug the full defaults < file < env < flags precedence
+	// chain. --log-level/--log-format/--log-file are deliberately excluded:
+	// `config show` never constructs a logger, so that CLI-flag layer is
+	// reserved for `serve`/bare `maelsink` per addLogFlags' doc comment.
 	addServeFlags(showCmd)
+	addConfigFlag(showCmd)
 }

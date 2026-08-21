@@ -20,9 +20,13 @@ Flags:
   -B, --api-base-path string                   REST API reverse-proxy base path
   -A, --api-host string                        REST API listen host (default "127.0.0.1")
   -o, --api-port int                           REST API listen port (default 9090)
+  -c, --config string                          path to maelsink.yaml
   -d, --db string                              path to the SQLite database file (omit for a transient in-memory database; pass with no value, or an empty string, to force the default file, ./maelsink.db)
   -u, --headless                               shorthand for --web-enabled=false (headless mode)
   -h, --help                                   help for serve
+  -j, --log-file string                        log file path (empty = stdout only)
+  -F, --log-format string                      log format (text|json)
+  -l, --log-level string                       log level (debug|info|warn|error)
   -g, --retention-max-age-hours int            max message age in hours (0 = unlimited)
   -M, --retention-max-messages int             max stored messages (0 = unlimited)
   -i, --retention-sweep-interval-minutes int   retention sweeper interval in minutes (default 5)
@@ -52,10 +56,4 @@ Flags:
   -P, --web-port int                           Web UI listen port (default 8080)
   -q, --web-tls-cert string                    path to PEM certificate for Web UI HTTPS (both cert+key required together; disabled if empty)
   -z, --web-tls-key string                     path to PEM private key for Web UI HTTPS (both cert+key required together; disabled if empty)
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
 ```

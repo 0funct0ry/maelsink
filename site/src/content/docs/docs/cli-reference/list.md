@@ -32,10 +32,4 @@ Flags:
       --subject string   filter by subject substring
       --to string        filter by to address substring
       --until string     only messages received at/before this RFC3339 timestamp
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
 ```

@@ -25,16 +25,11 @@ Flags:
   -k, --api-insecure-skip-verify   skip TLS verification when calling the target API (local/CI use only)
   -P, --api-pass string            basic-auth password for the target API
   -u, --api-user string            basic-auth username for the target API (if fronted by auth)
+  -c, --config string              path to maelsink.yaml
   -h, --help                       help for compose
   -L, --listen string              compose server listen address (default ":8090")
   -o, --open                       automatically open the compose UI in a browser on startup
   -S, --smtp-addr string           target maelsink SMTP address (host:port) (default "127.0.0.1:1025")
   -W, --smtp-pass string           target SMTP AUTH password
   -U, --smtp-user string           target SMTP AUTH username
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
 ```

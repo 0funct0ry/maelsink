@@ -124,6 +124,8 @@ func addServeFlags(cmd *cobra.Command) {
 func init() {
 	rootCmd.AddCommand(serveCmd)
 	addServeFlags(serveCmd)
+	addConfigFlag(serveCmd)
+	addLogFlags(serveCmd)
 }
 
 // resolveConfig loads the layered config using the flags actually set on

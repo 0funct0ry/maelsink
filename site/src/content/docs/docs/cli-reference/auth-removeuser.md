@@ -24,10 +24,4 @@ Usage:
 Flags:
   -h, --help                   help for removeuser
   -L, --web-auth-file string   path to the htpasswd-style basic-auth file (default "maelsink.htpasswd")
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
 ```

@@ -14,11 +14,6 @@ Usage:
   maelsink config validate [flags]
 
 Flags:
-  -h, --help   help for validate
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
+  -c, --config string   path to maelsink.yaml
+  -h, --help            help for validate
 ```

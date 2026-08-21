@@ -25,6 +25,7 @@ Flags:
   -U, --auth-user string                SMTP AUTH username
   -L, --color string                    auto|always|never (default "auto")
   -x, --command-prefix string           builtin prefix: "", ".", ":" or "/"
+  -c, --config string                   path to maelsink.yaml
   -E, --editor string                   "" = $VISUAL, $EDITOR, vi/notepad
   -e, --execute stringArray             run a command and exit (repeatable)
   -Q, --exit-on-error                   abort a script on first failure
@@ -43,10 +44,4 @@ Flags:
       --smtp-tls-insecure-skip-verify   accept a self-signed/dev SMTP TLS certificate without verification (local/CI use only)
   -t, --template-enabled                enable {{ }} template expansion (default true)
   -Z, --template-unsafe-funcs           re-enable env/expandenv/getHostByName
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
 ```

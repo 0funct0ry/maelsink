@@ -16,10 +16,4 @@ Usage:
 Flags:
   -f, --force   overwrite an existing maelsink.yaml
   -h, --help    help for init
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
 ```

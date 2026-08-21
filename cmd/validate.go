@@ -8,8 +8,8 @@ import (
 	"github.com/0funct0ry/maelsink/internal/config"
 )
 
-// validateCmd validates a config file without starting the server. It uses
-// the persistent --config/-c flag defined on the root command.
+// validateCmd validates a config file without starting the server. It
+// registers its own --config/-c flag (addConfigFlag).
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate a maelsink.yaml file",
@@ -34,4 +34,5 @@ var validateCmd = &cobra.Command{
 
 func init() {
 	configCmd.AddCommand(validateCmd)
+	addConfigFlag(validateCmd)
 }

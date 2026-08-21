@@ -55,6 +55,7 @@ and SMTP port — it never talks to storage directly.`,
 
 func init() {
 	rootCmd.AddCommand(shellCmd)
+	addConfigFlag(shellCmd)
 
 	d := config.Defaults()
 
@@ -129,15 +130,6 @@ func resolveShellConfig(cmd *cobra.Command) (config.Shell, error) {
 	}
 	if f.Changed("template-unsafe-funcs") {
 		overrides.ShellTemplateUnsafeFuncs = &flagTemplateUnsafeFuncs
-	}
-	if logLevel != "" {
-		overrides.LogLevel = &logLevel
-	}
-	if logFormat != "" {
-		overrides.LogFormat = &logFormat
-	}
-	if logFile != "" {
-		overrides.LogFile = &logFile
 	}
 
 	cfg, err := config.Load(config.Options{ConfigFile: cfgFile, Flags: overrides})

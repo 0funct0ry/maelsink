@@ -115,12 +115,14 @@ in-memory.
 
 | Key | Type | Default | Env var | Flag |
 |---|---|---|---|---|
-| `logging.level` | string | `info` | `MAELSINK_LOGGING_LEVEL` | `-l, --log-level` (root) |
-| `logging.format` | string | `text` | `MAELSINK_LOGGING_FORMAT` | `-F, --log-format` (root) |
-| `logging.file` | string | `""` | `MAELSINK_LOGGING_FILE` | `-j, --log-file` (root) |
+| `logging.level` | string | `info` | `MAELSINK_LOGGING_LEVEL` | `-l, --log-level` (`serve`/root only) |
+| `logging.format` | string | `text` | `MAELSINK_LOGGING_FORMAT` | `-F, --log-format` (`serve`/root only) |
+| `logging.file` | string | `""` | `MAELSINK_LOGGING_FILE` | `-j, --log-file` (`serve`/root only) |
 
-Logging flags are registered on the root command (inherited by every subcommand), not
-on `serve` specifically.
+Logging flags are registered only on `serve` and the bare root command (an alias for
+`serve`) — the two commands that construct their own logger from scratch. Other
+commands don't accept `--log-level`/`--log-format`/`--log-file`, but `logging.*` is
+still configurable for them via `maelsink.yaml` or `MAELSINK_LOGGING_*` env vars.
 
 ### server
 

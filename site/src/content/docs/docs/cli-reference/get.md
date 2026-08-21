@@ -18,10 +18,4 @@ Flags:
       --api-key string   REST API bearer key (if api.auth.enabled)
       --format string    output format: table|json, or a Go template (e.g. '{{.ID}}: {{.Subject}}') (default "table")
   -h, --help             help for get
-
-Global Flags:
-  -c, --config string       path to maelsink.yaml
-  -j, --log-file string     log file path (empty = stdout only)
-  -F, --log-format string   log format (text|json)
-  -l, --log-level string    log level (debug|info|warn|error)
 ```
